@@ -1,0 +1,28 @@
+{
+  "items": [
+    { "id": "python-tutorial-intro", "category": "docs-section", "url": "https://docs.python.org/3/tutorial/introduction.html" },
+    { "id": "python-tutorial-controlflow", "category": "docs-section", "url": "https://docs.python.org/3/tutorial/controlflow.html" },
+    { "id": "rust-book-ownership", "category": "docs-section", "url": "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html" },
+    { "id": "rust-book-references", "category": "docs-section", "url": "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html" },
+    { "id": "react-describing-ui", "category": "docs-section-js", "url": "https://react.dev/learn/describing-the-ui" },
+    { "id": "react-state-memory", "category": "docs-section-js", "url": "https://react.dev/learn/state-a-components-memory" },
+    { "id": "nextjs-layouts", "category": "docs-section-js", "url": "https://nextjs.org/docs/app/getting-started/layouts-and-pages" },
+    { "id": "kubernetes-components", "category": "docs-section", "url": "https://kubernetes.io/docs/concepts/overview/components/" },
+    { "id": "tailwind-install", "category": "docs-section-js", "url": "https://tailwindcss.com/docs/installation" },
+    { "id": "mdn-array-filter", "category": "reference", "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter" },
+    { "id": "mdn-css-grid", "category": "reference", "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_grid_layout/Basic_concepts_of_grid_layout" },
+    { "id": "mdn-flexbox", "category": "reference", "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Basic_concepts_of_flexbox" },
+    { "id": "mdn-media", "category": "media", "url": "https://developer.mozilla.org/en-US/docs/Learn/HTML/Multimedia_and_embedding/Video_and_audio_content" },
+    { "id": "rfc9110", "category": "reference", "url": "https://httpwg.org/specs/rfc9110.html" },
+    { "id": "caniuse-grid", "category": "tables", "url": "https://caniuse.com/css-grid" },
+    { "id": "wikipedia-http", "category": "reference", "url": "https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol" },
+    { "id": "overreacted-useeffect", "category": "blog", "url": "https://overreacted.io/a-complete-guide-to-useeffect/" },
+    { "id": "github-blog-rust", "category": "blog", "url": "https://github.blog/ai-and-ml/generative-ai/migrating-the-github-copilot-runtime-to-rust-using-copilot/" },
+    { "id": "devto-event-loop", "category": "blog", "url": "https://dev.to/lydiahallie/javascript-visualized-event-loop-3dif" },
+    { "id": "vite-guide", "category": "docs-section-js", "url": "https://vitejs.dev/guide/" },
+    { "id": "stripe-webhooks", "category": "docs-section-js", "url": "https://docs.stripe.com/webhooks" },
+    { "id": "python-discourse-hasattr", "category": "q-and-a", "url": "https://discuss.python.org/t/hasattr-performance-on-objects-with-slots/109134" },
+    { "id": "arstechnica-article", "category": "multi-column", "url": "https://arstechnica.com/ai/2026/09/apple-reportedly-building-server-packed-with-m-series-ultra-chips-for-ai/" },
+    { "id": "golang-faq", "category": "docs-section", "url": "https://go.dev/doc/faq" }
+  ]
+}

@@ -12,7 +12,6 @@ todos/
 # Build artifacts
 /dist/
 /build/
-/bin/
 *.out
 coverage.*
 .wrangler/
@@ -28,6 +27,9 @@ coverage.*
 # Node
 node_modules/
 npm-debug.log*
+
+# Eval: generated snapshots + extractor output (regenerate via eval/src)
+eval/data/
 
 # Python
 __pycache__/
