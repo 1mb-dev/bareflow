@@ -1,18 +1,46 @@
 // The agent-facing HTTP boundary: a Worker handler that serves the pipeline as Markdown or
 // the typed IR (JSON), cached in KV (versioned, read-through, stale-first). This is the agent
-// surface; it is not a reader. Deterministic for a pinned snapshot; live fetch records
-// retrieval time.
+// surface, not a reader. Dev runtime: the fetch layer is Node-only today; the CF fetch swap
+// is the next commit. Deterministic for a pinned snapshot; live fetch records retrieval time.
 import { run, VERSION } from "./pipeline.js";
+import { EXTRACTOR_VERSION } from "./extract.js";
 import { cacheKey, getCached, putCached } from "./cache.js";
 
 const TTL = 3600; // fresh cache: 1 hour
 const STALE_TTL = 30 * 24 * 3600; // last-good fallback: 30 days
 
-function respond(body, status, headers) {
+const PRIVATE_V4 = [
+  /^10\./, /^127\./, /^0\./, /^169\.254\./,
+  /^172\.(1[6-9]|2[0-9]|3[0-1])\./, /^192\.168\./,
+  /^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./,
+];
+const PRIVATE_V6 = [/^::1$/, /^::$/, /^f[cd][0-9a-f]{2}:/i, /^fe[89ab][0-9a-f]:/i, /^::ffff:/i];
+
+function assertSafeUrl(raw) {
+  let u;
+  try { u = new URL(raw); } catch { throw new Error("invalid url"); }
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`unsupported protocol: ${u.protocol}`);
+  const host = u.hostname.toLowerCase();
+  const priv = host.includes(":") ? PRIVATE_V6 : PRIVATE_V4;
+  if (priv.some((re) => re.test(host))) throw new Error(`blocked address: ${host}`);
+  return u;
+}
+
+function wantsJson(accept) {
+  if (!accept) return false;
+  return accept.split(",").some((part) => {
+    const [mt, ...params] = part.trim().split(";");
+    const q = params.find((p) => p.trim().toLowerCase().startsWith("q="));
+    if (q && parseFloat(q.split("=")[1]) === 0) return false;
+    return mt === "application/json" || mt.endsWith("+json");
+  });
+}
+
+function respond(body, status, json, headers) {
   return new Response(body, {
     status,
     headers: {
-      "content-type": "text/plain; charset=utf-8",
+      "content-type": json ? "application/json" : "text/plain; charset=utf-8",
       "access-control-allow-origin": "*",
       "x-mdflow-version": VERSION,
       ...headers,
@@ -25,28 +53,34 @@ export async function handle(request, env, deps = {}) {
   const kv = deps.kv || env.MDFLOW_KV;
   const u = new URL(request.url);
   const target = u.searchParams.get("url") || u.pathname.slice(1);
-  if (!target) return respond("mdflow: missing url\n", 400);
-  const wantJson = u.searchParams.get("format") === "json" || (request.headers.get("accept") || "").includes("json");
-  const body = (v) => (wantJson ? JSON.stringify(v.doc) : v.markdown);
 
-  const key = cacheKey(target, VERSION);
+  let fmt = (u.searchParams.get("format") || "").toLowerCase();
+  const json = fmt === "json" || (fmt === "" && wantsJson(request.headers.get("accept")));
+  if (fmt && fmt !== "json" && fmt !== "markdown") fmt = "markdown";
+
+  const error = (msg, code) => (json ? respond(JSON.stringify({ error: msg, code }), code, true) : respond(`mdflow: ${msg}\n`, code, false));
+  if (!target) return error("missing url", 400);
+  let safe;
+  try { safe = assertSafeUrl(target); } catch (e) { return error(e.message, 400); }
+
+  const key = cacheKey(safe.toString(), VERSION, EXTRACTOR_VERSION);
   const fresh = await getCached(kv, key);
   if (fresh) {
-    return respond(body(fresh), 200, { "x-mdflow-cache": "hit", "x-mdflow-retrieved-at": fresh.retrievedAt });
+    return respond(json ? JSON.stringify(fresh.doc) : fresh.markdown, 200, json, { "x-mdflow-cache": "hit", "x-mdflow-retrieved-at": fresh.retrievedAt });
   }
 
   try {
-    const { doc, markdown, snapshot } = await runImpl({ url: target });
-    const value = { doc, markdown, retrievedAt: snapshot.retrievedAt, fingerprint: snapshot.fingerprint };
+    const { doc, markdown, snapshot } = await runImpl({ url: safe.toString() });
+    const value = { doc, markdown, retrievedAt: snapshot.retrievedAt };
     await putCached(kv, key, value, TTL);
     await putCached(kv, `${key}:stale`, value, STALE_TTL);
-    return respond(body(value), 200, { "x-mdflow-cache": "miss", "x-mdflow-fingerprint": snapshot.fingerprint });
+    return respond(json ? JSON.stringify(doc) : markdown, 200, json, { "x-mdflow-cache": "miss", "x-mdflow-retrieved-at": snapshot.retrievedAt });
   } catch (err) {
     const stale = await getCached(kv, `${key}:stale`);
     if (stale) {
-      return respond(body(stale), 200, { "x-mdflow-cache": "hit-stale", "x-mdflow-retrieved-at": stale.retrievedAt });
+      return respond(json ? JSON.stringify(stale.doc) : stale.markdown, 200, json, { "x-mdflow-cache": "hit-stale", "x-mdflow-retrieved-at": stale.retrievedAt });
     }
-    return respond(`mdflow: ${err?.message || err}\n`, 502);
+    return error(err?.message || String(err), 502);
   }
 }
 

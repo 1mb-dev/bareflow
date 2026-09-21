@@ -46,5 +46,5 @@ export async function run({ url, html, siblings = {}, config = DEFAULT_CONFIG, r
   const doc = compose({ url: snap.finalUrl, html: snap.html, title: ex.title, blocks, source, generator, siblingBlocks });
   validate(doc);
 
-  return { doc, markdown: renderMarkdown(doc), json: doc, snapshot: snap, extract: ex };
+  return { doc, markdown: renderMarkdown(doc), snapshot: snap, extract: ex };
 }
