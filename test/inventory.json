@@ -7,7 +7,8 @@
       { "kind": "sibling", "text": "Using the Python Interpreter" },
       { "kind": "heading", "text": "First Steps Towards Programming" },
       { "kind": "loss", "text": "Using Python as a Calculator" },
-      { "kind": "code", "min": 1 }
+      { "kind": "code", "contains": "Fibonacci series" },
+      { "kind": "loss", "text": "2 + 2" }
     ]
   },
   "rust-book-ownership": {
@@ -15,15 +16,16 @@
     "url": "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html",
     "expect": [
       { "kind": "heading", "text": "Ownership Rules" },
-      { "kind": "code", "min": 1 }
+      { "kind": "code", "contains": "let x = 5; let y = x;" }
     ]
   },
   "mdn-array-filter": {
     "fixture": "mdn-array-filter.html",
     "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter",
+    "denyLoss": ["Help improve MDN"],
     "expect": [
       { "kind": "heading", "text": "Description" },
-      { "kind": "code", "min": 3 }
+      { "kind": "code", "contains": "isBigEnough" }
     ]
   },
   "caniuse-grid": {
