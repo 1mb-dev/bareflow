@@ -6,8 +6,10 @@
 import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { run } from "./pipeline.js";
+import { run, VERSION } from "./pipeline.js";
 import { auditSourceLoss } from "./loss-audit.js";
+import { cacheKey } from "./cache.js";
+import { handle } from "./worker.js";
 import { walk } from "./ir.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -99,6 +101,46 @@ for (const [id, spec] of Object.entries(inventory)) {
 
   const again = await run({ url: introUrl, html: introHtml, siblings: { [cfUrl]: cfHtml }, retrievedAt: FIXED });
   record("document-unit", "determinism", "", JSON.stringify(composed.doc) === JSON.stringify(again.doc));
+}
+
+// Agent surface: versioned stale-first KV cache + HTTP handler.
+{
+  const makeKv = () => {
+    const m = new Map();
+    return {
+      async get(key, type) { const v = m.get(key); return v == null ? null : (type === "json" ? JSON.parse(v) : v); },
+      async put(key, value) { m.set(key, value); },
+      _map: m,
+    };
+  };
+  const doc = { schema: "mdflow/ir/v1", id: "x", title: "T", source: { url: "u", retrievedAt: "2026-01-01", fingerprint: "f" }, generator: { name: "mdflow", version: "0.1.0", extractor: "defuddle", extractorVersion: "0.19.4", config: {} }, sections: [] };
+  const markdown = "# T\n";
+  const snapshot = { retrievedAt: "2026-01-01", fingerprint: "f" };
+  let calls = 0;
+  const okRun = async () => { calls++; return { doc, markdown, snapshot }; };
+  const failRun = async () => { throw new Error("upstream down"); };
+  const req = (q = "https://example.com") => new Request(`https://m/?url=${q}`);
+
+  record("agent-surface", "version-pin", "", cacheKey("https://e.com", "0.1.0") !== cacheKey("https://e.com", "0.2.0"));
+
+  const kv = makeKv();
+  const key = cacheKey("https://example.com", VERSION);
+
+  const r1 = await handle(req(), {}, { run: okRun, kv });
+  record("agent-surface", "cache", "miss", r1.headers.get("x-mdflow-cache") === "miss" && calls === 1);
+
+  const r2 = await handle(req(), {}, { run: okRun, kv });
+  record("agent-surface", "cache", "hit", r2.headers.get("x-mdflow-cache") === "hit" && calls === 1);
+
+  kv._map.delete(key); // simulate fresh expiry, keep the stale fallback
+  const r3 = await handle(req(), {}, { run: failRun, kv });
+  record("agent-surface", "cache", "hit-stale", r3.headers.get("x-mdflow-cache") === "hit-stale" && r3.headers.get("x-mdflow-retrieved-at") === "2026-01-01");
+
+  const r4 = await handle(req(), {}, { run: failRun, kv: makeKv() });
+  record("agent-surface", "cache", "502", r4.status === 502);
+
+  const r5 = await handle(req("https://example.com&format=json"), {}, { run: okRun, kv: makeKv() });
+  record("agent-surface", "format", "json", (await r5.text()).includes('"schema"'));
 }
 
 const failed = results.filter((r) => !r.ok);
