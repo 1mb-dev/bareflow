@@ -49,6 +49,17 @@ function detectLang(pre) {
   return m ? m[1] : undefined;
 }
 
+// Pull nested <pre> blocks out of a container, emit them as code blocks, and remove them
+// so the container's inline text no longer inlines them. Returns the code blocks.
+function pullCode(el) {
+  const codes = [];
+  for (const pre of [...el.querySelectorAll("pre")]) {
+    codes.push(ir.code(textContent(pre), detectLang(pre)));
+    pre.remove();
+  }
+  return codes;
+}
+
 function tableOf(tbl) {
   const headers = [];
   const rows = [];
@@ -86,13 +97,22 @@ function blockFor(el, out) {
     return;
   }
   if (tag === "BLOCKQUOTE") {
+    const nested = pullCode(el);
     const t = inlineMarkdown(el).trim();
     if (t) out.push(ir.blockquote(t));
+    out.push(...nested);
     return;
   }
   if (tag === "UL" || tag === "OL") {
-    const items = [...el.children].filter((c) => c.tagName === "LI").map((li) => inlineMarkdown(li).trim()).filter(Boolean);
+    const items = [];
+    const nested = [];
+    for (const li of [...el.children].filter((c) => c.tagName === "LI")) {
+      nested.push(...pullCode(li));
+      const text = inlineMarkdown(li).trim();
+      if (text) items.push(text);
+    }
     if (items.length) out.push(ir.list(tag === "OL", items));
+    out.push(...nested);
     return;
   }
   if (tag === "TABLE") {
@@ -105,9 +125,14 @@ function blockFor(el, out) {
     return;
   }
   if (tag === "FIGURE") {
+    const nested = pullCode(el);
     const img = el.querySelector("img");
     if (img) out.push(ir.image(img.getAttribute("src") || "", img.getAttribute("alt") || ""));
-    else { const t = inlineMarkdown(el).trim(); if (t) out.push(ir.paragraph(t)); }
+    out.push(...nested);
+    if (!nested.length && !img) {
+      const t = inlineMarkdown(el).trim();
+      if (t) out.push(ir.paragraph(t));
+    }
     return;
   }
   if (["IFRAME", "VIDEO", "AUDIO", "OBJECT", "EMBED"].includes(tag)) {
