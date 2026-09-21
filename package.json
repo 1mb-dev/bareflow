@@ -1,0 +1,18 @@
+{
+  "name": "mdflow",
+  "version": "0.1.0",
+  "description": "Deterministic, faithful, versioned document layer for technical web content",
+  "type": "module",
+  "bin": {
+    "mdflow": "./bin/mdflow.js"
+  },
+  "scripts": {
+    "mdflow": "node bin/mdflow.js",
+    "verify": "node src/verify.js"
+  },
+  "dependencies": {
+    "defuddle": "0.19.4",
+    "linkedom": "0.18.12"
+  },
+  "license": "MIT"
+}
