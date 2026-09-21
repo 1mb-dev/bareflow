@@ -1,0 +1,41 @@
+# Working notes (private, never committed). Sketches, plans, handoff live under todos/.
+todos/
+
+# Claude Code local settings
+.claude/
+
+# Local env
+.env
+.env.local
+.dev.vars
+
+# Build artifacts
+/dist/
+/build/
+/bin/
+*.out
+coverage.*
+.wrangler/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Go
+vendor/
+go.work
+go.work.sum
