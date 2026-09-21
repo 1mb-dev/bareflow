@@ -69,6 +69,38 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("mutation", "loss", anchor, losses.some((l) => l.reason.includes(anchor)));
 }
 
+// Document-unit round-trip: compose a page with its next sibling pinned, assert the sibling's
+// blocks equal its own single-page run, order is prev < page < next, and it is deterministic.
+{
+  const introUrl = "https://docs.python.org/3/tutorial/introduction.html";
+  const cfUrl = "https://docs.python.org/3/tutorial/controlflow.html";
+  const introHtml = await readFile(join(ROOT, "test/fixtures/python-tutorial-intro.html"), "utf8");
+  const cfHtml = await readFile(join(ROOT, "test/fixtures/python-tutorial-controlflow.html"), "utf8");
+
+  const cfSingle = await run({ url: cfUrl, html: cfHtml, retrievedAt: FIXED });
+  const composed = await run({ url: introUrl, html: introHtml, siblings: { [cfUrl]: cfHtml }, retrievedAt: FIXED });
+  const secs = composed.doc.sections;
+
+  record("document-unit", "order", "prev < page < next",
+    secs.length === 3 && secs[0].url.endsWith("interpreter.html") && secs[1].url === introUrl && secs[2].url === cfUrl);
+
+  const findSection = (sections, u) => {
+    for (const s of sections) {
+      if (s.url === u) return s;
+      const found = findSection(s.children, u);
+      if (found) return found;
+    }
+    return null;
+  };
+  const nextSection = secs.find((s) => s.url === cfUrl);
+  const cfPage = findSection(cfSingle.doc.sections, cfUrl);
+  record("document-unit", "round-trip", "sibling blocks equal single-page run",
+    !!nextSection && nextSection.blocks.length > 0 && JSON.stringify(nextSection.blocks) === JSON.stringify(cfPage.blocks));
+
+  const again = await run({ url: introUrl, html: introHtml, siblings: { [cfUrl]: cfHtml }, retrievedAt: FIXED });
+  record("document-unit", "determinism", "", JSON.stringify(composed.doc) === JSON.stringify(again.doc));
+}
+
 const failed = results.filter((r) => !r.ok);
 for (const r of results) console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.id}  ${r.kind}  ${r.text}`);
 console.log(`\n${results.length - failed.length}/${results.length} assertions passed`);

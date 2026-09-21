@@ -1,6 +1,7 @@
-// Navigation shell: wraps one page in a section tree built from its own navigation
-// (breadcrumbs, rel=next/prev/up). Siblings are title+URL stubs with no content; this is
-// not a site crawl. The tree, not the page, is the document-unit structure no extractor emits.
+// Navigation shell: wraps a page in a section tree built from its own navigation
+// (breadcrumbs, rel=next/prev/up). When sibling content is provided (a pinned url -> html
+// map), the prev/next sections carry real blocks instead of empty stubs. Order is preserved:
+// prev before page before next. This is not a crawl; it attaches only the provided siblings.
 import { parseHTML } from "linkedom";
 import * as ir from "./ir.js";
 
@@ -33,18 +34,28 @@ export function extractNav(html, url) {
 }
 
 // Build a Document whose section tree reflects the page's position in the docs site:
-// breadcrumb ancestors wrap the page, and prev/next are empty sibling stubs.
-export function compose({ url, html, title, blocks, source, generator }) {
+// breadcrumb ancestors wrap the page, and prev/next are ordered siblings, each with content
+// when siblingBlocks supplies it.
+export function compose({ url, html, title, blocks, source, generator, siblingBlocks = {} }) {
   const nav = extractNav(html, url);
 
   const page = ir.section(ir.stableId(url), title || norm(extractPageTitle(html)) || url, { url });
   page.blocks = blocks;
 
-  // Ancestor chain from breadcrumbs, wrapped around the page (topmost becomes root).
+  const mk = (r, fallback) => {
+    if (!r || !r.url) return null;
+    const sb = siblingBlocks[r.url];
+    const s = ir.section(ir.stableId(r.url), (sb && sb.title) || r.title || fallback, { url: r.url });
+    if (sb) s.blocks = sb.blocks;
+    return s;
+  };
+  const prev = mk(nav.rel.prev, "Previous");
+  const next = mk(nav.rel.next, "Next");
+
+  // Ancestor chain from breadcrumbs wraps the page.
   let root = page;
-  const ancestors = nav.breadcrumbs;
-  for (let i = ancestors.length - 1; i >= 0; i--) {
-    const a = ancestors[i];
+  for (let i = nav.breadcrumbs.length - 1; i >= 0; i--) {
+    const a = nav.breadcrumbs[i];
     const s = ir.section(ir.stableId(a.url), a.title, { url: a.url });
     s.children.push(root);
     root = s;
@@ -55,16 +66,24 @@ export function compose({ url, html, title, blocks, source, generator }) {
     root = up;
   }
 
-  // prev/next are siblings of the page: attach to the page's immediate parent (or root).
-  const parent = root === page ? null : immediateParent(root, page.id);
-  const siblingHost = parent ?? root;
-  for (const k of ["prev", "next"]) {
-    const r = nav.rel[k];
-    if (r && r.url) {
-      const stub = ir.section(ir.stableId(r.url), r.title || (k === "prev" ? "Previous" : "Next"), { url: r.url });
-      if (siblingHost === root) root.children.push(stub);
-      else siblingHost.children.push(stub);
-    }
+  if (root === page) {
+    // No parent: the document's top-level sections are the ordered siblings.
+    return ir.document({
+      id: ir.stableId(url),
+      title: title || "Document",
+      source,
+      generator,
+      sections: [prev, page, next].filter(Boolean),
+    });
+  }
+
+  // Siblings go around the page in its immediate parent's children list.
+  const parent = immediateParent(root, page.id) ?? root;
+  const idx = parent.children.indexOf(page);
+  if (idx >= 0) {
+    if (prev) parent.children.splice(idx, 0, prev);
+    const after = parent.children.indexOf(page);
+    if (next) parent.children.splice(after + 1, 0, next);
   }
 
   return ir.document({
