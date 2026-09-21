@@ -12,7 +12,7 @@ if (!url) {
 }
 
 try {
-  const { doc, markdown } = await run({ url, config: { mode: "document" } });
+  const { doc, markdown } = await run({ url });
   console.log(asJson ? JSON.stringify(doc, null, 2) : markdown);
 } catch (e) {
   console.error(`mdflow: ${e?.message || e}`);
