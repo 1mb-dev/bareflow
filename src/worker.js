@@ -20,7 +20,8 @@ function assertSafeUrl(raw) {
   let u;
   try { u = new URL(raw); } catch { throw new Error("invalid url"); }
   if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`unsupported protocol: ${u.protocol}`);
-  const host = u.hostname.toLowerCase();
+  // hostname keeps IPv6 brackets in this runtime; strip them before the literal-IP check.
+  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   const priv = host.includes(":") ? PRIVATE_V6 : PRIVATE_V4;
   if (priv.some((re) => re.test(host))) throw new Error(`blocked address: ${host}`);
   return u;

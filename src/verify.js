@@ -161,6 +161,8 @@ for (const [id, spec] of Object.entries(inventory)) {
 
   const r8 = await handle(req("http://127.0.0.1/"), {}, { run: okRun, kv: makeKv() });
   record("agent-surface", "boundary", "ssrf-block", r8.status === 400);
+  const r8b = await handle(req("http://[::1]/"), {}, { run: okRun, kv: makeKv() });
+  record("agent-surface", "boundary", "ssrf-ipv6", r8b.status === 400);
 
   const r9 = await handle(new Request("https://m/?url=https://example.com&format=json"), {}, { run: failRun, kv: makeKv() });
   const r9body = await r9.text();
