@@ -43,7 +43,8 @@ export async function run({ url, html, siblings = {}, config = DEFAULT_CONFIG, r
   // Pinned sibling snapshots: extract each so prev/next sections carry real content.
   const siblingBlocks = {};
   for (const [surl, shtml] of Object.entries(siblings)) {
-    const canonical = new URL(surl).toString(); // match extractNav's abs() spelling
+    let canonical;
+    try { canonical = new URL(surl).toString(); } catch { continue; } // malformed sibling key: skip, becomes a stub
     const sex = await extract(shtml, canonical);
     const { blocks: sblocks, losses: slosses } = separateLosses(contentToBlocks(sex.contentHtml), shtml, sex.title);
     siblingBlocks[canonical] = { title: sex.title, blocks: sblocks, losses: slosses };
