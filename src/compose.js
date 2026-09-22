@@ -53,10 +53,13 @@ export function compose({ url, html, title, blocks, losses = [], source, generat
   const prev = mk(nav.rel.prev, "Previous");
   const next = mk(nav.rel.next, "Next");
 
-  // Ancestor chain from breadcrumbs wraps the page.
+  // Ancestor chain from breadcrumbs wraps the page. A crumb that links to the page itself is
+  // the page, not an ancestor: skip it, or its section id collides with the page and the
+  // prev/next splice below targets the wrong parent, dropping the siblings.
   let root = page;
   for (let i = nav.breadcrumbs.length - 1; i >= 0; i--) {
     const a = nav.breadcrumbs[i];
+    if (ir.stableId(a.url) === page.id) continue;
     const s = ir.section(ir.stableId(a.url), a.title, { url: a.url });
     s.children.push(root);
     root = s;

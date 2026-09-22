@@ -43,9 +43,10 @@ export async function run({ url, html, siblings = {}, config = DEFAULT_CONFIG, r
   // Pinned sibling snapshots: extract each so prev/next sections carry real content.
   const siblingBlocks = {};
   for (const [surl, shtml] of Object.entries(siblings)) {
-    const sex = await extract(shtml, surl);
+    const canonical = new URL(surl).toString(); // match extractNav's abs() spelling
+    const sex = await extract(shtml, canonical);
     const { blocks: sblocks, losses: slosses } = separateLosses(contentToBlocks(sex.contentHtml), shtml, sex.title);
-    siblingBlocks[surl] = { title: sex.title, blocks: sblocks, losses: slosses };
+    siblingBlocks[canonical] = { title: sex.title, blocks: sblocks, losses: slosses };
   }
 
   const source = { url, finalUrl: snap.finalUrl, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint };

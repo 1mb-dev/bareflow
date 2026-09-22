@@ -154,7 +154,14 @@ function blockFor(el, out) {
   // Div / section / article / header / footer: transparent containers, recurse.
   if (tag === "HR") return;
   if (tag === "DIV" || tag === "SECTION" || tag === "ARTICLE" || tag === "MAIN" || tag === "HEADER" || tag === "FOOTER" || tag === "ASIDE" || tag === "NAV" || tag === "SPAN") {
-    for (const c of el.childNodes) if (c.nodeType === 1) blockFor(c, out);
+    for (const c of el.childNodes) {
+      if (c.nodeType === 3) {
+        const t = (c.textContent ?? "").replace(/\s+/g, " ").trim();
+        if (t) out.push(ir.paragraph(t));
+      } else if (c.nodeType === 1) {
+        blockFor(c, out);
+      }
+    }
     return;
   }
   // Unknown block element: capture as paragraph if it has text, else recurse.

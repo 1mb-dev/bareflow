@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { run, VERSION } from "./pipeline.js";
 import { EXTRACTOR_VERSION } from "./extract.js";
 import { auditSourceLoss } from "./loss-audit.js";
+import { contentToBlocks } from "./to-ir.js";
 import { cacheKey } from "./cache.js";
 import { handle } from "./worker.js";
 import { walk } from "./ir.js";
@@ -108,6 +109,64 @@ for (const [id, spec] of Object.entries(inventory)) {
 
   const again = await run({ url: introUrl, html: introHtml, siblings: { [cfUrl]: cfHtml }, retrievedAt: FIXED });
   record("document-unit", "determinism", "", JSON.stringify(composed.doc) === JSON.stringify(again.doc));
+}
+
+// Document-unit integrity: the compose/to-ir bugs that would ship broken sibling content.
+// 9: direct text nodes in containers must survive. 10: a breadcrumb crumb linking to the
+// page must not drop prev/next. 11: sibling keys differing only by host casing must attach.
+{
+  const textOf = (s) => (s?.blocks || []).map((b) => b.text || "").join(" ");
+  const find = (doc, u) => {
+    const rec = (s) => {
+      if (s.url === u) return s;
+      for (const c of s.children) { const f = rec(c); if (f) return f; }
+      return null;
+    };
+    for (const s of doc.sections) { const f = rec(s); if (f) return f; }
+    return null;
+  };
+  const prevHtml = "<html><body><main><h1>Prev</h1><p>Prev content.</p></main></body></html>";
+  const nextHtml = "<html><body><main><h1>Next</h1><p>Next content.</p></main></body></html>";
+
+  // 10: breadcrumb crumb linking to the page itself.
+  {
+    const url = "https://example.com/docs/page/";
+    const html = `<html><head>
+      <link rel="prev" href="/docs/prev/" title="Prev"><link rel="next" href="/docs/next/" title="Next">
+      </head><body>
+      <nav aria-label="breadcrumb"><a href="/docs/">Docs</a> <a href="/docs/page/">Page</a></nav>
+      <main><h1>Page</h1><p>Page content.</p></main>
+      </body></html>`;
+    const { doc } = await run({ url, html, siblings: {
+      "https://example.com/docs/prev/": prevHtml,
+      "https://example.com/docs/next/": nextHtml,
+    }, retrievedAt: FIXED });
+    const prev = find(doc, "https://example.com/docs/prev/");
+    const next = find(doc, "https://example.com/docs/next/");
+    record("document-unit", "integrity", "breadcrumb page-url keeps prev/next",
+      !!prev && !!next && textOf(prev).includes("Prev content") && textOf(next).includes("Next content"));
+  }
+
+  // 11: sibling keys that differ only by host casing still attach content.
+  {
+    const url = "https://example.com/docs/page/";
+    const html = `<html><head>
+      <link rel="next" href="/docs/next/" title="Next">
+      </head><body><main><h1>Page</h1><p>Page content.</p></main></body></html>`;
+    const { doc } = await run({ url, html, siblings: {
+      "https://EXAMPLE.com/docs/next/": nextHtml,
+    }, retrievedAt: FIXED });
+    const next = find(doc, "https://example.com/docs/next/");
+    record("document-unit", "integrity", "host-cased sibling key attaches content",
+      !!next && textOf(next).includes("Next content"));
+  }
+
+  // 9: direct text nodes in a transparent container must not be dropped.
+  {
+    const blocks = contentToBlocks('<div>Hello <b>world</b></div>');
+    const text = blocks.map((b) => b.text || "").join(" ");
+    record("to-ir", "text-node", "container text preserved", text.includes("Hello") && text.includes("world"));
+  }
 }
 
 // Agent surface: versioned stale-first KV cache + HTTP handler.
