@@ -15,14 +15,14 @@ the output, never silently passed through.
 
 Phase 1. The core pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented, with a
 versioned snapshot, a navigation shell, structured loss markers, and a loss-marker inventory
-gate over frozen fixtures. The gate is green (15/15). The document-unit composer builds nav
-stubs, not a full site crawl. Extraction is composed (Defuddle), not built from scratch; the
-moat is the contract downstream of extraction.
+gate over frozen fixtures (39/39). The document-unit composer follows rel=prev/next/up to
+attach real sibling content (bounded, not a crawl). Extraction is composed (Defuddle), not
+built from scratch; the moat is the contract downstream of extraction.
 
 Loss reporting is bounded: mdflow marks (a) post-extraction unrepresentable content and
-(b) source headings the extractor dropped, via a source-to-IR diff. Paragraph or code loss where
-a heading survives is not yet detected. On the Python tutorial, Defuddle drops the "3.1 Using
-Python as a Calculator" section; mdflow flags it as a loss block rather than passing it silently.
+(b) source headings, code blocks, and tables the extractor dropped, via a source-to-IR diff.
+Loss markers are findings, not content: they live in `section.losses`, not the block stream.
+Prose loss (a paragraph dropped while its heading survives) is not yet detected.
 
 ## Run
 
