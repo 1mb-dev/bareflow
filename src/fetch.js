@@ -10,30 +10,11 @@ import { lookup } from "node:dns";
 import { isIP } from "node:net";
 import { gunzipSync, inflateSync, brotliDecompressSync } from "node:zlib";
 import { createHash } from "node:crypto";
+import { isPrivateIp } from "./ssrf.js";
 
 export const MAX_BYTES = 5 * 1024 * 1024;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 const sha = (b) => createHash("sha256").update(b).digest("hex").slice(0, 16);
-
-const PRIVATE_V4 = [
-  /^10\./, /^127\./, /^0\./, /^169\.254\./,
-  /^172\.(1[6-9]|2[0-9]|3[0-1])\./, /^192\.168\./,
-  /^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./, // CGNAT
-  /^198\.18\./, /^198\.51\.100\./, /^203\.0\.113\./,
-];
-const PRIVATE_V6 = [/^::1$/, /^::$/, /^f[cd][0-9a-f]{2}:/i, /^fe[89ab][0-9a-f]:/i];
-
-// IPv4-mapped and IPv4-compatible IPv6 are evaluated as their embedded IPv4 address.
-function normalizeIp(ip) {
-  const m = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i) || ip.match(/^::(\d+\.\d+\.\d+\.\d+)$/i);
-  return m ? m[1] : ip;
-}
-function isPrivateIp(ip) {
-  const n = normalizeIp(ip);
-  if (isIP(n) === 0) return true;
-  if (n.includes(":")) return PRIVATE_V6.some((re) => re.test(n.toLowerCase()));
-  return PRIVATE_V4.some((re) => re.test(n));
-}
 
 function validatingLookup(hostname, opts, cb) {
   lookup(hostname, { all: true }, (err, addrs) => {

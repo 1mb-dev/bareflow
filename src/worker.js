@@ -5,16 +5,10 @@
 import { run, VERSION } from "./pipeline.js";
 import { EXTRACTOR_VERSION } from "./extract.js";
 import { cacheKey, getCached, putCached } from "./cache.js";
+import { isPrivateIp } from "./ssrf.js";
 
 const TTL = 3600; // fresh cache: 1 hour
 const STALE_TTL = 30 * 24 * 3600; // last-good fallback: 30 days
-
-const PRIVATE_V4 = [
-  /^10\./, /^127\./, /^0\./, /^169\.254\./,
-  /^172\.(1[6-9]|2[0-9]|3[0-1])\./, /^192\.168\./,
-  /^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./,
-];
-const PRIVATE_V6 = [/^::1$/, /^::$/, /^f[cd][0-9a-f]{2}:/i, /^fe[89ab][0-9a-f]:/i, /^::ffff:/i];
 
 function assertSafeUrl(raw) {
   let u;
@@ -22,8 +16,7 @@ function assertSafeUrl(raw) {
   if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`unsupported protocol: ${u.protocol}`);
   // hostname keeps IPv6 brackets in this runtime; strip them before the literal-IP check.
   const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  const priv = host.includes(":") ? PRIVATE_V6 : PRIVATE_V4;
-  if (priv.some((re) => re.test(host))) throw new Error(`blocked address: ${host}`);
+  if (isPrivateIp(host)) throw new Error(`blocked address: ${host}`);
   return u;
 }
 
