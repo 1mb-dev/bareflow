@@ -17,6 +17,7 @@ function renderSection(s, depth, out) {
     out.push("");
   }
   for (const b of s.blocks) out.push(renderBlock(b));
+  for (const l of s.losses) out.push(renderLoss(l));
   for (const c of s.children) renderSection(c, depth + 1, out);
 }
 
@@ -29,9 +30,12 @@ function renderBlock(b) {
     case "list": return b.items.map((it, i) => b.ordered ? `${i + 1}. ${it}` : `- ${it}`).join("\n");
     case "image": return `![${b.alt || ""}](${b.src})`;
     case "table": return renderTable(b);
-    case "loss": return `> **Loss:** ${b.reason}${b.source ? ` (${b.source})` : ""}`;
     default: return "";
   }
+}
+
+function renderLoss(l) {
+  return `> **Loss:** ${l.reason}${l.source ? ` (${l.source})` : ""}`;
 }
 
 function renderTable(t) {

@@ -36,17 +36,18 @@ export function extractNav(html, url) {
 // Build a Document whose section tree reflects the page's position in the docs site:
 // breadcrumb ancestors wrap the page, and prev/next are ordered siblings, each with content
 // when siblingBlocks supplies it.
-export function compose({ url, html, title, blocks, source, generator, siblingBlocks = {} }) {
+export function compose({ url, html, title, blocks, losses = [], source, generator, siblingBlocks = {} }) {
   const nav = extractNav(html, url);
 
   const page = ir.section(ir.stableId(url), title || norm(extractPageTitle(html)) || url, { url });
   page.blocks = blocks;
+  page.losses = losses;
 
   const mk = (r, fallback) => {
     if (!r || !r.url) return null;
     const sb = siblingBlocks[r.url];
     const s = ir.section(ir.stableId(r.url), (sb && sb.title) || r.title || fallback, { url: r.url });
-    if (sb) s.blocks = sb.blocks;
+    if (sb) { s.blocks = sb.blocks; s.losses = sb.losses ?? []; }
     return s;
   };
   const prev = mk(nav.rel.prev, "Previous");

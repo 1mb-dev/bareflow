@@ -24,8 +24,14 @@ const sectionTitles = (doc) => {
   return out;
 };
 const blocks = (doc) => [...walk(doc)].map(({ block }) => block);
+const losses = (doc) => {
+  const out = [];
+  const rec = (s) => { out.push(...(s.losses || [])); s.children.forEach(rec); };
+  doc.sections.forEach(rec);
+  return out;
+};
 const lossMentions = (doc, text) =>
-  blocks(doc).some((b) => b.type === "loss" && `${b.reason} ${b.source || ""}`.includes(text));
+  losses(doc).some((l) => `${l.reason} ${l.source || ""}`.includes(text));
 
 const results = [];
 const record = (id, kind, text, ok) => results.push({ id, kind, text, ok });
@@ -48,7 +54,7 @@ for (const [id, spec] of Object.entries(inventory)) {
 
   // Negative inventory: chrome strings must not appear in any loss block.
   for (const deny of spec.denyLoss || []) {
-    const leaked = bs.some((b) => b.type === "loss" && `${b.reason} ${b.source || ""}`.includes(deny));
+    const leaked = losses(doc).some((l) => `${l.reason} ${l.source || ""}`.includes(deny));
     record(id, "denyLoss", deny, !leaked);
   }
 
@@ -66,7 +72,7 @@ for (const [id, spec] of Object.entries(inventory)) {
     html,
     retrievedAt: FIXED,
   });
-  const base = blocks(doc).filter((b) => b.type !== "loss");
+  const base = blocks(doc);
   const without = base.filter((b) => !(b.type === "code" && b.code.includes(anchor)));
   const losses = auditSourceLoss(html, without, "Ownership Rules");
   record("mutation", "loss", anchor, losses.some((l) => l.reason.includes(anchor)));

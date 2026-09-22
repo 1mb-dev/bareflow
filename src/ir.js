@@ -1,14 +1,15 @@
 // The mdflow IR: the typed document contract. Canonical form; Markdown and JSON are renders.
 //
-// Block-level structure is typed (heading, paragraph, code, list, table, image, loss, ...).
-// Inline formatting inside prose is retained as Markdown for v1; a full inline node tree is
-// a later schema revision, not a v1 requirement.
+// Block-level structure is typed (heading, paragraph, code, list, table, blockquote, image).
+// Loss markers are section-level findings (section.losses), not content blocks. Inline
+// formatting inside prose is retained as Markdown for v1; a full inline node tree is a later
+// schema revision, not a v1 requirement.
 import { createHash } from "node:crypto";
 
 export const SCHEMA = "mdflow/ir/v1";
 
 export const BLOCK_TYPES = new Set([
-  "heading", "paragraph", "code", "list", "table", "blockquote", "image", "loss",
+  "heading", "paragraph", "code", "list", "table", "blockquote", "image",
 ]);
 
 export function stableId(str) {
@@ -41,7 +42,7 @@ export function loss(reason, source) {
 }
 
 export function section(id, title, opts = {}) {
-  return { id, title, ...(opts.url ? { url: opts.url } : {}), blocks: [], children: [] };
+  return { id, title, ...(opts.url ? { url: opts.url } : {}), blocks: [], losses: [], children: [] };
 }
 
 // Document is the tree root: document -> section -> block.
@@ -70,6 +71,8 @@ function validateSection(s, path) {
   if (typeof s.title !== "string") fail(`${path}.title`, "missing");
   if (!Array.isArray(s.blocks)) fail(`${path}.blocks`, "missing");
   for (const b of s.blocks) validateBlock(b, `${path}.blocks`);
+  if (!Array.isArray(s.losses)) fail(`${path}.losses`, "missing");
+  for (const l of s.losses) if (!l || typeof l.reason !== "string") fail(`${path}.losses`, "loss: reason string");
   if (!Array.isArray(s.children)) fail(`${path}.children`, "missing");
   for (const c of s.children) validateSection(c, `${path}.children`);
 }
@@ -85,7 +88,6 @@ function validateBlock(b, path) {
     case "list": if (!Array.isArray(b.items) || !b.items.every(str) || typeof b.ordered !== "boolean") fail(path, "list: ordered boolean + string items"); break;
     case "table": if (!Array.isArray(b.headers) || !b.headers.every(str) || !Array.isArray(b.rows) || !b.rows.every((r) => Array.isArray(r) && r.every(str))) fail(path, "table: string headers + string rows"); break;
     case "image": if (!str(b.src)) fail(path, "image: src string"); break;
-    case "loss": if (!str(b.reason)) fail(path, "loss: reason string"); break;
   }
 }
 

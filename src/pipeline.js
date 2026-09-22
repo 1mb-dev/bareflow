@@ -15,6 +15,14 @@ const require = createRequire(import.meta.url);
 export const VERSION = require("../package.json").version;
 const sha = (s) => createHash("sha256").update(s).digest("hex").slice(0, 16);
 
+// Split extraction output into content blocks and loss markers, then append the source-loss
+// audit's drops. Loss markers are findings, not content, so they live in section.losses.
+function separateLosses(extracted, html, title) {
+  const blocks = extracted.filter((b) => b.type !== "loss");
+  const losses = [...extracted.filter((b) => b.type === "loss"), ...auditSourceLoss(html, blocks, title)];
+  return { blocks, losses };
+}
+
 export const DEFAULT_CONFIG = {};
 
 export async function run({ url, html, siblings = {}, config = DEFAULT_CONFIG, retrievedAt }) {
@@ -30,20 +38,19 @@ export async function run({ url, html, siblings = {}, config = DEFAULT_CONFIG, r
   }
 
   const ex = await extract(snap.html, url);
-  const extracted = contentToBlocks(ex.contentHtml);
-  const blocks = [...extracted, ...auditSourceLoss(snap.html, extracted, ex.title)];
+  const { blocks, losses } = separateLosses(contentToBlocks(ex.contentHtml), snap.html, ex.title);
 
   // Pinned sibling snapshots: extract each so prev/next sections carry real content.
   const siblingBlocks = {};
   for (const [surl, shtml] of Object.entries(siblings)) {
     const sex = await extract(shtml, surl);
-    const sextracted = contentToBlocks(sex.contentHtml);
-    siblingBlocks[surl] = { title: sex.title, blocks: [...sextracted, ...auditSourceLoss(shtml, sextracted, sex.title)] };
+    const { blocks: sblocks, losses: slosses } = separateLosses(contentToBlocks(sex.contentHtml), shtml, sex.title);
+    siblingBlocks[surl] = { title: sex.title, blocks: sblocks, losses: slosses };
   }
 
   const source = { url, finalUrl: snap.finalUrl, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint };
   const generator = { name: "mdflow", version: VERSION, extractor: EXTRACTOR, extractorVersion: EXTRACTOR_VERSION, config };
-  const doc = compose({ url: snap.finalUrl, html: snap.html, title: ex.title, blocks, source, generator, siblingBlocks });
+  const doc = compose({ url: snap.finalUrl, html: snap.html, title: ex.title, blocks, losses, source, generator, siblingBlocks });
   validate(doc);
 
   return { doc, markdown: renderMarkdown(doc), snapshot: snap, extract: ex };
