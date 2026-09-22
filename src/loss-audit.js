@@ -1,11 +1,11 @@
 // Source-loss audit: diff load-bearing blocks (headings, code, tables) in the raw HTML
 // against the extracted IR and emit a loss block per drop. Multiset identity, so duplicate
 // blocks are counted and a dropped copy is still flagged. Chrome is excluded by a denylist;
-// there is deliberately no main-content detector (that would be rebuilding the extractor).
+// the audit scans body minus that denylist and is a conservative heuristic, not a content
+// detector.
 import { parseHTML } from "linkedom";
 import * as ir from "./ir.js";
 
-const CONTAINER = ["main", "[role='main']", "article", "#content", "#main", ".content", ".document", "div.body"];
 const SKIP =
   "nav, aside, footer, [role='navigation'], .sidebar, .toc, #toc, .sphinxsidebar, " +
   "[class*='footer'], [class*='feedback'], [id*='footer'], [id*='feedback']";
@@ -24,22 +24,20 @@ const cellNorm = (c) => aggressive(norm(c).replace(/#.*$/, ""));
 
 function sourceBlocks(html) {
   const { document } = parseHTML(html);
-  let container = null;
-  for (const sel of CONTAINER) { container = document.querySelector(sel); if (container) break; }
-  container = container ?? document.body;
+  const root = document.body;
 
   const headings = [], codes = [], tables = [];
-  for (const h of container.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
+  for (const h of root.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
     if (h.closest(SKIP)) continue;
     const text = norm(h.textContent).replace(/\s*¶\s*$/, "");
     if (text) headings.push({ level: Number(h.tagName[1]), text });
   }
-  for (const pre of container.querySelectorAll("pre")) {
+  for (const pre of root.querySelectorAll("pre")) {
     if (pre.closest(SKIP)) continue;
     const t = norm(pre.textContent);
     if (t) codes.push(t);
   }
-  for (const tbl of container.querySelectorAll("table")) {
+  for (const tbl of root.querySelectorAll("table")) {
     if (tbl.closest(SKIP)) continue;
     const cells = [...tbl.querySelectorAll("th,td")].map((c) => norm(c.textContent));
     if (cells.length) tables.push(cells);
