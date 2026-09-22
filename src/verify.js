@@ -200,6 +200,36 @@ for (const [id, spec] of Object.entries(inventory)) {
     decompress(small, "gzip").toString() === "hello" && decompress(bomb, "gzip").length <= MAX_BYTES);
 }
 
+// Live wiring: run({url}) follows rel=prev/next/up through the injected fetch, attaches real
+// sibling content, and degrades a dead sibling to a stub rather than crashing.
+{
+  const introUrl = "https://docs.python.org/3/tutorial/introduction.html";
+  const cfUrl = "https://docs.python.org/3/tutorial/controlflow.html";
+  const introHtml = await readFile(join(ROOT, "test/fixtures/python-tutorial-intro.html"), "utf8");
+  const cfHtml = await readFile(join(ROOT, "test/fixtures/python-tutorial-controlflow.html"), "utf8");
+  const snap = (u, html) => ({ url: u, finalUrl: u, status: 200, contentType: "text/html", bytes: Buffer.byteLength(html), html, fingerprint: "f", retrievedAt: FIXED });
+  const fakeFetch = async (u) => {
+    if (u === introUrl) return snap(u, introHtml);
+    if (u === cfUrl) return snap(u, cfHtml);
+    throw new Error("no fixture"); // prev/up and any unknown sibling degrade to a stub
+  };
+  const { doc } = await run({ url: introUrl, fetch: fakeFetch, retrievedAt: FIXED });
+  const find = (d, u) => {
+    const rec = (s) => {
+      if (s.url === u) return s;
+      for (const c of s.children) { const f = rec(c); if (f) return f; }
+      return null;
+    };
+    for (const s of d.sections) { const f = rec(s); if (f) return f; }
+    return null;
+  };
+  const next = find(doc, cfUrl);
+  const cfSingle = await run({ url: cfUrl, html: cfHtml, retrievedAt: FIXED });
+  const cfPage = find(cfSingle.doc, cfUrl);
+  record("wiring", "live", "next sibling carries real blocks equal to single-page run",
+    !!next && next.blocks.length > 0 && JSON.stringify(next.blocks) === JSON.stringify(cfPage.blocks));
+}
+
 // Agent surface: versioned stale-first KV cache + HTTP handler.
 {
   const makeKv = (clock = () => 0) => {

@@ -7,7 +7,7 @@ import { fetchSnapshot } from "./fetch.js";
 import { extract, EXTRACTOR, EXTRACTOR_VERSION } from "./extract.js";
 import { contentToBlocks } from "./to-ir.js";
 import { auditSourceLoss } from "./loss-audit.js";
-import { compose } from "./compose.js";
+import { compose, extractNav } from "./compose.js";
 import { validate } from "./ir.js";
 import { renderMarkdown } from "./render.js";
 
@@ -23,9 +23,23 @@ function separateLosses(extracted, html, title) {
   return { blocks, losses };
 }
 
+// Fetch (if needed), extract, and partition one sibling into blocks + losses. A dead sibling
+// returns null so it degrades to a title-only stub rather than failing the whole document.
+async function buildSibling(surl, shtml, fetch) {
+  let docHtml = shtml;
+  if (docHtml == null) {
+    try { docHtml = (await fetch(surl)).html; } catch { return null; }
+  }
+  let canonical;
+  try { canonical = new URL(surl).toString(); } catch { return null; }
+  const sex = await extract(docHtml, canonical);
+  const { blocks, losses } = separateLosses(contentToBlocks(sex.contentHtml), docHtml, sex.title);
+  return { canonical, title: sex.title, blocks, losses };
+}
+
 export const DEFAULT_CONFIG = {};
 
-export async function run({ url, html, siblings = {}, config = DEFAULT_CONFIG, retrievedAt }) {
+export async function run({ url, html, siblings = {}, config = DEFAULT_CONFIG, retrievedAt, fetch = fetchSnapshot }) {
   let snap;
   if (html != null) {
     snap = {
@@ -34,21 +48,25 @@ export async function run({ url, html, siblings = {}, config = DEFAULT_CONFIG, r
       fingerprint: sha(html), retrievedAt: retrievedAt ?? new Date().toISOString(),
     };
   } else {
-    snap = await fetchSnapshot(url);
+    snap = await fetch(url);
   }
 
   const ex = await extract(snap.html, url);
   const { blocks, losses } = separateLosses(contentToBlocks(ex.contentHtml), snap.html, ex.title);
 
-  // Pinned sibling snapshots: extract each so prev/next sections carry real content.
-  const siblingBlocks = {};
-  for (const [surl, shtml] of Object.entries(siblings)) {
-    let canonical;
-    try { canonical = new URL(surl).toString(); } catch { continue; } // malformed sibling key: skip, becomes a stub
-    const sex = await extract(shtml, canonical);
-    const { blocks: sblocks, losses: slosses } = separateLosses(contentToBlocks(sex.contentHtml), shtml, sex.title);
-    siblingBlocks[canonical] = { title: sex.title, blocks: sblocks, losses: slosses };
+  // Sibling content: an explicit pinned map (tests), or the live prev/next/up frontier
+  // (item 2). Live wiring fires only on a real fetch; a pinned html snapshot never auto-fetches.
+  const siblingInputs = [];
+  if (Object.keys(siblings).length) {
+    for (const [surl, shtml] of Object.entries(siblings)) siblingInputs.push({ surl, shtml });
+  } else if (html == null) {
+    const nav = extractNav(snap.html, snap.finalUrl);
+    for (const r of [nav.rel.prev, nav.rel.next, nav.rel.up]) if (r?.url) siblingInputs.push({ surl: r.url });
   }
+
+  const built = await Promise.all(siblingInputs.map(({ surl, shtml }) => buildSibling(surl, shtml, fetch)));
+  const siblingBlocks = {};
+  for (const b of built) if (b) siblingBlocks[b.canonical] = { title: b.title, blocks: b.blocks, losses: b.losses };
 
   const source = { url, finalUrl: snap.finalUrl, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint };
   const generator = { name: "mdflow", version: VERSION, extractor: EXTRACTOR, extractorVersion: EXTRACTOR_VERSION, config };
