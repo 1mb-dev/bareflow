@@ -169,6 +169,18 @@ for (const [id, spec] of Object.entries(inventory)) {
   }
 }
 
+// Chrome guard: a site header must not leak into loss markers (SKIP denylist).
+{
+  const url = "https://example.com/article/";
+  const html = `<html><head><title>Article</title></head><body>
+    <header><h1>Site Name</h1><nav><a href="/">Home</a></nav></header>
+    <main><h1>Article Title</h1><p>Article body.</p></main>
+    </body></html>`;
+  const { doc } = await run({ url, html, retrievedAt: FIXED });
+  record("loss-audit", "chrome", "site header not flagged as loss",
+    !losses(doc).some((l) => l.reason.includes("Site Name")));
+}
+
 // Agent surface: versioned stale-first KV cache + HTTP handler.
 {
   const makeKv = (clock = () => 0) => {

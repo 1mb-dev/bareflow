@@ -1,13 +1,13 @@
 // Source-loss audit: diff load-bearing blocks (headings, code, tables) in the raw HTML
-// against the extracted IR and emit a loss block per drop. Multiset identity, so duplicate
-// blocks are counted and a dropped copy is still flagged. Chrome is excluded by a denylist;
-// the audit scans body minus that denylist and is a conservative heuristic, not a content
-// detector.
+// against the extracted IR and emit a loss marker per drop. Multiset identity, so duplicate
+// blocks are counted and a dropped copy is still flagged. Chrome (nav, header, footer,
+// sidebars) is excluded by a denylist; the audit scans body minus that denylist and is a
+// conservative heuristic, not a content detector.
 import { parseHTML } from "linkedom";
 import * as ir from "./ir.js";
 
 const SKIP =
-  "nav, aside, footer, [role='navigation'], .sidebar, .toc, #toc, .sphinxsidebar, " +
+  "header, nav, aside, footer, [role='banner'], [role='navigation'], .sidebar, .toc, #toc, .sphinxsidebar, " +
   "[class*='footer'], [class*='feedback'], [id*='footer'], [id*='feedback']";
 
 const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
