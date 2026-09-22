@@ -1,8 +1,8 @@
-// The loss-marker inventory gate. For each fixture page, assert that every inventoried
-// load-bearing block is present in the typed IR or carried by a loss block (the source-loss
-// audit marks extractor drops). Negative inventory (denyLoss) asserts chrome strings never
-// appear in a loss block. A mutation test proves the audit actually detects drops. Plus a
-// determinism check over a pinned snapshot. Exit 1 on any failure.
+// The loss-marker inventory gate: asserts each inventoried load-bearing block is present in
+// the typed IR or carried by a loss marker, that chrome never leaks into a loss marker, and
+// that a mutation test fires a marker. This proves the pipeline is WIRED, not VERIFIED:
+// determinism compares a pure function to itself (near-tautological), and the cache tests
+// exercise a mock KV, not CF KV semantics. Exit 1 on any failure.
 import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -228,6 +228,19 @@ for (const [id, spec] of Object.entries(inventory)) {
   const cfPage = find(cfSingle.doc, cfUrl);
   record("wiring", "live", "next sibling carries real blocks equal to single-page run",
     !!next && next.blocks.length > 0 && JSON.stringify(next.blocks) === JSON.stringify(cfPage.blocks));
+
+  // SSRF: a sibling URL to a private address is rejected before the fetch.
+  {
+    const pageUrl = "https://example.com/page/";
+    const fetched = [];
+    const spy = async (u) => {
+      fetched.push(u);
+      if (u === pageUrl) return snap(u, `<html><head><link rel="next" href="http://169.254.169.254/"></head><body><main><h1>Page</h1></main></body></html>`);
+      throw new Error("unexpected sibling fetch " + u);
+    };
+    await run({ url: pageUrl, fetch: spy, retrievedAt: FIXED });
+    record("wiring", "ssrf", "private sibling rejected before fetch", fetched.length === 1 && fetched[0] === pageUrl);
+  }
 }
 
 // Agent surface: versioned stale-first KV cache + HTTP handler.
@@ -297,7 +310,7 @@ for (const [id, spec] of Object.entries(inventory)) {
 
 const failed = results.filter((r) => !r.ok);
 for (const r of results) console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.id}  ${r.kind}  ${r.text}`);
-console.log(`\n${results.length - failed.length}/${results.length} assertions passed`);
+console.log(`\n${results.length - failed.length}/${results.length} assertions passed (wired, not verified)`);
 if (failed.length) {
   console.log("FAILED:");
   for (const r of failed) console.log(`  - ${r.id}: ${r.kind} ${r.text}`);

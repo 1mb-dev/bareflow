@@ -7,6 +7,7 @@ import { fetchSnapshot } from "./fetch.js";
 import { extract, EXTRACTOR, EXTRACTOR_VERSION } from "./extract.js";
 import { contentToBlocks } from "./to-ir.js";
 import { auditSourceLoss } from "./loss-audit.js";
+import { isPrivateIp } from "./ssrf.js";
 import { compose, extractNav } from "./compose.js";
 import { validate } from "./ir.js";
 import { renderMarkdown } from "./render.js";
@@ -28,6 +29,12 @@ function separateLosses(extracted, html, title) {
 async function buildSibling(surl, shtml, fetch) {
   let docHtml = shtml;
   if (docHtml == null) {
+    // SSRF pre-check: sibling URLs come from page nav (untrusted), so reject a literal
+    // private address before the fetch. Hostnames still rely on fetchSnapshot's pinned lookup.
+    try {
+      const host = new URL(surl).hostname.replace(/^\[|\]$/g, "");
+      if (isPrivateIp(host)) return null;
+    } catch { /* non-URL key: the canonicalize below rejects it too */ }
     try { docHtml = (await fetch(surl)).html; } catch { return null; }
   }
   let canonical;
