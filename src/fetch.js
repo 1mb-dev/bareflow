@@ -16,6 +16,18 @@ export const MAX_BYTES = 5 * 1024 * 1024;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 const sha = (b) => createHash("sha256").update(b).digest("hex").slice(0, 16);
 
+// Decompress a capped body, capping the decompressed output too: a small compressed stream
+// inflates far past MAX_BYTES, so the sync decoders get a maxOutputLength that throws before
+// the bomb allocates. On failure the raw body is returned (the caller's fingerprint still sees it).
+export function decompress(body, enc) {
+  try {
+    if (enc.includes("gzip")) return gunzipSync(body, { maxOutputLength: MAX_BYTES });
+    if (enc.includes("deflate")) return inflateSync(body, { maxOutputLength: MAX_BYTES });
+    if (enc.includes("br")) return brotliDecompressSync(body, { maxOutputLength: MAX_BYTES });
+  } catch { /* decode failed or output exceeded the cap: keep raw */ }
+  return body;
+}
+
 function validatingLookup(hostname, opts, cb) {
   lookup(hostname, { all: true }, (err, addrs) => {
     if (err) return cb(err);
@@ -46,6 +58,7 @@ function rawFetch(url, timeout, depth = 0) {
       lookup: validatingLookup,
       headers: { "user-agent": UA, "accept": "text/html", "accept-language": "en-US,en;q=0.9", "accept-encoding": "gzip, deflate, br" },
     }, (res) => {
+      res.on("error", reject); // mid-body abort must reject, not crash the process
       if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
         const loc = res.headers.location;
         res.resume();
@@ -58,13 +71,7 @@ function rawFetch(url, timeout, depth = 0) {
       let size = 0;
       res.on("data", (c) => { size += c.length; if (size <= MAX_BYTES) chunks.push(c); });
       res.on("end", () => {
-        let body = Buffer.concat(chunks).subarray(0, MAX_BYTES);
-        const enc = (res.headers["content-encoding"] || "").toLowerCase();
-        try {
-          if (enc.includes("gzip")) body = gunzipSync(body);
-          else if (enc.includes("deflate")) body = inflateSync(body);
-          else if (enc.includes("br")) body = brotliDecompressSync(body);
-        } catch { /* keep raw if decode fails */ }
+        const body = decompress(Buffer.concat(chunks).subarray(0, MAX_BYTES), (res.headers["content-encoding"] || "").toLowerCase());
         resolve({ status: res.statusCode, contentType: res.headers["content-type"] || "", finalUrl: res.responseUrl || url, body });
       });
     });

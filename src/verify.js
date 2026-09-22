@@ -6,10 +6,12 @@
 import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 import { run, VERSION } from "./pipeline.js";
 import { EXTRACTOR_VERSION } from "./extract.js";
 import { auditSourceLoss } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
+import { decompress, MAX_BYTES } from "./fetch.js";
 import { cacheKey } from "./cache.js";
 import { isPrivateIp } from "./ssrf.js";
 import { handle } from "./worker.js";
@@ -188,6 +190,14 @@ for (const [id, spec] of Object.entries(inventory)) {
   const allowed = ["8.8.8.8", "1.1.1.1", "2606:4700:4700::1111", "example.com"];
   record("ssrf", "denylist", "non-public blocked, public allowed",
     blocked.every((ip) => isPrivateIp(ip)) && allowed.every((ip) => !isPrivateIp(ip)));
+}
+
+// Fetch decompression: a small compressed body must not inflate past the cap.
+{
+  const small = gzipSync("hello");
+  const bomb = gzipSync(Buffer.alloc(MAX_BYTES * 2, 65)); // 10MB of "A", compresses tiny
+  record("fetch", "decompress", "caps decompressed output",
+    decompress(small, "gzip").toString() === "hello" && decompress(bomb, "gzip").length <= MAX_BYTES);
 }
 
 // Agent surface: versioned stale-first KV cache + HTTP handler.
