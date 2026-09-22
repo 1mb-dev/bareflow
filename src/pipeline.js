@@ -61,14 +61,15 @@ export async function run({ url, html, siblings = {}, config = DEFAULT_CONFIG, r
   const ex = await extract(snap.html, url);
   const { blocks, losses } = separateLosses(contentToBlocks(ex.contentHtml), snap.html, ex.title);
 
-  // Sibling content: an explicit pinned map (tests), or the live prev/next/up frontier
-  // (item 2). Live wiring fires only on a real fetch; a pinned html snapshot never auto-fetches.
+  // Sibling content: an explicit pinned map (tests), or the live prev/next frontier (item 2).
+  // Live wiring fires only on a real fetch; a pinned html snapshot never auto-fetches. rel=up
+  // stays a title-only structural parent, like the breadcrumb ancestors.
   const siblingInputs = [];
   if (Object.keys(siblings).length) {
     for (const [surl, shtml] of Object.entries(siblings)) siblingInputs.push({ surl, shtml });
   } else if (html == null) {
     const nav = extractNav(snap.html, snap.finalUrl);
-    for (const r of [nav.rel.prev, nav.rel.next, nav.rel.up]) if (r?.url) siblingInputs.push({ surl: r.url });
+    for (const r of [nav.rel.prev, nav.rel.next]) if (r?.url) siblingInputs.push({ surl: r.url });
   }
 
   const built = await Promise.all(siblingInputs.map(({ surl, shtml }) => buildSibling(surl, shtml, fetch)));

@@ -192,12 +192,15 @@ for (const [id, spec] of Object.entries(inventory)) {
     blocked.every((ip) => isPrivateIp(ip)) && allowed.every((ip) => !isPrivateIp(ip)));
 }
 
-// Fetch decompression: a small compressed body must not inflate past the cap.
+// Fetch decompression: a small compressed body must not inflate past the cap, and a bomb must
+// yield valid (not raw-compressed) HTML.
 {
   const small = gzipSync("hello");
   const bomb = gzipSync(Buffer.alloc(MAX_BYTES * 2, 65)); // 10MB of "A", compresses tiny
+  const smallOut = await decompress(small, "gzip");
+  const bombOut = await decompress(bomb, "gzip");
   record("fetch", "decompress", "caps decompressed output",
-    decompress(small, "gzip").toString() === "hello" && decompress(bomb, "gzip").length <= MAX_BYTES);
+    smallOut.toString() === "hello" && bombOut.length <= MAX_BYTES && bombOut[0] === 0x41);
 }
 
 // Live wiring: run({url}) follows rel=prev/next/up through the injected fetch, attaches real
