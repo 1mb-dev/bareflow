@@ -9,6 +9,7 @@ export const PRIVATE_V4 = [
   /^192\.0\.2\./,                                    // TEST-NET-1 192.0.2.0/24
   /^198\.(18|19)\./,                                 // benchmark 198.18/15
   /^198\.51\.100\./, /^203\.0\.113\./,               // TEST-NET-2/3
+  /^192\.0\.0\./,                                    // IETF protocol assignments 192.0.0.0/24
   /^(22[4-9]|23[0-9])\./,                            // multicast 224/4
   /^2[4-5][0-9]\./,                                  // reserved 240/4
 ];
@@ -18,6 +19,11 @@ export const PRIVATE_V6 = [
   /^::ffff:/i,                                       // IPv4-mapped (hex form)
   /^f[cd][0-9a-f]{2}:/i,                             // ULA fc00::/7
   /^fe[89ab][0-9a-f]:/i,                             // link-local fe80::/10
+  /^fe[c-f][0-9a-f]:/i,                              // site-local fec0::/10 (deprecated)
+  /^ff[0-9a-f]{2}:/i,                                // multicast ff00::/8
+  /^::[0-9a-f]{1,4}:[0-9a-f]{1,4}$/i,                // IPv4-compatible, hex form (::7f00:1)
+  /^64:ff9b:/i,                                      // NAT64 64:ff9b::/96 embeds any IPv4
+  /^2002:/i,                                         // 6to4 2002::/16 embeds any IPv4
 ];
 
 // IPv4-mapped and IPv4-compatible IPv6 are evaluated as their embedded IPv4 address.

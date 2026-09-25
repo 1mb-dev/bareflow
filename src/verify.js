@@ -273,7 +273,8 @@ for (const [id, spec] of Object.entries(inventory)) {
 
 // SSRF denylist: the shared policy blocks the full non-public range and rejects nothing public.
 {
-  const blocked = ["192.0.2.1", "198.19.255.254", "224.0.0.1", "240.0.0.1", "10.0.0.1", "::ffff:7f00:1", "fd00::1", "fe80::1"];
+  const blocked = ["192.0.2.1", "198.19.255.254", "224.0.0.1", "240.0.0.1", "10.0.0.1", "::ffff:7f00:1", "fd00::1", "fe80::1",
+    "192.0.0.1", "::7f00:1", "64:ff9b::a9fe:a9fe", "2002:7f00:1::", "fec0::1", "ff02::1"];
   const allowed = ["8.8.8.8", "1.1.1.1", "2606:4700:4700::1111", "example.com"];
   record("ssrf", "denylist", "non-public blocked, public allowed",
     blocked.every((ip) => isPrivateIp(ip)) && allowed.every((ip) => !isPrivateIp(ip)));
