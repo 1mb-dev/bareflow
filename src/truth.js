@@ -36,7 +36,8 @@ function universe(html) {
       : tableText([...el.querySelectorAll("th, td")].map((c) => c.textContent));
     // lines: non-blank source lines of a code block, to catch code flattened to one line.
     const lines = kind === "code" ? el.textContent.split("\n").filter((l) => l.trim()).length : 0;
-    if (text) out.push({ kind, text, lines, label: "present" });
+    const cells = kind === "table" ? [...el.querySelectorAll("td")].map((c) => loose(vnorm(c.textContent))).filter(Boolean) : null;
+    if (text) out.push({ kind, text, lines, cells, label: "present" });
   }
   return out;
 }
@@ -104,7 +105,11 @@ export function scoreLoss(html, doc, spec) {
     if (it.kind === "code" && it.lines > 1 && irCodeLines.get(loose(it.text)) === 1) errors.push(`code flattened to one line: "${it.text.slice(0, 60)}"`);
     return true;
   };
+  const irProse = loose([...walk(doc)].map(({ block: b }) => b.text ?? b.code ?? (b.items || []).join(" ")).join(" "));
   for (const it of items) {
+    // A demoted table survives as prose cell by cell, not as its joined text.
+    const survives = it.kind === "table" ? it.cells.filter((c) => irProse.includes(c)).length >= 0.9 * it.cells.length : irProse.includes(loose(it.text));
+    if (it.label === "demoted" && !survives) errors.push(`labelled demoted but text not in IR: ${it.kind} "${it.text.slice(0, 80)}"`);
     const found = it.label === "chrome" || it.label === "demoted" ? null : inIr(it);
     if (it.label === "present" && !found) errors.push(`unlabelled drop: ${it.kind} "${it.text.slice(0, 80)}"`);
     if (it.label === "lost" && found) errors.push(`labelled lost but in IR: ${it.kind} "${it.text.slice(0, 80)}"`);

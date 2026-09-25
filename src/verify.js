@@ -58,6 +58,10 @@ for (const [id, spec] of Object.entries(inventory)) {
 
   const nav = scoreNav(html, spec.url, spec.nav);
   for (const f of nav.fp) record(id, "nav", `wrong sibling ${f}`, false);
+  // Nav misses are baselined like loss misses: a new one fails, a stale entry fails.
+  const knownNav = spec.known_nav_miss || [];
+  for (const m of nav.miss) if (!knownNav.includes(m.split(":")[0])) record(id, "nav", `new miss ${m}`, false);
+  for (const r of knownNav) if (!nav.miss.some((m) => m.startsWith(`${r}:`))) record(id, "nav", `known_nav_miss ${r} is stale: remove it`, false);
   const loss = scoreLoss(html, doc, spec);
   for (const e of loss.errors) record(id, "truth", e, false);
   if (!loss.errors.length) record(id, "truth", "labels resolve; findings match baseline", true);
@@ -93,6 +97,10 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("truth-harness", "fails on", "ambiguous label", fails(doc, { labels: { lost: [H("")] } }, /ambiguous/));
   record("truth-harness", "fails on", "known_fp without why", fails(withLosses(false, "Kept"), { known_fp: [H("Kept")] }, /without a why/));
   record("truth-harness", "fails on", "flattened label not emitted", fails(doc, { flattened: true }, /not emitted/));
+  const demotedFinding = { ...doc, sections: [{ ...page, blocks: page.blocks.filter((b) => b.text !== "Gone"), losses: [{ type: "loss", reason: "r", source: "source-heading-demoted", text: "Gone" }] }] };
+  record("truth-harness", "fails on", "demoted finding on a lost block", fails(demotedFinding, lost, /^new false positive \(lost\)/));
+  record("truth-harness", "fails on", "demoted label whose text is gone", fails(withLosses(true), { labels: { demoted: [H("Gone")] } }, /labelled demoted but text not in IR/));
+  record("truth-harness", "fails on", "lost label on a block in the IR", fails(doc, lost, /labelled lost but in IR/));
 }
 
 // Mutation test: drop a known code block from the IR; the audit must flag it as a loss.
@@ -105,9 +113,12 @@ for (const [id, spec] of Object.entries(inventory)) {
     retrievedAt: FIXED,
   });
   const base = blocks(doc);
-  const without = base.filter((b) => !(b.type === "code" && b.code.includes(anchor)));
-  const losses = auditSourceLoss(html, without, "Ownership Rules");
-  record("mutation", "loss", anchor, losses.some((l) => l.reason.includes(anchor)));
+  const cut = base.filter((b) => b.type === "code" && b.code.includes(anchor));
+  const losses = auditSourceLoss(html, base.filter((b) => !cut.includes(b)), "Ownership Rules");
+  const flat = (t) => t.replace(/\s/g, "");
+  const diffs = losses.filter((l) => l.source === "source-code-diff");
+  record("mutation", "loss", `every removed block flagged as a diff (${cut.length})`,
+    cut.length > 1 && diffs.length === cut.length && cut.every((b) => diffs.some((l) => flat(l.text) === flat(b.code))));
 }
 
 // Auditor rules the fixtures do not isolate.

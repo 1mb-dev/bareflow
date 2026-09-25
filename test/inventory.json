@@ -188,6 +188,7 @@
     "url": "https://vitejs.dev/guide/",
     "sha256": "ac58fe396a2000fc73118853b19ec9f722c41efc7f83ee549e3808d37fd8f095",
     "nav": { "prev": "none", "next": "https://vitejs.dev/guide/philosophy" },
+    "known_nav_miss": ["next"],
     "flattened": false,
     "labels": {
       "chrome": [
@@ -212,6 +213,7 @@
     "url": "https://vite.dev/guide/features",
     "sha256": "8ed14238b2ca9a1d3cb5022d6330c6eea540fb6feb97f12546ac9b8190deabdf",
     "nav": { "prev": "https://vite.dev/guide/why", "next": "https://vite.dev/guide/cli" },
+    "known_nav_miss": ["prev", "next"],
     "flattened": false,
     "labels": {
       "chrome": [
@@ -281,6 +283,7 @@
     "url": "https://react.dev/learn/state-a-components-memory",
     "sha256": "bd26816c8bd33e6f550a338334751244d9d565b957b4b88805a7646d451d6b07",
     "nav": { "prev": "https://react.dev/learn/responding-to-events", "next": "https://react.dev/learn/render-and-commit" },
+    "known_nav_miss": ["prev", "next"],
     "flattened": false,
     "labels": {
       "chrome": [
