@@ -18,7 +18,10 @@ const tableText = (cells) => vnorm(cells.join(" | "));
 // on the renderer ("Specification#" in source, "Specification #" in the IR).
 const loose = (t) => t.replace(/\s/g, "");
 
-const AUDIT_KIND = { "source-heading-diff": "heading", "source-code-diff": "code", "source-table-diff": "table" };
+const AUDIT_KIND = {
+  "source-heading-diff": "heading", "source-heading-demoted": "heading",
+  "source-code-diff": "code", "source-table-diff": "table",
+};
 const LABELS = ["lost", "demoted", "chrome"];
 
 function universe(html) {
@@ -50,9 +53,13 @@ function irTexts(doc) {
 
 function auditLosses(doc) {
   const out = [];
-  const rec = (s) => { for (const l of s.losses) if (AUDIT_KIND[l.source]) out.push(l); s.children.forEach(rec); };
+  const rec = (s) => { for (const l of s.losses) if (AUDIT_KIND[l.source] || l.source === "audit-scope-empty") out.push(l); s.children.forEach(rec); };
   doc.sections.forEach(rec);
-  return out.map((l) => ({ kind: AUDIT_KIND[l.source], text: l.source === "source-heading-diff" ? headingText(l.text) : vnorm(l.text) }));
+  return out.map((l) => ({
+    source: l.source,
+    kind: AUDIT_KIND[l.source],
+    text: AUDIT_KIND[l.source] === "heading" ? headingText(l.text) : vnorm(l.text),
+  }));
 }
 
 // Resolve {kind, key} entries against items; returns [matchedItems, errors]. Each entry
@@ -97,13 +104,17 @@ export function scoreLoss(html, doc, spec) {
   }
 
   // Emitted findings against labels, as a multiset.
+  // A demoted finding is right only on a demoted label, and sits outside precision: it reports a
+  // type change, not missing content. Any other finding on a non-lost block is a false positive.
   const pool = items.map((it) => ({ ...it }));
-  let tp = 0;
+  let tp = 0, demoted = 0;
   const fps = [];
   for (const f of auditLosses(doc)) {
+    if (f.source === "audit-scope-empty") { errors.push("audit scope empty: the auditor could not read this fixture"); continue; }
+    const want = f.source === "source-heading-demoted" ? "demoted" : "lost";
     const i = pool.findIndex((it) => !it.taken && it.kind === f.kind && loose(it.text) === loose(f.text));
-    if (i >= 0 && pool[i].label === "lost") { pool[i].taken = true; tp++; continue; }
     if (i >= 0) pool[i].taken = true;
+    if (i >= 0 && pool[i].label === want) { if (want === "lost") tp++; else demoted++; continue; }
     fps.push({ kind: f.kind, text: f.text, label: i >= 0 ? pool[i].label : "unmatched" });
   }
   const misses = pool.filter((it) => it.label === "lost" && !it.taken);
@@ -120,7 +131,7 @@ export function scoreLoss(html, doc, spec) {
     errors,
     fps,
     misses,
-    counts: { universe: items.length, lost, tp, fp: fps.length, miss: misses.length },
+    counts: { universe: items.length, lost, tp, fp: fps.length, miss: misses.length, demoted },
     precision: tp + fps.length ? tp / (tp + fps.length) : null,
     recall: lost ? tp / lost : null,
   };

@@ -75,7 +75,7 @@ function tableOf(tbl) {
 }
 
 function lossOf(el, reason) {
-  return ir.loss(reason, el.outerHTML.slice(0, 120).replace(/\s+/g, " "));
+  return ir.loss(reason, "extract-unrepresentable", el.outerHTML.slice(0, 120).replace(/\s+/g, " "));
 }
 
 function blockFor(el, out) {
@@ -132,7 +132,11 @@ function blockFor(el, out) {
     if (!nested.length && !img) {
       const t = inlineMarkdown(el).trim();
       if (t) out.push(ir.paragraph(t));
+      return;
     }
+    const cap = el.querySelector("figcaption");
+    const t = cap ? inlineMarkdown(cap).trim() : "";
+    if (t) out.push(ir.paragraph(t));
     return;
   }
   if (["IFRAME", "VIDEO", "AUDIO", "OBJECT", "EMBED"].includes(tag)) {

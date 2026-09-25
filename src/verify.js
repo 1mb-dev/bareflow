@@ -90,6 +90,39 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("mutation", "loss", anchor, losses.some((l) => l.reason.includes(anchor)));
 }
 
+// Auditor rules the fixtures do not isolate.
+{
+  const src = (l) => l.map((x) => x.source);
+  const P = (text) => ({ type: "paragraph", text });
+  const Hd = (text) => ({ type: "heading", level: 2, text });
+
+  // Demoted only at the heading's position: "Note:" between A and B is demoted; a "Usage"
+  // heading whose only look-alike paragraph sits in another section is lost.
+  const demo = auditSourceLoss("<main><h2>A</h2><p>x</p><h4>Note:</h4><p>y</p><h2>B</h2><h3>Usage</h3><h2>C</h2></main>",
+    [Hd("A"), P("x"), P("Note:"), P("y"), Hd("B"), Hd("C"), P("Usage is simple")]);
+  record("loss-audit", "demoted", "at position only",
+    JSON.stringify(src(demo)) === JSON.stringify(["source-heading-demoted", "source-heading-diff"]) && demo[0].text === "Note:");
+
+  // A scope with nothing to audit while the IR has structure is reported, not silently clean.
+  const blind = auditSourceLoss("<html><body><p>x</p></body></html>", [Hd("Real")]);
+  record("loss-audit", "scope", "empty scope reported", JSON.stringify(src(blind)) === JSON.stringify(["audit-scope-empty"]));
+
+  // Inside main, a header is sectioning content, not chrome; page-level header is chrome.
+  const hdr = auditSourceLoss("<header><h1>Site</h1></header><main><article><header><h2>Real</h2></header><p>x</p></article></main>", [P("x")]);
+  record("loss-audit", "scope", "header inside main audited, page header skipped",
+    hdr.length === 1 && hdr[0].text === "Real");
+
+  // Bug 12: the header row is skipped as a row, not as one cell. A table whose data is gone
+  // is flagged even though its header text survives; data re-rendered as prose survives.
+  const tbl = "<main><table><tr><th>Name</th><th>Kind</th><th>Size</th><th>Mode</th></tr><tr><td>alpha</td></tr></table></main>";
+  record("loss-audit", "table", "header row skipped, reshaped data survives",
+    auditSourceLoss(tbl, [P("Name Kind Size Mode")]).length === 1 && auditSourceLoss(tbl, [P("alpha")]).length === 0);
+
+  // Bug 13: a figcaption next to an image is kept.
+  const fig = contentToBlocks('<figure><img src="a.png" alt="A"><figcaption>Figure caption</figcaption></figure>');
+  record("to-ir", "figure", "figcaption kept with image", fig.length === 2 && fig[1].text === "Figure caption");
+}
+
 // Document-unit round-trip: compose a page with its next sibling pinned, assert the sibling's
 // blocks equal its own single-page run, order is prev < page < next, and it is deterministic.
 {

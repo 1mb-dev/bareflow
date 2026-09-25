@@ -119,10 +119,7 @@
         { "kind": "heading", "key": "The Rust Programming Language" }
       ]
     },
-    "known_fp": [
-      { "kind": "heading", "key": "Keyboard shortcuts" },
-      { "kind": "heading", "key": "The Rust Programming Language" }
-    ],
+    "known_fp": [],
     "known_miss": []
   },
   "rust-book-references": {
@@ -136,10 +133,7 @@
         { "kind": "heading", "key": "The Rust Programming Language" }
       ]
     },
-    "known_fp": [
-      { "kind": "heading", "key": "Keyboard shortcuts" },
-      { "kind": "heading", "key": "The Rust Programming Language" }
-    ],
+    "known_fp": [],
     "known_miss": []
   },
   "mdn-array-filter": {
@@ -177,9 +171,7 @@
       ]
     },
     "known_fp": [],
-    "known_miss": [
-      { "kind": "heading", "key": "Global usage" }
-    ]
+    "known_miss": []
   },
   "vite-guide": {
     "fixture": "vite-guide.html",
@@ -202,18 +194,6 @@
       ]
     },
     "known_fp": [
-      { "kind": "heading", "key": "Getting Started" },
-      { "kind": "heading", "key": "Overview" },
-      { "kind": "heading", "key": "Browser Support" },
-      { "kind": "heading", "key": "Trying Vite Online" },
-      { "kind": "heading", "key": "Scaffolding Your First Vite Project" },
-      { "kind": "heading", "key": "Community Templates" },
-      { "kind": "heading", "key": "Manual Installation" },
-      { "kind": "heading", "key": "index.html and Project Root" },
-      { "kind": "heading", "key": "Specifying Alternative Root" },
-      { "kind": "heading", "key": "Command Line Interface" },
-      { "kind": "heading", "key": "Using Unreleased Commits" },
-      { "kind": "heading", "key": "Community" },
       { "kind": "code", "key": "# npm 7+, extra double-dash is needed: $ npm create vite@lat" },
       { "kind": "code", "key": "$ yarn create vite my-vue-app --template vue" },
       { "kind": "code", "key": "$ pnpm create vite my-vue-app --template vue" },
@@ -239,56 +219,6 @@
       ]
     },
     "known_fp": [
-      { "kind": "heading", "key": "Features" },
-      { "kind": "heading", "key": "npm Dependency Resolving and Pre-Bundling" },
-      { "kind": "heading", "key": "Hot Module Replacement" },
-      { "kind": "heading", "key": "TypeScript" },
-      { "kind": "heading", "key": "Transpile Only" },
-      { "kind": "heading", "key": "TypeScript Compiler Options" },
-      { "kind": "heading", "key": "isolatedModules" },
-      { "kind": "heading", "key": "useDefineForClassFields" },
-      { "kind": "heading", "key": "target" },
-      { "kind": "heading", "key": "emitDecoratorMetadata" },
-      { "kind": "heading", "key": "paths" },
-      { "kind": "heading", "key": "Other Compiler Options Affecting the Build Result" },
-      { "kind": "heading", "key": "Client Types" },
-      { "kind": "heading", "key": "HTML" },
-      { "kind": "heading", "key": "Frameworks" },
-      { "kind": "heading", "key": "JSX" },
-      { "kind": "heading", "key": "CSS" },
-      { "kind": "heading", "key": "@import Inlining and Rebasing" },
-      { "kind": "heading", "key": "PostCSS" },
-      { "kind": "heading", "key": "CSS Modules" },
-      { "kind": "heading", "key": "CSS Pre-processors" },
-      { "kind": "heading", "key": "Disabling CSS injection into the page" },
-      { "kind": "heading", "key": "Lightning CSS" },
-      { "kind": "heading", "key": "Static Assets" },
-      { "kind": "heading", "key": "JSON" },
-      { "kind": "heading", "key": "Glob Import" },
-      { "kind": "heading", "key": "Multiple Patterns" },
-      { "kind": "heading", "key": "Negative Patterns" },
-      { "kind": "heading", "key": "Named Imports" },
-      { "kind": "heading", "key": "Custom Queries" },
-      { "kind": "heading", "key": "Base Path" },
-      { "kind": "heading", "key": "Case Sensitive Matching" },
-      { "kind": "heading", "key": "Glob Import Caveats" },
-      { "kind": "heading", "key": "Dynamic Import" },
-      { "kind": "heading", "key": "WebAssembly" },
-      { "kind": "heading", "key": "ESM Integration" },
-      { "kind": "heading", "key": "Manual Initialization" },
-      { "kind": "heading", "key": "Accessing the WebAssembly Module" },
-      { "kind": "heading", "key": "Web Workers" },
-      { "kind": "heading", "key": "Import with Constructors" },
-      { "kind": "heading", "key": "Import with Query Suffixes" },
-      { "kind": "heading", "key": "Content Security Policy (CSP)" },
-      { "kind": "heading", "key": "'nonce-{RANDOM}'" },
-      { "kind": "heading", "key": "data:" },
-      { "kind": "heading", "key": "License" },
-      { "kind": "heading", "key": "Build Optimizations" },
-      { "kind": "heading", "key": "CSS Code Splitting" },
-      { "kind": "heading", "key": "Preload Directives Generation" },
-      { "kind": "heading", "key": "Async Chunk Loading Optimization" },
-      { "kind": "heading", "key": "Chunk Import Map Optimization" },
       { "kind": "code", "key": "/// <reference types=\"vite/client\" />" }
     ],
     "known_miss": []
@@ -311,12 +241,7 @@
         { "kind": "heading", "key": "Note:" }
       ]
     },
-    "known_fp": [
-      { "kind": "heading", "key": "Note:" },
-      { "kind": "heading", "key": "Note:" },
-      { "kind": "heading", "key": "Note:" },
-      { "kind": "heading", "key": "Note:" }
-    ],
+    "known_fp": [],
     "known_miss": []
   },
   "django-views": {
@@ -342,14 +267,7 @@
         { "kind": "heading", "key": "Support Us" }
       ]
     },
-    "known_fp": [
-      { "kind": "heading", "key": "Additional Information" },
-      { "kind": "heading", "key": "Support Django!" },
-      { "kind": "heading", "key": "Contents" },
-      { "kind": "heading", "key": "Getting help" },
-      { "kind": "heading", "key": "Download:" },
-      { "kind": "heading", "key": "Sponsored Fellow, Diamond and Platinum Members" }
-    ],
+    "known_fp": [],
     "known_miss": []
   },
   "react-state-memory": {
@@ -369,7 +287,10 @@
         { "kind": "code", "key": "let componentHooks" }
       ]
     },
-    "known_fp": [],
+    "known_fp": [
+      { "kind": "heading", "key": "How does React know which state to return?" },
+      { "kind": "code", "key": "let componentHooks = []; let currentHookIndex = 0; // How us" }
+    ],
     "known_miss": []
   },
   "tailwind-install": {
@@ -428,7 +349,6 @@
       ]
     },
     "known_fp": [
-      { "kind": "heading", "key": "Get started with Tailwind CSS" },
       { "kind": "heading", "key": "Installation" },
       { "kind": "heading", "key": "Using Vite" },
       { "kind": "heading", "key": "Using PostCSS" },
