@@ -1,7 +1,9 @@
-// The loss-marker inventory gate: asserts each inventoried load-bearing block is present in
-// the typed IR or carried by a loss marker, that chrome never leaks into a loss marker, and
-// that a mutation test fires a marker. This proves the pipeline is WIRED, not VERIFIED:
-// determinism compares a pure function to itself (near-tautological). Exit 1 on any failure.
+// The gate: scores the loss audit and nav detection against hand-labelled truth
+// (test/inventory.json, via src/truth.js), fails on any false positive or miss not named in the
+// fixture's known_fp / known_miss baseline, and checks wiring, mutation, SSRF, and the handler
+// boundary. Determinism compares a pure function to itself (near-tautological). Exit 1 on any
+// failure.
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,56 +15,64 @@ import { decompress, MAX_BYTES } from "./fetch.js";
 import { cacheKey } from "./cache.js";
 import { isPrivateIp } from "./ssrf.js";
 import { handle } from "./worker.js";
-import { walk } from "./ir.js";
+import { walk, SCHEMA } from "./ir.js";
+import { scoreLoss, scoreNav } from "./truth.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const inventory = JSON.parse(await readFile(join(ROOT, "test/inventory.json"), "utf8"));
 const FIXED = "2026-01-01T00:00:00.000Z";
 
-const sectionTitles = (doc) => {
-  const out = [];
-  const rec = (s) => { if (s.title) out.push(s.title); s.children.forEach(rec); };
-  doc.sections.forEach(rec);
-  return out;
-};
 const blocks = (doc) => [...walk(doc)].map(({ block }) => block);
-const losses = (doc) => {
-  const out = [];
-  const rec = (s) => { out.push(...(s.losses || [])); s.children.forEach(rec); };
-  doc.sections.forEach(rec);
-  return out;
-};
-const lossMentions = (doc, text) =>
-  losses(doc).some((l) => `${l.reason} ${l.source || ""}`.includes(text));
-
 const results = [];
 const record = (id, kind, text, ok) => results.push({ id, kind, text, ok });
 
+const truth = [];
+const pr = (n, d) => (d ? (n / d).toFixed(2) : "-");
 for (const [id, spec] of Object.entries(inventory)) {
   const html = await readFile(join(ROOT, "test/fixtures", spec.fixture), "utf8");
+  record(id, "fixture", "sha256", createHash("sha256").update(html).digest("hex") === spec.sha256);
   const { doc } = await run({ url: spec.url, html, retrievedAt: FIXED });
-  const titles = sectionTitles(doc);
-  const bs = blocks(doc);
+  record(id, "schema", SCHEMA, doc.schema === SCHEMA);
 
-  for (const e of spec.expect) {
-    let ok = false;
-    if (e.kind === "sibling") ok = titles.some((t) => t.includes(e.text));
-    else if (e.kind === "heading") ok = bs.some((b) => b.type === "heading" && b.text.includes(e.text)) || lossMentions(doc, e.text);
-    else if (e.kind === "code") ok = bs.some((b) => b.type === "code" && b.code.includes(e.contains)) || lossMentions(doc, e.contains);
-    else if (e.kind === "loss") ok = lossMentions(doc, e.text);
-    else if (e.kind === "table") ok = bs.some((b) => b.type === "table") || lossMentions(doc, e.text);
-    record(id, e.kind, e.text || e.contains || "(table)", ok);
+  const nav = scoreNav(html, spec.url, spec.nav);
+  for (const f of nav.fp) record(id, "nav", `wrong sibling ${f}`, false);
+  const row = { id, nav };
+  if (spec.audit !== false) {
+    const loss = scoreLoss(html, doc, spec);
+    for (const e of loss.errors) record(id, "truth", e, false);
+    if (!loss.errors.length) record(id, "truth", "labels resolve; findings match baseline", true);
+    row.loss = loss.counts;
   }
-
-  // Negative inventory: chrome strings must not appear in any loss block.
-  for (const deny of spec.denyLoss || []) {
-    const leaked = losses(doc).some((l) => `${l.reason} ${l.source || ""}`.includes(deny));
-    record(id, "denyLoss", deny, !leaked);
-  }
+  truth.push(row);
 
   // Determinism: same snapshot + pinned retrievedAt -> byte-identical IR.
   const { doc: again } = await run({ url: spec.url, html, retrievedAt: FIXED });
   record(id, "determinism", "", JSON.stringify(doc) === JSON.stringify(again));
+}
+
+// Truth harness self-test: the gate must fail on a new false positive, a new miss, an
+// unlabelled drop, and a stale baseline entry, or a green run proves nothing.
+{
+  const url = "https://example.com/t/";
+  const html = `<html><body><nav><h2>Menu</h2></nav><main><h1>T</h1><h2>Kept</h2><p>x</p>
+    <h2>Gone</h2><pre>code()</pre></main></body></html>`;
+  const { doc } = await run({ url, html, retrievedAt: FIXED });
+  const H = (key) => ({ kind: "heading", key });
+  const chrome = [H("Menu")];
+  const errors = (d, spec) => scoreLoss(html, d, { ...spec, labels: { chrome, ...spec.labels } }).errors;
+  const fails = (d, spec, re) => errors(d, spec).some((e) => re.test(e));
+  // withLosses: the page with "Gone" cut from its blocks and the given audit findings attached.
+  const page = doc.sections[0];
+  const finding = (text) => ({ type: "loss", reason: "r", source: "source-heading-diff", text });
+  const withLosses = (cutGone, ...texts) => ({ ...doc, sections: [{ ...page,
+    blocks: cutGone ? page.blocks.filter((b) => b.text !== "Gone") : page.blocks, losses: texts.map(finding) }] });
+  const lost = { labels: { lost: [H("Gone")] } };
+  record("truth-harness", "fails on", "unlabelled drop", fails(withLosses(true, "Gone"), {}, /^unlabelled drop/));
+  record("truth-harness", "passes on", "labelled loss emitted", errors(withLosses(true, "Gone"), lost).length === 0);
+  record("truth-harness", "fails on", "new miss", fails(withLosses(true), lost, /^new miss/));
+  record("truth-harness", "fails on", "new false positive", fails(withLosses(false, "Kept"), {}, /^new false positive/));
+  record("truth-harness", "fails on", "stale known_fp", fails(doc, { known_fp: [H("Kept")] }, /stale/));
+  record("truth-harness", "fails on", "ambiguous label", fails(doc, { labels: { lost: [H("")] } }, /ambiguous/));
 }
 
 // Mutation test: drop a known code block from the IR; the audit must flag it as a loss.
@@ -170,18 +180,6 @@ for (const [id, spec] of Object.entries(inventory)) {
   }
 }
 
-// Chrome guard: a site header must not leak into loss markers (SKIP denylist).
-{
-  const url = "https://example.com/article/";
-  const html = `<html><head><title>Article</title></head><body>
-    <header><h1>Site Name</h1><nav><a href="/">Home</a></nav></header>
-    <main><h1>Article Title</h1><p>Article body.</p></main>
-    </body></html>`;
-  const { doc } = await run({ url, html, retrievedAt: FIXED });
-  record("loss-audit", "chrome", "site header not flagged as loss",
-    !losses(doc).some((l) => l.reason.includes("Site Name")));
-}
-
 // SSRF denylist: the shared policy blocks the full non-public range and rejects nothing public.
 {
   const blocked = ["192.0.2.1", "198.19.255.254", "224.0.0.1", "240.0.0.1", "10.0.0.1", "::ffff:7f00:1", "fd00::1", "fe80::1"];
@@ -282,6 +280,18 @@ for (const [id, spec] of Object.entries(inventory)) {
 
 const failed = results.filter((r) => !r.ok);
 for (const r of results) console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.id}  ${r.kind}  ${r.text}`);
+
+// Truth scores. Loss P/R is over headings, code, and tables only: prose is not audited.
+// Known FPs and misses count against P/R; the baseline only stops them failing the gate.
+const sum = { tp: 0, fp: 0, miss: 0, lost: 0, ntp: 0, nfp: 0, nmiss: 0 };
+console.log("\nfixture                          loss P   R     (tp/fp/miss)   nav P   R     (tp/fp/miss)");
+for (const { id, nav, loss } of truth) {
+  sum.ntp += nav.tp; sum.nfp += nav.fp.length; sum.nmiss += nav.miss.length;
+  const l = loss ? `${pr(loss.tp, loss.tp + loss.fp).padEnd(5)} ${pr(loss.tp, loss.lost).padEnd(5)} ${`${loss.tp}/${loss.fp}/${loss.miss}`.padEnd(14)}` : "(not audited)".padEnd(26);
+  if (loss) { sum.tp += loss.tp; sum.fp += loss.fp; sum.miss += loss.miss; sum.lost += loss.lost; }
+  console.log(`${id.padEnd(32)} ${l} ${pr(nav.tp, nav.tp + nav.fp.length).padEnd(5)} ${pr(nav.tp, nav.tp + nav.miss.length).padEnd(5)} ${nav.tp}/${nav.fp.length}/${nav.miss.length}`);
+}
+console.log(`${"all".padEnd(32)} ${pr(sum.tp, sum.tp + sum.fp).padEnd(5)} ${pr(sum.tp, sum.lost).padEnd(5)} ${`${sum.tp}/${sum.fp}/${sum.miss}`.padEnd(14)} ${pr(sum.ntp, sum.ntp + sum.nfp).padEnd(5)} ${pr(sum.ntp, sum.ntp + sum.nmiss).padEnd(5)} ${sum.ntp}/${sum.nfp}/${sum.nmiss}`);
 console.log(`\n${results.length - failed.length}/${results.length} assertions passed (wired, not verified)`);
 if (failed.length) {
   console.log("FAILED:");

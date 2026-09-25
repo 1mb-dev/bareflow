@@ -1,0 +1,2 @@
+# Frozen fixtures are hashed byte-for-byte in test/inventory.json: never normalize line endings.
+test/fixtures/** -text

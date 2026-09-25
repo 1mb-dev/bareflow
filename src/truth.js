@@ -1,0 +1,144 @@
+// Truth harness: scores the source-loss audit and nav detection against hand labels in
+// test/inventory.json. It owns its normalizer on purpose: importing loss-audit.js's would let
+// a normalization bug there hide itself here.
+//
+// Universe: every h1-h6, pre, and table under documentElement (not body: linkedom can parse
+// content outside body). Each block is `present` unless labelled lost | demoted | chrome.
+// A label is {kind, key}; key is the block's normalized text or a prefix of it (an exact match
+// wins), and must not match two distinct blocks.
+import { parseHTML } from "linkedom";
+import { walk } from "./ir.js";
+import { extractNav } from "./compose.js";
+
+const vnorm = (s) => (s || "").normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/\s+/g, " ").trim();
+// Permalink glyphs trail headings on Sphinx (¶) and VitePress (#). "C#" has no space, so it stays.
+const headingText = (s) => vnorm(s).replace(/\s*¶$|\s+#$/u, "");
+const tableText = (cells) => vnorm(cells.join(" | "));
+// Block identity ignores whitespace: inline elements join with or without a space depending
+// on the renderer ("Specification#" in source, "Specification #" in the IR).
+const loose = (t) => t.replace(/\s/g, "");
+
+const AUDIT_KIND = { "source-heading-diff": "heading", "source-code-diff": "code", "source-table-diff": "table" };
+const LABELS = ["lost", "demoted", "chrome"];
+
+function universe(html) {
+  const { document } = parseHTML(html);
+  const out = [];
+  for (const el of document.documentElement.querySelectorAll("h1, h2, h3, h4, h5, h6, pre, table")) {
+    const tag = el.tagName.toLowerCase();
+    const kind = tag === "pre" ? "code" : tag === "table" ? "table" : "heading";
+    const text = kind === "heading" ? headingText(el.textContent)
+      : kind === "code" ? vnorm(el.textContent)
+      : tableText([...el.querySelectorAll("th, td")].map((c) => c.textContent));
+    if (text) out.push({ kind, text, label: "present" });
+  }
+  return out;
+}
+
+// Section titles count as headings: the page h1 becomes the page section's title, not a block.
+function irTexts(doc) {
+  const m = { heading: [], code: [], table: [] };
+  const titles = (s) => { m.heading.push(loose(headingText(s.title))); s.children.forEach(titles); };
+  doc.sections.forEach(titles);
+  for (const { block: b } of walk(doc)) {
+    if (b.type === "heading") m.heading.push(loose(headingText(b.text)));
+    else if (b.type === "code") m.code.push(loose(vnorm(b.code)));
+    else if (b.type === "table") m.table.push(loose(tableText([...b.headers, ...b.rows.flat()])));
+  }
+  return m;
+}
+
+function auditLosses(doc) {
+  const out = [];
+  const rec = (s) => { for (const l of s.losses) if (AUDIT_KIND[l.source]) out.push(l); s.children.forEach(rec); };
+  doc.sections.forEach(rec);
+  return out.map((l) => ({ kind: AUDIT_KIND[l.source], text: l.source === "source-heading-diff" ? headingText(l.text) : vnorm(l.text) }));
+}
+
+// Resolve {kind, key} entries against items; returns [matchedItems, errors]. Each entry
+// consumes one item; an entry whose prefix spans two distinct texts is ambiguous.
+function resolve(entries, items, what) {
+  const used = new Set(), hits = [], errors = [];
+  for (const e of entries) {
+    const open = items.filter((it, i) => !used.has(i) && it.kind === e.kind);
+    const exact = open.filter((it) => it.text === e.key);
+    const cands = exact.length ? exact : open.filter((it) => it.text.startsWith(e.key));
+    const distinct = new Set(cands.map((c) => c.text));
+    if (!cands.length) { errors.push(`${what} matches nothing: ${e.kind} "${e.key}"`); continue; }
+    if (distinct.size > 1) { errors.push(`${what} is ambiguous (${distinct.size} blocks): ${e.kind} "${e.key}"`); continue; }
+    const i = items.indexOf(cands[0]);
+    used.add(i);
+    hits.push(cands[0]);
+  }
+  return [hits, errors];
+}
+
+// Score one fixture's audit. errors fail the gate; the counts are reported.
+export function scoreLoss(html, doc, spec) {
+  const errors = [];
+  const items = universe(html);
+  for (const label of LABELS) {
+    const [hits, errs] = resolve(spec.labels?.[label] || [], items.filter((it) => it.label === "present"), `label ${label}`);
+    for (const h of hits) h.label = label;
+    errors.push(...errs);
+  }
+
+  // Label sanity against the IR: present must be there, lost must not be.
+  const ir = irTexts(doc);
+  const inIr = (it) => {
+    const i = ir[it.kind].indexOf(loose(it.text));
+    if (i >= 0) { ir[it.kind].splice(i, 1); return true; }
+    return false;
+  };
+  for (const it of items) {
+    const found = it.label === "chrome" || it.label === "demoted" ? null : inIr(it);
+    if (it.label === "present" && !found) errors.push(`unlabelled drop: ${it.kind} "${it.text.slice(0, 80)}"`);
+    if (it.label === "lost" && found) errors.push(`labelled lost but in IR: ${it.kind} "${it.text.slice(0, 80)}"`);
+  }
+
+  // Emitted findings against labels, as a multiset.
+  const pool = items.map((it) => ({ ...it }));
+  let tp = 0;
+  const fps = [];
+  for (const f of auditLosses(doc)) {
+    const i = pool.findIndex((it) => !it.taken && it.kind === f.kind && loose(it.text) === loose(f.text));
+    if (i >= 0 && pool[i].label === "lost") { pool[i].taken = true; tp++; continue; }
+    if (i >= 0) pool[i].taken = true;
+    fps.push({ kind: f.kind, text: f.text, label: i >= 0 ? pool[i].label : "unmatched" });
+  }
+  const misses = pool.filter((it) => it.label === "lost" && !it.taken);
+
+  // Baseline: named known FPs and misses are allowed; anything else, or a stale entry, fails.
+  const [knownFp, fpErrs] = resolve(spec.known_fp || [], fps, "known_fp");
+  const [knownMiss, missErrs] = resolve(spec.known_miss || [], misses, "known_miss");
+  errors.push(...fpErrs.map((e) => `${e} (stale: remove it)`), ...missErrs.map((e) => `${e} (stale: remove it)`));
+  for (const f of fps) if (!knownFp.includes(f)) errors.push(`new false positive (${f.label}): ${f.kind} "${f.text.slice(0, 80)}"`);
+  for (const m of misses) if (!knownMiss.includes(m)) errors.push(`new miss: ${m.kind} "${m.text.slice(0, 80)}"`);
+
+  const lost = items.filter((it) => it.label === "lost").length;
+  return {
+    errors,
+    fps,
+    misses,
+    counts: { universe: items.length, lost, tp, fp: fps.length, miss: misses.length },
+    precision: tp + fps.length ? tp / (tp + fps.length) : null,
+    recall: lost ? tp / lost : null,
+  };
+}
+
+// Score nav detection: truth is the page's visible prev/next, "none" when it has none.
+export function scoreNav(html, url, truth) {
+  const nav = extractNav(html, url).rel;
+  const canon = (u) => { try { return new URL(u).toString(); } catch { return u; } };
+  const out = { tp: 0, fp: [], miss: [] };
+  for (const r of ["prev", "next"]) {
+    const want = truth[r] === "none" ? null : canon(truth[r]);
+    const got = nav[r]?.url ? canon(nav[r].url) : null;
+    if (got && got === want) out.tp++;
+    else {
+      if (got) out.fp.push(`${r}: ${got}`);
+      if (want) out.miss.push(`${r}: ${want}`);
+    }
+  }
+  return out;
+}

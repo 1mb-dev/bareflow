@@ -14,8 +14,9 @@ the output, never silently passed through.
 ## Status
 
 Phase 1. The core pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented, with a
-versioned snapshot, a navigation shell, structured loss markers, and a loss-marker inventory
-gate over frozen fixtures (35/35, wired not verified). The document-unit composer follows rel=prev/next to
+versioned snapshot, a navigation shell, structured loss markers, and a truth gate that scores
+the loss audit and nav detection against hand-labelled frozen fixtures (baseline loss precision
+0.16: most findings are still false positives). The document-unit composer follows rel=prev/next to
 attach real sibling content (bounded, not a crawl). Extraction is composed (Defuddle), not
 built from scratch; the moat is the contract downstream of extraction.
 
@@ -30,7 +31,7 @@ Prose loss (a paragraph dropped while its heading survives) is not yet detected.
 npm install
 node bin/mdflow.js <url>          # Markdown
 node bin/mdflow.js <url> --json   # the typed IR
-npm run verify                    # the loss-marker inventory gate
+npm run verify                    # truth gate: loss + nav precision/recall per fixture
 ```
 
 ## License
