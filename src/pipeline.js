@@ -24,27 +24,21 @@ function separateLosses(extracted, html, title) {
   return { blocks, losses };
 }
 
-// Fetch (if needed), extract, and partition one sibling into blocks + losses. A dead sibling
-// returns null so it degrades to a title-only stub rather than failing the whole document.
-async function buildSibling(surl, shtml, fetch) {
-  let docHtml = shtml;
-  if (docHtml == null) {
-    // SSRF pre-check: sibling URLs come from page nav (untrusted), so reject a literal
-    // private address before the fetch. Hostnames still rely on fetchSnapshot's pinned lookup.
-    try {
-      const host = new URL(surl).hostname.replace(/^\[|\]$/g, "");
-      if (isPrivateIp(host)) return null;
-    } catch { /* non-URL key: the canonicalize below rejects it too */ }
-    try { docHtml = (await fetch(surl)).html; } catch { return null; }
-  }
-  let canonical;
-  try { canonical = new URL(surl).toString(); } catch { return null; }
-  const sex = await extract(docHtml, canonical);
+// Fetch, extract, and partition one sibling (a canonical URL from extractNav) into blocks +
+// losses. A dead sibling returns null so it degrades to a title-only stub rather than failing
+// the whole document.
+async function buildSibling(surl, fetch) {
+  // SSRF pre-check: sibling URLs come from page nav (untrusted), so reject a literal private
+  // address before the fetch. Hostnames still rely on fetchSnapshot's pinned lookup.
+  if (isPrivateIp(new URL(surl).hostname.replace(/^\[|\]$/g, ""))) return null;
+  let docHtml;
+  try { docHtml = (await fetch(surl)).html; } catch { return null; }
+  const sex = await extract(docHtml, surl);
   const { blocks, losses } = separateLosses(contentToBlocks(sex.contentHtml), docHtml, sex.title);
-  return { canonical, title: sex.title, blocks, losses };
+  return { url: surl, title: sex.title, blocks, losses };
 }
 
-export async function run({ url, html, siblings = {}, retrievedAt, fetch = fetchSnapshot }) {
+export async function run({ url, html, retrievedAt, fetch = fetchSnapshot }) {
   let snap;
   if (html != null) {
     snap = {
@@ -59,24 +53,18 @@ export async function run({ url, html, siblings = {}, retrievedAt, fetch = fetch
   const ex = await extract(snap.html, url);
   const { blocks, losses } = separateLosses(contentToBlocks(ex.contentHtml), snap.html, ex.title);
 
-  // Sibling content: an explicit pinned map (tests), or the live prev/next frontier (item 2).
-  // Live wiring fires only on a real fetch; a pinned html snapshot never auto-fetches. rel=up
-  // stays a title-only structural parent, like the breadcrumb ancestors.
-  const siblingInputs = [];
-  if (Object.keys(siblings).length) {
-    for (const [surl, shtml] of Object.entries(siblings)) siblingInputs.push({ surl, shtml });
-  } else if (html == null) {
-    const nav = extractNav(snap.html, snap.finalUrl);
-    for (const r of [nav.rel.prev, nav.rel.next]) if (r?.url) siblingInputs.push({ surl: r.url });
-  }
-
-  const built = await Promise.all(siblingInputs.map(({ surl, shtml }) => buildSibling(surl, shtml, fetch)));
+  // Nav is parsed once and drives both the frontier and the section tree. Sibling content is
+  // fetched only on a live run; a pinned html snapshot never auto-fetches. rel=up stays a
+  // title-only structural parent, like the breadcrumb ancestors.
+  const nav = extractNav(snap.html, snap.finalUrl);
+  const frontier = html == null ? [nav.rel.prev, nav.rel.next].filter((r) => r?.url) : [];
+  const built = await Promise.all(frontier.map((r) => buildSibling(r.url, fetch)));
   const siblingBlocks = {};
-  for (const b of built) if (b) siblingBlocks[b.canonical] = { title: b.title, blocks: b.blocks, losses: b.losses };
+  for (const b of built) if (b) siblingBlocks[b.url] = { title: b.title, blocks: b.blocks, losses: b.losses };
 
   const source = { url, finalUrl: snap.finalUrl, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint };
   const generator = { name: "mdflow", version: VERSION, extractor: EXTRACTOR, extractorVersion: EXTRACTOR_VERSION };
-  const doc = compose({ url: snap.finalUrl, html: snap.html, title: ex.title, blocks, losses, source, generator, siblingBlocks });
+  const doc = compose({ url: snap.finalUrl, html: snap.html, nav, title: ex.title, blocks, losses, source, generator, siblingBlocks });
   validate(doc);
 
   return { doc, markdown: renderMarkdown(doc), snapshot: snap, extract: ex };

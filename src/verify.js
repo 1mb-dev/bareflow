@@ -26,6 +26,22 @@ const blocks = (doc) => [...walk(doc)].map(({ block }) => block);
 const results = [];
 const record = (id, kind, text, ok) => results.push({ id, kind, text, ok });
 
+// Serve frozen pages by URL; any other URL fails like a dead link.
+const snap = (u, html) => ({ url: u, finalUrl: u, status: 200, contentType: "text/html", bytes: Buffer.byteLength(html), html, fingerprint: "f", retrievedAt: FIXED });
+const pagesFetch = (pages) => async (u) => {
+  if (u in pages) return snap(u, pages[u]);
+  throw new Error(`no fixture: ${u}`);
+};
+const findSection = (doc, u) => {
+  const rec = (s) => {
+    if (s.url === u) return s;
+    for (const c of s.children) { const f = rec(c); if (f) return f; }
+    return null;
+  };
+  for (const s of doc.sections) { const f = rec(s); if (f) return f; }
+  return null;
+};
+
 const truth = [];
 const pr = (n, d) => (d ? (n / d).toFixed(2) : "-");
 for (const [id, spec] of Object.entries(inventory)) {
@@ -136,86 +152,68 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("to-ir", "figure", "figcaption kept with image", fig.length === 2 && fig[1].text === "Figure caption");
 }
 
-// Document-unit round-trip: compose a page with its next sibling pinned, assert the sibling's
-// blocks equal its own single-page run, order is prev < page < next, and it is deterministic.
+// Document-unit round-trip: a live run over frozen pages follows rel=next through the injected
+// fetch; the sibling's blocks equal its own single-page run, order is prev < page < next (the
+// dead prev degrades to a stub), and the composed document is deterministic.
 {
   const introUrl = "https://docs.python.org/3/tutorial/introduction.html";
   const cfUrl = "https://docs.python.org/3/tutorial/controlflow.html";
-  const introHtml = await readFile(join(ROOT, "test/fixtures/python-tutorial-intro.html"), "utf8");
-  const cfHtml = await readFile(join(ROOT, "test/fixtures/python-tutorial-controlflow.html"), "utf8");
-
-  const cfSingle = await run({ url: cfUrl, html: cfHtml, retrievedAt: FIXED });
-  const composed = await run({ url: introUrl, html: introHtml, siblings: { [cfUrl]: cfHtml }, retrievedAt: FIXED });
+  const fetch = pagesFetch({
+    [introUrl]: await readFile(join(ROOT, "test/fixtures/python-tutorial-intro.html"), "utf8"),
+    [cfUrl]: await readFile(join(ROOT, "test/fixtures/python-tutorial-controlflow.html"), "utf8"),
+  });
+  const composed = await run({ url: introUrl, fetch, retrievedAt: FIXED });
   const secs = composed.doc.sections;
-
   record("document-unit", "order", "prev < page < next",
     secs.length === 3 && secs[0].url.endsWith("interpreter.html") && secs[1].url === introUrl && secs[2].url === cfUrl);
 
-  const findSection = (sections, u) => {
-    for (const s of sections) {
-      if (s.url === u) return s;
-      const found = findSection(s.children, u);
-      if (found) return found;
-    }
-    return null;
-  };
-  const nextSection = secs.find((s) => s.url === cfUrl);
-  const cfPage = findSection(cfSingle.doc.sections, cfUrl);
+  const cfSingle = await run({ url: cfUrl, fetch, retrievedAt: FIXED });
+  const next = findSection(composed.doc, cfUrl);
   record("document-unit", "round-trip", "sibling blocks equal single-page run",
-    !!nextSection && nextSection.blocks.length > 0 && JSON.stringify(nextSection.blocks) === JSON.stringify(cfPage.blocks));
+    !!next && next.blocks.length > 0 && JSON.stringify(next.blocks) === JSON.stringify(findSection(cfSingle.doc, cfUrl).blocks));
 
-  const again = await run({ url: introUrl, html: introHtml, siblings: { [cfUrl]: cfHtml }, retrievedAt: FIXED });
+  const again = await run({ url: introUrl, fetch, retrievedAt: FIXED });
   record("document-unit", "determinism", "", JSON.stringify(composed.doc) === JSON.stringify(again.doc));
 }
 
 // Document-unit integrity: the compose/to-ir bugs that would ship broken sibling content.
 // 9: direct text nodes in containers must survive. 10: a breadcrumb crumb linking to the
-// page must not drop prev/next. 11: sibling keys differing only by host casing must attach.
+// page must not drop prev/next. 11: a nav href differing only by host casing canonicalizes to
+// the fetched sibling. Ambiguous rel (two targets) attaches nothing.
 {
   const textOf = (s) => (s?.blocks || []).map((b) => b.text || "").join(" ");
-  const find = (doc, u) => {
-    const rec = (s) => {
-      if (s.url === u) return s;
-      for (const c of s.children) { const f = rec(c); if (f) return f; }
-      return null;
-    };
-    for (const s of doc.sections) { const f = rec(s); if (f) return f; }
-    return null;
+  const url = "https://example.com/docs/page/";
+  const prevUrl = "https://example.com/docs/prev/", nextUrl = "https://example.com/docs/next/";
+  const sib = {
+    [prevUrl]: "<html><body><main><h1>Prev</h1><p>Prev content.</p></main></body></html>",
+    [nextUrl]: "<html><body><main><h1>Next</h1><p>Next content.</p></main></body></html>",
   };
-  const prevHtml = "<html><body><main><h1>Prev</h1><p>Prev content.</p></main></body></html>";
-  const nextHtml = "<html><body><main><h1>Next</h1><p>Next content.</p></main></body></html>";
+  const page = (head, body = "") => `<html><head>${head}</head><body>${body}<main><h1>Page</h1><p>Page content.</p></main></body></html>`;
 
   // 10: breadcrumb crumb linking to the page itself.
   {
-    const url = "https://example.com/docs/page/";
-    const html = `<html><head>
-      <link rel="prev" href="/docs/prev/" title="Prev"><link rel="next" href="/docs/next/" title="Next">
-      </head><body>
-      <nav aria-label="breadcrumb"><a href="/docs/">Docs</a> <a href="/docs/page/">Page</a></nav>
-      <main><h1>Page</h1><p>Page content.</p></main>
-      </body></html>`;
-    const { doc } = await run({ url, html, siblings: {
-      "https://example.com/docs/prev/": prevHtml,
-      "https://example.com/docs/next/": nextHtml,
-    }, retrievedAt: FIXED });
-    const prev = find(doc, "https://example.com/docs/prev/");
-    const next = find(doc, "https://example.com/docs/next/");
+    const html = page('<link rel="prev" href="/docs/prev/"><link rel="next" href="/docs/next/">',
+      '<nav aria-label="breadcrumb"><a href="/docs/">Docs</a> <a href="/docs/page/">Page</a></nav>');
+    const { doc } = await run({ url, fetch: pagesFetch({ [url]: html, ...sib }), retrievedAt: FIXED });
     record("document-unit", "integrity", "breadcrumb page-url keeps prev/next",
-      !!prev && !!next && textOf(prev).includes("Prev content") && textOf(next).includes("Next content"));
+      textOf(findSection(doc, prevUrl)).includes("Prev content") && textOf(findSection(doc, nextUrl)).includes("Next content"));
   }
 
-  // 11: sibling keys that differ only by host casing still attach content.
+  // 11: an upper-cased host in the nav href still reaches the sibling.
   {
-    const url = "https://example.com/docs/page/";
-    const html = `<html><head>
-      <link rel="next" href="/docs/next/" title="Next">
-      </head><body><main><h1>Page</h1><p>Page content.</p></main></body></html>`;
-    const { doc } = await run({ url, html, siblings: {
-      "https://EXAMPLE.com/docs/next/": nextHtml,
-    }, retrievedAt: FIXED });
-    const next = find(doc, "https://example.com/docs/next/");
-    record("document-unit", "integrity", "host-cased sibling key attaches content",
-      !!next && textOf(next).includes("Next content"));
+    const html = page('<link rel="next" href="https://EXAMPLE.com/docs/next/">');
+    const { doc } = await run({ url, fetch: pagesFetch({ [url]: html, ...sib }), retrievedAt: FIXED });
+    record("document-unit", "integrity", "host-cased nav href attaches content", textOf(findSection(doc, nextUrl)).includes("Next content"));
+  }
+
+  // rel is a token list on <a> too; two different next targets attach neither.
+  {
+    const tok = await run({ url, fetch: pagesFetch({ [url]: page("", '<a rel="next prefetch" href="/docs/next/">Next</a>'), ...sib }), retrievedAt: FIXED });
+    record("document-unit", "nav", "rel token on <a> attaches", textOf(findSection(tok.doc, nextUrl)).includes("Next content"));
+    const two = await run({ url, fetch: pagesFetch({ [url]: page('<link rel="next" href="/docs/next/">', '<a rel="next" href="/docs/other/">x</a>'), ...sib }), retrievedAt: FIXED });
+    record("document-unit", "nav", "ambiguous rel attaches nothing", two.doc.sections.length === 1);
+    const js = await run({ url, fetch: pagesFetch({ [url]: page('<link rel="next" href="javascript:alert(1)"><link rel="prev" href="file:///etc/passwd">') }), retrievedAt: FIXED });
+    record("document-unit", "nav", "non-http(s) rel target ignored", js.doc.sections.length === 1);
   }
 
   // 9: direct text nodes in a transparent container must not be dropped.
@@ -245,47 +243,18 @@ for (const [id, spec] of Object.entries(inventory)) {
     smallOut.toString() === "hello" && bombOut.length <= MAX_BYTES && bombOut[0] === 0x41);
 }
 
-// Live wiring: run({url}) follows rel=prev/next/up through the injected fetch, attaches real
-// sibling content, and degrades a dead sibling to a stub rather than crashing.
+// Live wiring SSRF: nav-derived sibling URLs are untrusted; a private address is rejected
+// before the fetch.
 {
-  const introUrl = "https://docs.python.org/3/tutorial/introduction.html";
-  const cfUrl = "https://docs.python.org/3/tutorial/controlflow.html";
-  const introHtml = await readFile(join(ROOT, "test/fixtures/python-tutorial-intro.html"), "utf8");
-  const cfHtml = await readFile(join(ROOT, "test/fixtures/python-tutorial-controlflow.html"), "utf8");
-  const snap = (u, html) => ({ url: u, finalUrl: u, status: 200, contentType: "text/html", bytes: Buffer.byteLength(html), html, fingerprint: "f", retrievedAt: FIXED });
-  const fakeFetch = async (u) => {
-    if (u === introUrl) return snap(u, introHtml);
-    if (u === cfUrl) return snap(u, cfHtml);
-    throw new Error("no fixture"); // prev/up and any unknown sibling degrade to a stub
+  const pageUrl = "https://example.com/page/";
+  const fetched = [];
+  const spy = async (u) => {
+    fetched.push(u);
+    if (u === pageUrl) return snap(u, `<html><head><link rel="next" href="http://169.254.169.254/"></head><body><main><h1>Page</h1></main></body></html>`);
+    throw new Error("unexpected sibling fetch " + u);
   };
-  const { doc } = await run({ url: introUrl, fetch: fakeFetch, retrievedAt: FIXED });
-  const find = (d, u) => {
-    const rec = (s) => {
-      if (s.url === u) return s;
-      for (const c of s.children) { const f = rec(c); if (f) return f; }
-      return null;
-    };
-    for (const s of d.sections) { const f = rec(s); if (f) return f; }
-    return null;
-  };
-  const next = find(doc, cfUrl);
-  const cfSingle = await run({ url: cfUrl, html: cfHtml, retrievedAt: FIXED });
-  const cfPage = find(cfSingle.doc, cfUrl);
-  record("wiring", "live", "next sibling carries real blocks equal to single-page run",
-    !!next && next.blocks.length > 0 && JSON.stringify(next.blocks) === JSON.stringify(cfPage.blocks));
-
-  // SSRF: a sibling URL to a private address is rejected before the fetch.
-  {
-    const pageUrl = "https://example.com/page/";
-    const fetched = [];
-    const spy = async (u) => {
-      fetched.push(u);
-      if (u === pageUrl) return snap(u, `<html><head><link rel="next" href="http://169.254.169.254/"></head><body><main><h1>Page</h1></main></body></html>`);
-      throw new Error("unexpected sibling fetch " + u);
-    };
-    await run({ url: pageUrl, fetch: spy, retrievedAt: FIXED });
-    record("wiring", "ssrf", "private sibling rejected before fetch", fetched.length === 1 && fetched[0] === pageUrl);
-  }
+  await run({ url: pageUrl, fetch: spy, retrievedAt: FIXED });
+  record("wiring", "ssrf", "private sibling rejected before fetch", fetched.length === 1 && fetched[0] === pageUrl);
 }
 
 // Agent surface: cache key + HTTP handler boundary.

@@ -9,7 +9,7 @@
 // scored as its own row, not pooled into block precision. Every known_fp entry carries a `why`.
 import { parseHTML } from "linkedom";
 import { walk } from "./ir.js";
-import { extractNav } from "./compose.js";
+import { extractNav, canonicalUrl } from "./compose.js";
 
 const vnorm = (s) => (s || "").normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/\s+/g, " ").trim();
 // Permalink glyphs trail headings on Sphinx (¶) and VitePress (#). "C#" has no space, so it stays.
@@ -148,11 +148,10 @@ export function scoreLoss(html, doc, spec) {
 // Score nav detection: truth is the page's visible prev/next, "none" when it has none.
 export function scoreNav(html, url, truth) {
   const nav = extractNav(html, url).rel;
-  const canon = (u) => { try { return new URL(u).toString(); } catch { return u; } };
   const out = { tp: 0, fp: [], miss: [] };
   for (const r of ["prev", "next"]) {
-    const want = truth[r] === "none" ? null : canon(truth[r]);
-    const got = nav[r]?.url ? canon(nav[r].url) : null;
+    const want = truth[r] === "none" ? null : canonicalUrl(truth[r]);
+    const got = nav[r]?.url ?? null;
     if (got && got === want) out.tp++;
     else {
       if (got) out.fp.push(`${r}: ${got}`);

@@ -1,7 +1,7 @@
 // Navigation shell: wraps a page in a section tree built from its own navigation
-// (breadcrumbs, rel=next/prev/up). When sibling content is provided (a pinned url -> html
-// map), the prev/next sections carry real blocks instead of empty stubs. Order is preserved:
-// prev before page before next. This is not a crawl; it attaches only the provided siblings.
+// (breadcrumbs, rel=next/prev/up). When sibling content is provided (canonical url -> blocks),
+// the prev/next sections carry real blocks instead of empty stubs. Order is preserved: prev
+// before page before next. This is not a crawl; it attaches only the provided siblings.
 import { parseHTML } from "linkedom";
 import * as ir from "./ir.js";
 
@@ -9,25 +9,38 @@ function norm(s) {
   return (s || "").replace(/\s+/g, " ").trim();
 }
 
-function abs(href, base) {
-  try { return new URL(href, base).toString(); } catch { return href; }
+// The one URL canonicalizer: nav targets, sibling keys, and nav truth all compare through it.
+// null for an href that does not resolve or is not http(s): a nav target of a web document is
+// a web page, never javascript: or file:.
+export function canonicalUrl(href, base) {
+  try {
+    const u = new URL(href, base);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : null;
+  } catch { return null; }
 }
 
+// rel is a token list on <link> and <a> alike ("next prefetch" is next); only the standard
+// prev/next/up keywords count. Two different targets for one relation are ambiguous and
+// attach neither: a wrong sibling is worse than none.
 export function extractNav(html, url) {
   const { document } = parseHTML(html);
-  const rel = {};
-  for (const link of document.querySelectorAll("link[rel]")) {
-    const r = (link.getAttribute("rel") || "").toLowerCase();
-    if (r === "next" || r === "prev" || r === "up") {
-      rel[r] = { title: norm(link.getAttribute("title")), url: abs(link.getAttribute("href"), url) };
+  const found = {};
+  for (const el of document.querySelectorAll("link[rel][href], a[rel][href]")) {
+    const target = canonicalUrl(el.getAttribute("href"), url);
+    if (!target) continue;
+    for (const r of (el.getAttribute("rel") || "").toLowerCase().split(/\s+/)) {
+      if (r === "next" || r === "prev" || r === "up") (found[r] ??= []).push({ title: norm(el.getAttribute("title")), url: target });
     }
   }
+  const rel = {};
+  for (const [r, list] of Object.entries(found)) if (new Set(list.map((x) => x.url)).size === 1) rel[r] = list[0];
   const breadcrumbs = [];
   const bc = document.querySelector('nav[aria-label*="readcrumb" i], .breadcrumbs, [class*="breadcrumb" i]');
   if (bc) {
     for (const a of bc.querySelectorAll("a[href]")) {
       const t = norm(a.textContent);
-      if (t) breadcrumbs.push({ title: t, url: abs(a.getAttribute("href"), url) });
+      const target = canonicalUrl(a.getAttribute("href"), url);
+      if (t && target) breadcrumbs.push({ title: t, url: target });
     }
   }
   return { rel, breadcrumbs };
@@ -35,10 +48,8 @@ export function extractNav(html, url) {
 
 // Build a Document whose section tree reflects the page's position in the docs site:
 // breadcrumb ancestors wrap the page, and prev/next are ordered siblings, each with content
-// when siblingBlocks supplies it.
-export function compose({ url, html, title, blocks, losses = [], source, generator, siblingBlocks = {} }) {
-  const nav = extractNav(html, url);
-
+// when siblingBlocks supplies it. nav is extractNav's result for this page.
+export function compose({ url, html, nav, title, blocks, losses = [], source, generator, siblingBlocks = {} }) {
   const page = ir.section(ir.stableId(url), title || norm(extractPageTitle(html)) || url, { url });
   page.blocks = blocks;
   page.losses = losses;
