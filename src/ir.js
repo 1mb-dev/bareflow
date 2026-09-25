@@ -76,6 +76,12 @@ export function validate(doc) {
     fail("breadcrumbs", "array of { title, url }");
   if (!Array.isArray(doc.sections) || doc.sections.length === 0) fail("sections", "must be non-empty");
   for (const s of doc.sections) validateSection(s, "sections");
+  const ids = [];
+  const collect = (s) => { ids.push(s.id); s.children.forEach(collect); };
+  doc.sections.forEach(collect);
+  if (new Set(ids).size !== ids.length) fail("sections", "section ids must be unique");
+  const attached = ["prev", "next"].some((r) => doc.scope.siblings[r].status === "attached");
+  if ((doc.scope.kind === "window") !== attached) fail("scope.kind", "window exactly when a sibling is attached");
   return doc;
 }
 

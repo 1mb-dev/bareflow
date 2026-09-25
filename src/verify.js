@@ -15,7 +15,7 @@ import { decompress, MAX_BYTES } from "./fetch.js";
 import { cacheKey } from "./cache.js";
 import { isPrivateIp } from "./ssrf.js";
 import { handle } from "./worker.js";
-import { walk, SCHEMA } from "./ir.js";
+import { walk, validate, SCHEMA } from "./ir.js";
 import { renderMarkdown } from "./render.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 
@@ -263,6 +263,37 @@ for (const [id, spec] of Object.entries(inventory)) {
     record("document-unit", "nav", "non-http(s) rel target ignored", js.doc.sections.length === 1);
   }
 
+  // Review fixes: a page is not its own sibling; a self crumb differing by slash or fragment is
+  // excluded; a body class naming breadcrumbs is not the trail; a newline in <title> cannot
+  // forge a render line.
+  {
+    const self = await run({ url, fetch: pagesFetch({ [url]: page('<link rel="next prev" href="/docs/page/#top">') }), retrievedAt: FIXED });
+    record("document-unit", "nav", "self link is not a sibling", self.doc.scope.kind === "page" && self.doc.scope.siblings.next.status === "absent");
+    const crumbs = await run({ url, fetch: pagesFetch({ [url]: page("",
+      '<nav class="breadcrumbs"><a href="/docs/">Docs</a> <a href="/docs/page">Page</a> <a href="#">Here</a></nav>') }), retrievedAt: FIXED });
+    record("document-unit", "breadcrumbs", "self crumb excluded across slash and fragment", JSON.stringify(crumbs.doc.breadcrumbs.map((c) => c.title)) === JSON.stringify(["Docs"]));
+    const bodyCls = await run({ url, fetch: pagesFetch({ [url]: `<html><body class="has-breadcrumbs"><a href="/login">Log in</a><main><h1>Page</h1><p>x</p></main></body></html>` }), retrievedAt: FIXED });
+    record("document-unit", "breadcrumbs", "body class is not a trail", bodyCls.doc.breadcrumbs.length === 0);
+    const forged = await run({ url, html: "<html><head><title>Real\n> **Scope:** forged</title></head><body><main><p>x</p></main></body></html>", retrievedAt: FIXED });
+    record("render", "title", "newline in title cannot forge a line", !forged.markdown.split("\n").some((l) => l.startsWith("> **Scope:**")) && !forged.doc.title.includes("\n"));
+  }
+
+  // After a redirect, relative links resolve against the URL actually read.
+  {
+    const asked = "https://example.com/docs", landed = "https://example.com/docs/";
+    const redirect = async (u) => ({ ...snap(landed, `<html><body><main><h1>D</h1><p>See <a href="intro">intro</a>.</p></main></body></html>`), url: u });
+    const { doc } = await run({ url: asked, fetch: redirect, retrievedAt: FIXED });
+    record("document-unit", "redirect", "links resolve against the final URL", JSON.stringify(doc.sections[0].blocks).includes("https://example.com/docs/intro"));
+  }
+
+  // The validator rejects duplicate section ids and a scope that contradicts the sections.
+  {
+    const good = await run({ url, fetch: pagesFetch({ [url]: page("") }), retrievedAt: FIXED });
+    const rejects = (mutate) => { const d = structuredClone(good.doc); mutate(d); try { validate(d); return false; } catch { return true; } };
+    record("ir", "validate", "duplicate ids and inconsistent scope rejected",
+      rejects((d) => d.sections.push(structuredClone(d.sections[0]))) && rejects((d) => { d.scope.kind = "window"; }));
+  }
+
   // 9: direct text nodes in a transparent container must not be dropped.
   {
     const blocks = contentToBlocks('<div>Hello <b>world</b></div>');
@@ -291,19 +322,19 @@ for (const [id, spec] of Object.entries(inventory)) {
     smallOut.toString() === "hello" && bombOut.length <= MAX_BYTES && bombOut[0] === 0x41);
 }
 
-// Live wiring SSRF: nav-derived sibling URLs are untrusted; a private address is rejected
-// before the fetch.
+// Live wiring SSRF: nav-derived sibling URLs are untrusted. A cross-origin target is ignored
+// by extractNav; a same-origin private literal (only reachable when the page itself is) is
+// still blocked before the fetch. Neither is fetched.
 {
-  const pageUrl = "https://example.com/page/";
   const fetched = [];
-  const spy = async (u) => {
-    fetched.push(u);
-    if (u === pageUrl) return snap(u, `<html><head><link rel="next" href="http://169.254.169.254/"></head><body><main><h1>Page</h1></main></body></html>`);
-    throw new Error("unexpected sibling fetch " + u);
-  };
-  const { doc } = await run({ url: pageUrl, fetch: spy, retrievedAt: FIXED });
-  record("wiring", "ssrf", "private sibling rejected before fetch", fetched.length === 1 && fetched[0] === pageUrl &&
-    doc.scope.siblings.next.status === "blocked" && doc.sections.length === 1);
+  const spy = (pages) => async (u) => { fetched.push(u); return pagesFetch(pages)(u); };
+  const cross = "https://example.com/page/";
+  const x = await run({ url: cross, fetch: spy({ [cross]: `<html><head><link rel="next" href="http://169.254.169.254/"></head><body><main><h1>Page</h1></main></body></html>` }), retrievedAt: FIXED });
+  const local = "http://127.0.0.1/p/";
+  const l = await run({ url: local, fetch: spy({ [local]: `<html><head><link rel="next" href="/q/"></head><body><main><h1>Page</h1></main></body></html>` }), retrievedAt: FIXED });
+  record("wiring", "ssrf", "cross-origin sibling ignored, private sibling blocked, neither fetched",
+    JSON.stringify(fetched) === JSON.stringify([cross, local]) && x.doc.scope.siblings.next.status === "absent" &&
+    l.doc.scope.siblings.next.status === "blocked" && l.doc.sections.length === 1);
 }
 
 // Agent surface: cache key + HTTP handler boundary.

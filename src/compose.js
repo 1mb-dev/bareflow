@@ -18,15 +18,25 @@ export function canonicalUrl(href, base) {
   } catch { return null; }
 }
 
+// Two URLs name the same page when they differ only by fragment or a trailing slash.
+const samePage = (a, b) => {
+  const key = (u) => u.replace(/#.*$/, "").replace(/\/$/, "");
+  return key(a) === key(b);
+};
+
 // rel is a token list on <link> and <a> alike ("next prefetch" is next); only the standard
-// prev/next/up keywords count. Two different targets for one relation are ambiguous and
-// attach neither: a wrong sibling is worse than none.
+// prev/next/up keywords count. A sibling must be another page on the same origin: a link to
+// the page itself or to another site (user content can carry rel=next) is ignored. Two
+// different targets for one relation are ambiguous and attach neither: a wrong sibling is
+// worse than none.
 export function extractNav(html, url) {
   const { document } = parseHTML(html);
+  const page = canonicalUrl(url);
+  const origin = page && new URL(page).origin;
   const found = {};
   for (const el of document.querySelectorAll("link[rel][href], a[rel][href]")) {
     const target = canonicalUrl(el.getAttribute("href"), url);
-    if (!target) continue;
+    if (!target || new URL(target).origin !== origin || samePage(target, page)) continue;
     for (const r of (el.getAttribute("rel") || "").toLowerCase().split(/\s+/)) {
       if (r === "next" || r === "prev" || r === "up") (found[r] ??= []).push({ title: norm(el.getAttribute("title")), url: target });
     }
@@ -34,7 +44,9 @@ export function extractNav(html, url) {
   const rel = {};
   for (const [r, list] of Object.entries(found)) if (new Set(list.map((x) => x.url)).size === 1) rel[r] = list[0];
   const breadcrumbs = [];
-  const bc = document.querySelector('nav[aria-label*="readcrumb" i], .breadcrumbs, [class*="breadcrumb" i]');
+  // The trail container, never <html>/<body> (a body class like "has-breadcrumbs" matches).
+  const bc = [...document.querySelectorAll('nav[aria-label*="readcrumb" i], .breadcrumbs, [class*="breadcrumb" i]')]
+    .find((el) => el.tagName !== "BODY" && el.tagName !== "HTML" && el.querySelector("a[href]"));
   if (bc) {
     for (const a of bc.querySelectorAll("a[href]")) {
       const t = norm(a.textContent);
@@ -51,6 +63,8 @@ export function extractNav(html, url) {
 // nav is extractNav's result for this page; siblings maps prev/next to { status, url?, title?,
 // blocks?, losses? } with status attached | unfetched | failed | blocked | absent.
 export function compose({ url, html, nav, title, blocks, losses = [], source, generator, siblings }) {
+  // Titles are page text on one line: a newline in <title> must not forge render lines.
+  title = norm(title);
   const page = ir.section(ir.stableId(url), title || norm(extractPageTitle(html)) || url, { url });
   page.blocks = blocks;
   page.losses = losses;
@@ -58,7 +72,7 @@ export function compose({ url, html, nav, title, blocks, losses = [], source, ge
   const attached = (r) => {
     const s = siblings[r];
     if (s.status !== "attached") return null;
-    const sec = ir.section(ir.stableId(s.url), s.title || nav.rel[r]?.title || s.url, { url: s.url });
+    const sec = ir.section(ir.stableId(s.url), norm(s.title) || nav.rel[r]?.title || s.url, { url: s.url });
     sec.blocks = s.blocks;
     sec.losses = s.losses;
     return sec;
@@ -66,7 +80,7 @@ export function compose({ url, html, nav, title, blocks, losses = [], source, ge
   const sections = [attached("prev"), page, attached("next")].filter(Boolean);
 
   // A crumb that links to the page itself is the page, not a place above it.
-  const trail = nav.breadcrumbs.filter((c) => c.url !== url);
+  const trail = nav.breadcrumbs.filter((c) => !samePage(c.url, canonicalUrl(url) ?? url));
   const breadcrumbs = trail.length ? trail : nav.rel.up ? [{ title: nav.rel.up.title, url: nav.rel.up.url }] : [];
 
   const status = (r) => ({ status: siblings[r].status, ...(siblings[r].url ? { url: siblings[r].url } : {}) });

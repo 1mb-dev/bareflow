@@ -7,6 +7,7 @@ import { fetchSnapshot } from "./fetch.js";
 import { extract, EXTRACTOR, EXTRACTOR_VERSION } from "./extract.js";
 import { contentToBlocks } from "./to-ir.js";
 import { auditSourceLoss } from "./loss-audit.js";
+import { isIP } from "node:net";
 import { isPrivateIp } from "./ssrf.js";
 import { compose, extractNav } from "./compose.js";
 import { validate } from "./ir.js";
@@ -29,10 +30,13 @@ function separateLosses(extracted, html, title) {
 async function buildSibling(surl, fetch) {
   // SSRF pre-check: sibling URLs come from page nav (untrusted), so reject a literal private
   // address before the fetch. Hostnames still rely on fetchSnapshot's pinned lookup.
-  if (isPrivateIp(new URL(surl).hostname.replace(/^\[|\]$/g, ""))) return { status: "blocked", url: surl };
+  const host = new URL(surl).hostname.replace(/^\[|\]$/g, "");
+  if (isIP(host) && isPrivateIp(host)) return { status: "blocked", url: surl };
   try {
-    const docHtml = (await fetch(surl)).html;
-    const sex = await extract(docHtml, surl);
+    const sib = await fetch(surl);
+    const docHtml = sib.html;
+    // Extract against the URL actually read, so relative links resolve after a redirect.
+    const sex = await extract(docHtml, sib.finalUrl ?? surl);
     const { blocks, losses } = separateLosses(contentToBlocks(sex.contentHtml), docHtml, sex.title);
     return { status: "attached", url: surl, title: sex.title, blocks, losses };
   } catch {
@@ -52,7 +56,7 @@ export async function run({ url, html, retrievedAt, fetch = fetchSnapshot }) {
     snap = await fetch(url);
   }
 
-  const ex = await extract(snap.html, url);
+  const ex = await extract(snap.html, snap.finalUrl);
   const { blocks, losses } = separateLosses(contentToBlocks(ex.contentHtml), snap.html, ex.title);
 
   // Nav is parsed once and drives both the frontier and the document. Sibling content is
