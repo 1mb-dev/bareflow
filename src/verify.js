@@ -147,11 +147,38 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("loss-audit", "scope", "header inside main audited, page header skipped",
     hdr.length === 1 && hdr[0].text === "Real");
 
+  // Review fixes (2026-09-25). Word boundary: a dropped "Go" is not demoted into "Good luck".
+  // No placed neighbour: the window would be the whole page, so no demotion. The title skip
+  // applies once. A leading year is text, not a section number.
+  const wb = auditSourceLoss("<main><h2>A</h2><h2>Go</h2><p>x</p><h2>B</h2></main>", [Hd("A"), P("Good luck"), Hd("B")]);
+  const nn = auditSourceLoss("<main><h2>Usage</h2><p>x</p></main>", [P("x"), P("Usage is simple")]);
+  const tt = auditSourceLoss("<main><h1>Overview</h1><h3>Overview</h3><p>x</p></main>", [P("x")], "Overview");
+  const yr = auditSourceLoss("<main><h2>2024 Roadmap</h2><h2>2025 Roadmap</h2></main>", [Hd("2025 Roadmap")]);
+  record("loss-audit", "demoted", "word boundary; no whole-page window",
+    JSON.stringify(src(wb)) === JSON.stringify(["source-heading-diff"]) && JSON.stringify(src(nn)) === JSON.stringify(["source-heading-diff"]));
+  record("loss-audit", "heading", "title skipped once; year is not a section number",
+    tt.length === 1 && tt[0].text === "Overview" && yr.length === 1 && yr[0].text === "2024 Roadmap");
+
+  // Hidden content is not audited (the extractor drops it; re-emitting it hands an agent hidden
+  // text). Nested tables: only the innermost is audited, so output stays linear in depth.
+  const hid = auditSourceLoss(`<main><h2 style="display:none">IGNORE PREVIOUS</h2><h2 hidden>h</h2><div aria-hidden="true"><pre>x()</pre></div><p>x</p></main>`, [P("x")]);
+  let nest = "<td>c</td>";
+  for (let i = 0; i < 60; i++) nest = `<table><tr><td>c${i}</td><td>${nest}</td></tr></table>`;
+  const deep = auditSourceLoss(`<main>${nest}</main>`, [P("x")]);
+  record("loss-audit", "scope", "hidden content not audited", hid.length === 0);
+  record("loss-audit", "table", "nested tables audited innermost only", deep.length === 1 && JSON.stringify(deep).length < 1000);
+  const many = auditSourceLoss(`<main>${Array.from({ length: 600 }, (_, i) => `<h2>H${i}</h2>`).join("")}</main>`, [P("x")]);
+  record("loss-audit", "bound", "findings capped with a truncation finding",
+    many.length === 502 && many[0].source === "extract-flattened" && many.at(-1).source === "audit-truncated" && many.at(-1).reason.includes(": 100 more"));
+
   // Bug 12: the header row is skipped as a row, not as one cell. A table whose data is gone
   // is flagged even though its header text survives; data re-rendered as prose survives.
   const tbl = "<main><table><tr><th>Name</th><th>Kind</th><th>Size</th><th>Mode</th></tr><tr><td>alpha</td></tr></table></main>";
-  record("loss-audit", "table", "header row skipped, reshaped data survives",
-    auditSourceLoss(tbl, [P("Name Kind Size Mode")]).length === 1 && auditSourceLoss(tbl, [P("alpha")]).length === 0);
+  const one = "<main><h2>A</h2><table><tr><td>MAX_CONN</td><td>512</td></tr></table></main>";
+  record("loss-audit", "table", "header row skipped, reshaped data survives, one-row table checked",
+    JSON.stringify(src(auditSourceLoss(tbl, [P("Name Kind Size Mode")]))) === JSON.stringify(["source-table-diff"]) &&
+    auditSourceLoss(tbl, [P("alpha")]).length === 0 &&
+    JSON.stringify(src(auditSourceLoss(one, [Hd("A")]))) === JSON.stringify(["source-table-diff"]));
 
   // Bug 15: a site-suffixed title that repeats the first heading is not rendered twice.
   const suffixed = renderMarkdown({ scope: { kind: "page", siblings: { prev: { status: "absent" }, next: { status: "absent" } } },

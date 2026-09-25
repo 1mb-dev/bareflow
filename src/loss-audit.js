@@ -11,19 +11,22 @@ import * as ir from "./ir.js";
 // and saves five FPs (golang's link sidebar); both sit inside article, so no standard rule
 // separates them. Bare header/footer are sectioning content inside main or article, chrome
 // only page-wide.
-const SKIP = "nav, aside, [role='navigation'], [role='banner'], [id*='feedback']";
+// Hidden content is never content: the extractor drops it, and re-emitting it would hand an
+// agent text the page's author hid.
+const HIDDEN = "[hidden], [aria-hidden='true'], noscript, template, [style*='display:none'], [style*='display: none']";
+const SKIP = `nav, aside, [role='navigation'], [role='banner'], [id*='feedback'], ${HIDDEN}`;
 const SKIP_PAGE = `${SKIP}, header, footer`;
 
 // \p{Cf} (ZWSP in VitePress headings, BOM) is invisible and must not break identity.
 const norm = (s) => (s || "").replace(/\p{Cf}/gu, "").replace(/\s+/g, " ").trim();
 const aggressive = (s) => norm(s).toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 
-// Strip a leading section number ("3.1.", "3.1.1.") so source and IR headings compare even
-// when one side drops the numbering. Whitespace-free: inline code in a heading joins with or
-// without a space ("the ?: operator" in source, "the?: operator" in the IR).
-function headingKey(t) {
-  return norm(t).replace(/^\d+(\.\d+)*\.?\s+/, "").replace(/\s/g, "").toLowerCase();
-}
+// Strip a leading section number ("3.1.", "3.1 ", "3.") so source and IR headings compare even
+// when one side drops the numbering; a number without a dot ("2024 Roadmap") is text.
+const headingWords = (t) => norm(t).replace(/^(\d+\.)+\d*\s+/, "").toLowerCase();
+// Identity is whitespace-free: inline code in a heading joins with or without a space ("the
+// ?: operator" in source, "the?: operator" in the IR).
+const headingKey = (t) => headingWords(t).replace(/\s/g, "");
 // Code lines rendered as <div>s join without a newline in textContent; the IR has one.
 const codeKey = (s) => norm(s).replace(/\s/g, "");
 const tableKey = (cells) => norm(cells.join(" "));
@@ -52,8 +55,10 @@ function sourceBlocks(html) {
     const text = t.replace(/\s*¶\s*$/, "");
     if (text) headings.push({ level: Number(el.tagName[1]), text, raw: el.textContent });
   }
+  // Innermost tables only: an outer (layout) table's rows and cells contain every nested
+  // table, which multiplies the audit's output with nesting depth.
   for (const tbl of root.querySelectorAll("table")) {
-    if (tbl.closest(skip)) continue;
+    if (tbl.closest(skip) || tbl.querySelector("table")) continue;
     const rows = [...tbl.querySelectorAll("tr")].map((tr) => [...tr.querySelectorAll("th,td")].map((c) => c.textContent));
     const raw = rows.flat();
     if (raw.length) tables.push({ rows: rows.map((r) => r.map(norm)), raw: raw.join(" | ") });
@@ -85,49 +90,74 @@ function take(map, key) {
 
 // A source table survived if it matches an IR table, or most of its data cells appear in
 // the IR's text (Defuddle re-renders some tables as lists or prose; that is re-shaping, not
-// a drop). The first row is the header row and is not counted as data.
+// a drop). The first row is the header row and is not counted as data, unless it is the only row.
 function tableSurvived(rows, tables, fullText) {
   if (take(tables, tableKey(rows.flat()))) return true;
-  const data = rows.slice(1).flat().map(cellNorm).filter(Boolean);
+  const data = (rows.length > 1 ? rows.slice(1) : rows).flat().map(cellNorm).filter(Boolean);
   if (!data.length) return true;
   const hits = data.filter((c) => fullText.includes(c));
   return hits.length / data.length >= 0.6;
 }
 
 // Match source headings to IR headings in document order. Returns, per source heading, the
-// IR block index it matched, "title" for the h1 that became the document title, or null.
+// IR block index it matched, "title" for the first heading that became the document title, or
+// null.
 function placeHeadings(headings, blocks, titleKey) {
-  const irHeads = [];
-  blocks.forEach((b, i) => { if (b.type === "heading") irHeads.push({ i, key: headingKey(b.text), used: false }); });
-  let cursor = -1;
+  const byKey = new Map(); // key -> unused IR heading indices, ascending
+  blocks.forEach((b, i) => {
+    if (b.type !== "heading") return;
+    const k = headingKey(b.text);
+    if (!byKey.has(k)) byKey.set(k, []);
+    byKey.get(k).push(i);
+  });
+  let cursor = -1, titled = false;
   return headings.map((h) => {
     const k = headingKey(h.text);
-    if (k === titleKey) return "title";
-    const m = irHeads.find((x) => !x.used && x.key === k && x.i > cursor) ?? irHeads.find((x) => !x.used && x.key === k);
-    if (!m) return null;
-    m.used = true;
-    cursor = Math.max(cursor, m.i);
-    return m.i;
+    if (k === titleKey && !titled) { titled = true; return "title"; }
+    const free = byKey.get(k);
+    if (!free?.length) return null;
+    const at = Math.max(0, free.findIndex((i) => i > cursor));
+    const [i] = free.splice(at, 1);
+    cursor = Math.max(cursor, i);
+    return i;
   });
 }
 
-// The IR index range a source position maps to: between the IR positions of the nearest
-// placed headings before (up to index `before`) and after it.
-function irWindow(placed, before, after, blocks) {
+// Per source heading j, the IR index of the nearest placed heading at or before j (-1 if none)
+// and at or after j (blocks.length if none). Linear, so window lookups are O(1).
+function neighbours(placed, n) {
   const num = (x) => typeof x === "number";
-  return [placed.slice(0, before + 1).filter(num).at(-1) ?? -1, placed.slice(after).find(num) ?? blocks.length];
+  const before = [], after = [];
+  let last = -1;
+  for (let j = 0; j < placed.length; j++) { if (num(placed[j])) last = placed[j]; before[j] = last; }
+  last = n;
+  for (let j = placed.length - 1; j >= 0; j--) { if (num(placed[j])) last = placed[j]; after[j] = last; }
+  return { before: (j) => (j < 0 ? -1 : before[j]), after: (j) => (j >= placed.length ? n : after[j]) };
 }
 
-// A missing heading is demoted, not lost, only when a non-heading IR block between its
-// neighbours' positions starts with its text. Matching anywhere in the IR would file real
-// drops of short headings ("Note", "Usage") as demoted.
-function demotedTo(j, placed, headings, blocks, claimed) {
-  const [lo, hi] = irWindow(placed, j - 1, j + 1, blocks);
-  const k = headingKey(headings[j].text);
-  for (let i = lo + 1; i < hi; i++) {
-    const b = blocks[i];
-    if (claimed.has(i) || b.type === "heading" || typeof b.text !== "string") continue;
-    if (headingKey(b.text).startsWith(k)) { claimed.add(i); return b; }
+// Text keys of the IR's prose blocks, computed once per audit.
+function proseKeys(blocks) {
+  return blocks.map((b) => {
+    const text = b.type === "list" ? b.items.join(" ") : b.type === "heading" ? null : b.text;
+    return typeof text === "string" ? { words: headingWords(text), code: codeKey(text) } : null;
+  });
+}
+
+// A missing heading is demoted, not lost, only when a prose block between its placed
+// neighbours starts with its text as a whole word. Matching anywhere in the IR would file real
+// drops of short headings ("Note", "Usage") as demoted; so does a window with no placed
+// neighbour at all, which spans the whole page. The scan stops DEMOTE_SCAN blocks in: a
+// demotion sits where the heading was, and an unbounded scan is quadratic on large pages.
+const DEMOTE_SCAN = 200;
+function demotedTo(lo, hi, h, blocks, keys, claimed) {
+  if (lo === -1 && hi === blocks.length) return null;
+  const w = headingWords(h.text);
+  for (let i = lo + 1; i < Math.min(hi, lo + 1 + DEMOTE_SCAN); i++) {
+    const k = keys[i];
+    if (!k || claimed.has(i) || !k.words.startsWith(w)) continue;
+    if (/[a-z0-9]$/.test(w) && /^[a-z0-9]/.test(k.words.slice(w.length))) continue;
+    claimed.add(i);
+    return blocks[i];
   }
   return null;
 }
@@ -136,14 +166,10 @@ function demotedTo(j, placed, headings, blocks, claimed) {
 // section (Defuddle flattens <details> and some editors into paragraphs). Containment is safe
 // for code as it is not for headings only above a length floor; shorter code stays a diff.
 const DEMOTE_MIN_CODE = 20;
-function codeDemotedTo(code, placed, blocks) {
-  if (codeKey(code.key).length < DEMOTE_MIN_CODE) return null;
-  const [lo, hi] = irWindow(placed, code.under, code.under + 1, blocks);
-  for (let i = lo + 1; i < hi; i++) {
-    const b = blocks[i];
-    const text = b.type === "list" ? b.items.join(" ") : b.text;
-    if (b.type !== "heading" && typeof text === "string" && codeKey(text).includes(codeKey(code.key))) return b;
-  }
+function codeDemotedTo(lo, hi, code, blocks, keys) {
+  const k = codeKey(code.key);
+  if (k.length < DEMOTE_MIN_CODE || (lo === -1 && hi === blocks.length)) return null;
+  for (let i = lo + 1; i < Math.min(hi, lo + 1 + DEMOTE_SCAN); i++) if (keys[i]?.code.includes(k)) return blocks[i];
   return null;
 }
 
@@ -154,8 +180,15 @@ const FLAT_MIN_SOURCE = 5, FLAT_MAX_RATIO = 0.1;
 function flattened(src, blocks) {
   const n = src.headings.length + src.codes.length;
   const kept = blocks.filter((b) => ["heading", "code", "table", "list"].includes(b.type)).length;
-  return n >= FLAT_MIN_SOURCE && kept / n <= FLAT_MAX_RATIO;
+  return n >= FLAT_MIN_SOURCE && kept / n <= FLAT_MAX_RATIO ? { n, kept } : null;
 }
+
+// Page text in a finding's reason is clipped; the full block text is in the finding's `text`.
+const clip = (s, n = 200) => (s.length > n ? `${s.slice(0, n)}…` : s);
+
+// Per-block findings per page. Past the cap the rest are counted, not classified: bounded work
+// and output on a hostile or huge page. No fixture comes near it.
+const MAX_BLOCK_FINDINGS = 500;
 
 export function auditSourceLoss(html, blocks, title = "") {
   const src = sourceBlocks(html);
@@ -168,7 +201,7 @@ export function auditSourceLoss(html, blocks, title = "") {
   const flatText = flat ? codeKey(blocks.map((b) => b.text ?? b.code ?? (b.items || []).join(" ")).join(" ")).toLowerCase() : "";
   const survives = (raw) => flat && flatText.includes(codeKey(raw).toLowerCase());
   if (flat) {
-    losses.push(ir.loss(`extraction flattened: ${src.headings.length} headings and ${src.codes.length} code blocks exist only as prose`, "extract-flattened"));
+    losses.push(ir.loss(`extraction flattened: the IR kept ${flat.kept} of ${flat.n} source headings and code blocks as structure`, "extract-flattened"));
   }
 
   if (!src.headings.length && !src.codes.length && !src.tables.length &&
@@ -177,23 +210,29 @@ export function auditSourceLoss(html, blocks, title = "") {
   }
 
   const placed = placeHeadings(src.headings, blocks, headingKey(title));
+  const nb = neighbours(placed, blocks.length);
+  const keys = proseKeys(blocks);
   const claimed = new Set();
+  const pageLevel = losses.length;
+  let omitted = 0;
+  const full = () => losses.length - pageLevel >= MAX_BLOCK_FINDINGS && ++omitted;
   src.headings.forEach((h, j) => {
-    if (placed[j] !== null) return;
-    const to = demotedTo(j, placed, src.headings, blocks, claimed) ?? (survives(h.text) ? { type: "prose" } : null);
-    if (to) losses.push(ir.loss(`source heading demoted to ${to.type} (h${h.level}): ${h.text}`, "source-heading-demoted", h.raw));
-    else losses.push(ir.loss(`source heading not extracted (h${h.level}): ${h.text}`, "source-heading-diff", h.raw));
+    if (placed[j] !== null || full()) return;
+    const to = demotedTo(nb.before(j - 1), nb.after(j + 1), h, blocks, keys, claimed) ?? (survives(h.text) ? { type: "prose" } : null);
+    if (to) losses.push(ir.loss(`source heading demoted to ${to.type} (h${h.level}): ${clip(h.text)}`, "source-heading-demoted", h.raw));
+    else losses.push(ir.loss(`source heading not extracted (h${h.level}): ${clip(h.text)}`, "source-heading-diff", h.raw));
   });
   for (const code of src.codes) {
-    if (take(irc.codes, codeKey(code.key))) continue;
-    const to = codeDemotedTo(code, placed, blocks) ?? (survives(code.key) ? { type: "prose" } : null);
-    if (to) losses.push(ir.loss(`source code block demoted to ${to.type}: ${code.key.slice(0, 80)}`, "source-code-demoted", code.raw));
-    else losses.push(ir.loss(`source code block not extracted: ${code.key.slice(0, 80)}`, "source-code-diff", code.raw));
+    if (take(irc.codes, codeKey(code.key)) || full()) continue;
+    const to = codeDemotedTo(nb.before(code.under), nb.after(code.under + 1), code, blocks, keys) ?? (survives(code.key) ? { type: "prose" } : null);
+    if (to) losses.push(ir.loss(`source code block demoted to ${to.type}: ${clip(code.key, 80)}`, "source-code-demoted", code.raw));
+    else losses.push(ir.loss(`source code block not extracted: ${clip(code.key, 80)}`, "source-code-diff", code.raw));
   }
   for (const { rows, raw } of src.tables) {
-    if (!tableSurvived(rows, irc.tables, irc.fullText)) {
-      losses.push(ir.loss(`source table not extracted: ${rows.flat().slice(0, 6).join(" | ")}`, "source-table-diff", raw));
+    if (!tableSurvived(rows, irc.tables, irc.fullText) && !full()) {
+      losses.push(ir.loss(`source table not extracted: ${clip(rows.flat().slice(0, 6).join(" | "))}`, "source-table-diff", raw));
     }
   }
+  if (omitted) losses.push(ir.loss(`audit stopped at ${MAX_BLOCK_FINDINGS} findings: ${omitted} more missing headings, code blocks, or tables not reported`, "audit-truncated"));
   return losses;
 }
