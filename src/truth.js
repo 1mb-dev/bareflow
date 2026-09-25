@@ -34,7 +34,9 @@ function universe(html) {
     const text = kind === "heading" ? headingText(el.textContent)
       : kind === "code" ? vnorm(el.textContent)
       : tableText([...el.querySelectorAll("th, td")].map((c) => c.textContent));
-    if (text) out.push({ kind, text, label: "present" });
+    // lines: non-blank source lines of a code block, to catch code flattened to one line.
+    const lines = kind === "code" ? el.textContent.split("\n").filter((l) => l.trim()).length : 0;
+    if (text) out.push({ kind, text, lines, label: "present" });
   }
   return out;
 }
@@ -93,10 +95,14 @@ export function scoreLoss(html, doc, spec) {
 
   // Label sanity against the IR: present must be there, lost must not be.
   const ir = irTexts(doc);
+  const irCodeLines = new Map();
+  for (const { block: b } of walk(doc)) if (b.type === "code") irCodeLines.set(loose(vnorm(b.code)), b.code.split("\n").length);
   const inIr = (it) => {
     const i = ir[it.kind].indexOf(loose(it.text));
-    if (i >= 0) { ir[it.kind].splice(i, 1); return true; }
-    return false;
+    if (i < 0) return false;
+    ir[it.kind].splice(i, 1);
+    if (it.kind === "code" && it.lines > 1 && irCodeLines.get(loose(it.text)) === 1) errors.push(`code flattened to one line: "${it.text.slice(0, 60)}"`);
+    return true;
   };
   for (const it of items) {
     const found = it.label === "chrome" || it.label === "demoted" ? null : inIr(it);

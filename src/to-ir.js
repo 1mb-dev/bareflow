@@ -18,7 +18,7 @@ function inlineMarkdown(node, out = []) {
       case "EM": case "I": out.push(`*${textContent(child)}*`); break;
       case "IMG": out.push(`![${child.getAttribute("alt") || ""}](${child.getAttribute("src") || ""})`); break;
       case "BR": out.push("\n"); break;
-      case "PRE": out.push(`\`\`\`\n${textContent(child)}\n\`\`\``); break;
+      case "PRE": out.push(`\`\`\`\n${codeText(child)}\n\`\`\``); break;
       default: inlineMarkdown(child, out);
     }
   }
@@ -27,6 +27,12 @@ function inlineMarkdown(node, out = []) {
 
 function textContent(node) {
   return (node.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+
+// Code keeps its line breaks and indentation (Python, YAML); only leading blank lines and
+// trailing whitespace go.
+function codeText(pre) {
+  return (pre.textContent ?? "").replace(/^\s*\n/, "").replace(/\s+$/, "");
 }
 
 // A heading's permalink anchor: either its id, or an <a href="#..."> child. Strip it from text.
@@ -54,7 +60,7 @@ function detectLang(pre) {
 function pullCode(el) {
   const codes = [];
   for (const pre of [...el.querySelectorAll("pre")]) {
-    codes.push(ir.code(textContent(pre), detectLang(pre)));
+    codes.push(ir.code(codeText(pre), detectLang(pre)));
     pre.remove();
   }
   return codes;
@@ -88,7 +94,7 @@ function blockFor(el, out) {
     return;
   }
   if (tag === "PRE") {
-    out.push(ir.code(textContent(el), detectLang(el)));
+    out.push(ir.code(codeText(el), detectLang(el)));
     return;
   }
   if (tag === "P") {
