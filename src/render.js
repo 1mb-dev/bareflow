@@ -9,10 +9,18 @@ export function renderMarkdown(doc) {
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
 }
 
+// A title that is the first heading plus a site suffix ("Title - Site", "Title | Site") repeats
+// the heading.
+const SUFFIX = /^\s*[-|–—·:]\s/;
+function repeatsTitle(heading, title) {
+  const h = heading.toLowerCase(), t = title.toLowerCase();
+  return t === h || (t.startsWith(h) && SUFFIX.test(t.slice(h.length)));
+}
+
 function renderSection(s, depth, out) {
-  // Suppress a leading heading that merely repeats the section title.
+  // Suppress the section title when the leading heading already says it.
   const first = s.blocks[0];
-  if (!(first?.type === "heading" && first.text === s.title)) {
+  if (!(first?.type === "heading" && repeatsTitle(first.text, s.title))) {
     out.push(`${"#".repeat(Math.min(depth, 6))} ${s.title}`);
     out.push("");
   }

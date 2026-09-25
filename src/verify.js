@@ -16,6 +16,7 @@ import { cacheKey } from "./cache.js";
 import { isPrivateIp } from "./ssrf.js";
 import { handle } from "./worker.js";
 import { walk, SCHEMA } from "./ir.js";
+import { renderMarkdown } from "./render.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -146,6 +147,10 @@ for (const [id, spec] of Object.entries(inventory)) {
   const tbl = "<main><table><tr><th>Name</th><th>Kind</th><th>Size</th><th>Mode</th></tr><tr><td>alpha</td></tr></table></main>";
   record("loss-audit", "table", "header row skipped, reshaped data survives",
     auditSourceLoss(tbl, [P("Name Kind Size Mode")]).length === 1 && auditSourceLoss(tbl, [P("alpha")]).length === 0);
+
+  // Bug 15: a site-suffixed title that repeats the first heading is not rendered twice.
+  const suffixed = renderMarkdown({ sections: [{ title: "What is Ownership? - The Rust Programming Language", blocks: [Hd("What Is Ownership?")], losses: [], children: [] }] });
+  record("render", "title", "site-suffixed title deduped", suffixed === "## What Is Ownership?\n");
 
   // Bug 13: a figcaption next to an image is kept.
   const fig = contentToBlocks('<figure><img src="a.png" alt="A"><figcaption>Figure caption</figcaption></figure>');
