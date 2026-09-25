@@ -30,17 +30,17 @@ function sourceBlocks(html) {
   for (const h of root.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
     if (h.closest(SKIP)) continue;
     const text = norm(h.textContent).replace(/\s*¶\s*$/, "");
-    if (text) headings.push({ level: Number(h.tagName[1]), text });
+    if (text) headings.push({ level: Number(h.tagName[1]), text, raw: h.textContent });
   }
   for (const pre of root.querySelectorAll("pre")) {
     if (pre.closest(SKIP)) continue;
     const t = norm(pre.textContent);
-    if (t) codes.push(t);
+    if (t) codes.push({ key: t, raw: pre.textContent });
   }
   for (const tbl of root.querySelectorAll("table")) {
     if (tbl.closest(SKIP)) continue;
-    const cells = [...tbl.querySelectorAll("th,td")].map((c) => norm(c.textContent));
-    if (cells.length) tables.push(cells);
+    const raw = [...tbl.querySelectorAll("th,td")].map((c) => c.textContent);
+    if (raw.length) tables.push({ cells: raw.map(norm), raw: raw.join(" | ") });
   }
   return { headings, codes, tables };
 }
@@ -86,17 +86,17 @@ export function auditSourceLoss(html, blocks, title = "") {
   for (const h of src.headings) {
     if (headingKey(h.text) === titleKey) continue; // the h1 that became document.title is not lost
     if (!take(irc.headings, headingKey(h.text))) {
-      losses.push(ir.loss(`source heading not extracted (h${h.level}): ${h.text}`, "source-heading-diff"));
+      losses.push(ir.loss(`source heading not extracted (h${h.level}): ${h.text}`, "source-heading-diff", h.raw));
     }
   }
   for (const code of src.codes) {
-    if (!take(irc.codes, codeKey(code))) {
-      losses.push(ir.loss(`source code block not extracted: ${code.slice(0, 80)}`, "source-code-diff"));
+    if (!take(irc.codes, codeKey(code.key))) {
+      losses.push(ir.loss(`source code block not extracted: ${code.key.slice(0, 80)}`, "source-code-diff", code.raw));
     }
   }
-  for (const cells of src.tables) {
+  for (const { cells, raw } of src.tables) {
     if (!tableSurvived(cells, irc.tables, irc.fullText)) {
-      losses.push(ir.loss(`source table not extracted: ${cells.slice(0, 6).join(" | ")}`, "source-table-diff"));
+      losses.push(ir.loss(`source table not extracted: ${cells.slice(0, 6).join(" | ")}`, "source-table-diff", raw));
     }
   }
   return losses;

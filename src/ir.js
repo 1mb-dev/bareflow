@@ -37,8 +37,9 @@ export function blockquote(text) {
 export function image(src, alt) {
   return { type: "image", src, ...(alt ? { alt } : {}) };
 }
-export function loss(reason, source) {
-  return { type: "loss", reason, ...(source ? { source } : {}) };
+// text: the dropped block's source text, when the finding is about one block.
+export function loss(reason, source, text) {
+  return { type: "loss", reason, ...(source ? { source } : {}), ...(text != null ? { text } : {}) };
 }
 
 export function section(id, title, opts = {}) {
