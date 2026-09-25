@@ -101,6 +101,13 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("truth-harness", "fails on", "demoted finding on a lost block", fails(demotedFinding, lost, /^new false positive \(lost\)/));
   record("truth-harness", "fails on", "demoted label whose text is gone", fails(withLosses(true), { labels: { demoted: [H("Gone")] } }, /labelled demoted but text not in IR/));
   record("truth-harness", "fails on", "lost label on a block in the IR", fails(doc, lost, /labelled lost but in IR/));
+  // Partial layout loss: one line's relative indent gone, everything else intact.
+  const py = "<html><body><main><h1>T</h1><pre>if x:\n    y = 1\n    z = 2</pre></main></body></html>";
+  const pyDoc = await run({ url, html: py, retrievedAt: FIXED });
+  const pyCut = structuredClone(pyDoc.doc);
+  pyCut.sections[0].blocks = pyCut.sections[0].blocks.map((b) => (b.type === "code" ? { ...b, code: "if x:\n    y = 1\nz = 2" } : b));
+  record("truth-harness", "fails on", "one line's indent lost",
+    scoreLoss(py, pyDoc.doc, {}).errors.length === 0 && scoreLoss(py, pyCut, {}).errors.some((e) => e.startsWith("code layout changed")));
 }
 
 // Mutation test: drop a known code block from the IR; the audit must flag it as a loss.

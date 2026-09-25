@@ -11,6 +11,17 @@ import { parseHTML } from "linkedom";
 import { walk } from "./ir.js";
 import { extractNav, canonicalUrl } from "./compose.js";
 
+// Lines of a code block as layout: \p{Cf} removed, trailing whitespace, blank edge lines and
+// repeated blank lines dropped (blank-line counts are not syntax; Defuddle collapses them),
+// common leading indentation removed.
+function lineLayout(code) {
+  const lines = (code || "").replace(/\p{Cf}/gu, "").replace(/\n\s*\n(\s*\n)+/g, "\n\n").split("\n").map((l) => l.replace(/\s+$/, ""));
+  while (lines.length && !lines[0]) lines.shift();
+  while (lines.length && !lines.at(-1)) lines.pop();
+  const indent = Math.min(...lines.filter(Boolean).map((l) => l.match(/^\s*/)[0].length));
+  return lines.map((l) => l.slice(Number.isFinite(indent) ? indent : 0));
+}
+
 const vnorm = (s) => (s || "").normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/\s+/g, " ").trim();
 // Permalink glyphs trail headings on Sphinx (¶) and VitePress (#). "C#" has no space, so it stays.
 const headingText = (s) => vnorm(s).replace(/\s*¶$|\s+#$/u, "");
@@ -34,10 +45,9 @@ function universe(html) {
     const text = kind === "heading" ? headingText(el.textContent)
       : kind === "code" ? vnorm(el.textContent)
       : tableText([...el.querySelectorAll("th, td")].map((c) => c.textContent));
-    // lines: non-blank source lines of a code block, to catch code flattened to one line.
-    const lines = kind === "code" ? el.textContent.split("\n").filter((l) => l.trim()).length : 0;
+    const raw = kind === "code" ? el.textContent : null;
     const cells = kind === "table" ? [...el.querySelectorAll("td")].map((c) => loose(vnorm(c.textContent))).filter(Boolean) : null;
-    if (text) out.push({ kind, text, lines, cells, label: "present" });
+    if (text) out.push({ kind, text, raw, cells, label: "present" });
   }
   return out;
 }
@@ -96,13 +106,21 @@ export function scoreLoss(html, doc, spec) {
 
   // Label sanity against the IR: present must be there, lost must not be.
   const ir = irTexts(doc);
-  const irCodeLines = new Map();
-  for (const { block: b } of walk(doc)) if (b.type === "code") irCodeLines.set(loose(vnorm(b.code)), b.code.split("\n").length);
+  // Code identity is loose for matching, exact for layout: a matched multi-line block must keep
+  // every line, after a common dedent and trailing-whitespace strip (indentation is syntax in
+  // Python and YAML). Source code rendered as one <div> per line has no newlines in its
+  // textContent and is checked loosely only.
+  const irCode = new Map();
+  for (const { block: b } of walk(doc)) if (b.type === "code") irCode.set(loose(vnorm(b.code)), b.code);
+  const drifts = [];
   const inIr = (it) => {
     const i = ir[it.kind].indexOf(loose(it.text));
     if (i < 0) return false;
     ir[it.kind].splice(i, 1);
-    if (it.kind === "code" && it.lines > 1 && irCodeLines.get(loose(it.text)) === 1) errors.push(`code flattened to one line: "${it.text.slice(0, 60)}"`);
+    if (it.kind === "code" && lineLayout(it.raw).length > 1) {
+      const got = irCode.get(loose(it.text));
+      if (lineLayout(got).join("\n") !== lineLayout(it.raw).join("\n")) drifts.push({ kind: "code", text: it.text });
+    }
     return true;
   };
   const irProse = loose([...walk(doc)].map(({ block: b }) => b.text ?? b.code ?? (b.items || []).join(" ")).join(" "));
@@ -114,6 +132,11 @@ export function scoreLoss(html, doc, spec) {
     if (it.label === "present" && !found) errors.push(`unlabelled drop: ${it.kind} "${it.text.slice(0, 80)}"`);
     if (it.label === "lost" && found) errors.push(`labelled lost but in IR: ${it.kind} "${it.text.slice(0, 80)}"`);
   }
+
+  const [knownDrift, driftErrs] = resolve(spec.known_code_drift || [], drifts, "known_code_drift");
+  errors.push(...driftErrs.map((e) => `${e} (stale: remove it)`));
+  for (const e of spec.known_code_drift || []) if (!e.why) errors.push(`known_code_drift without a why: "${e.key}"`);
+  for (const d of drifts) if (!knownDrift.includes(d)) errors.push(`code layout changed: "${d.text.slice(0, 60)}"`);
 
   // Emitted findings against labels, as a multiset.
   // A demoted finding is right only on a demoted label, and sits outside precision: it reports a

@@ -38,7 +38,10 @@
       ]
     },
     "known_fp": [],
-    "known_miss": []
+    "known_miss": [],
+    "known_code_drift": [
+      { "kind": "code", "key": "+---+---+", "why": "Defuddle trims the leading spaces of a <pre>'s first line, so the diagram's first row shifts one column" }
+    ]
   },
   "python-tutorial-controlflow": {
     "fixture": "python-tutorial-controlflow.html",
