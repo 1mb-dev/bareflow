@@ -20,7 +20,7 @@ const loose = (t) => t.replace(/\s/g, "");
 
 const AUDIT_KIND = {
   "source-heading-diff": "heading", "source-heading-demoted": "heading",
-  "source-code-diff": "code", "source-table-diff": "table",
+  "source-code-diff": "code", "source-code-demoted": "code", "source-table-diff": "table",
 };
 const LABELS = ["lost", "demoted", "chrome"];
 
@@ -111,7 +111,7 @@ export function scoreLoss(html, doc, spec) {
   const fps = [];
   for (const f of auditLosses(doc)) {
     if (f.source === "audit-scope-empty") { errors.push("audit scope empty: the auditor could not read this fixture"); continue; }
-    const want = f.source === "source-heading-demoted" ? "demoted" : "lost";
+    const want = f.source.endsWith("-demoted") ? "demoted" : "lost";
     const i = pool.findIndex((it) => !it.taken && it.kind === f.kind && loose(it.text) === loose(f.text));
     if (i >= 0) pool[i].taken = true;
     if (i >= 0 && pool[i].label === want) { if (want === "lost") tp++; else demoted++; continue; }

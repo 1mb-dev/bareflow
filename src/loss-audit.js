@@ -40,16 +40,14 @@ function sourceBlocks(html) {
   const { document } = parseHTML(html);
   const { root, skip } = auditScope(document);
 
+  // One pass in document order, so each code block knows the heading it sits under.
   const headings = [], codes = [], tables = [];
-  for (const h of root.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
-    if (h.closest(skip)) continue;
-    const text = norm(h.textContent).replace(/\s*¶\s*$/, "");
-    if (text) headings.push({ level: Number(h.tagName[1]), text, raw: h.textContent });
-  }
-  for (const pre of root.querySelectorAll("pre")) {
-    if (pre.closest(skip)) continue;
-    const t = norm(pre.textContent);
-    if (t) codes.push({ key: t, raw: pre.textContent });
+  for (const el of root.querySelectorAll("h1, h2, h3, h4, h5, h6, pre")) {
+    if (el.closest(skip)) continue;
+    const t = norm(el.textContent);
+    if (el.tagName === "PRE") { if (t) codes.push({ key: t, raw: el.textContent, under: headings.length - 1 }); continue; }
+    const text = t.replace(/\s*¶\s*$/, "");
+    if (text) headings.push({ level: Number(el.tagName[1]), text, raw: el.textContent });
   }
   for (const tbl of root.querySelectorAll("table")) {
     if (tbl.closest(skip)) continue;
@@ -110,18 +108,38 @@ function placeHeadings(headings, blocks, titleKey) {
   });
 }
 
+// The IR index range a source position maps to: between the IR positions of the nearest
+// placed headings before (up to index `before`) and after it.
+function irWindow(placed, before, after, blocks) {
+  const num = (x) => typeof x === "number";
+  return [placed.slice(0, before + 1).filter(num).at(-1) ?? -1, placed.slice(after).find(num) ?? blocks.length];
+}
+
 // A missing heading is demoted, not lost, only when a non-heading IR block between its
 // neighbours' positions starts with its text. Matching anywhere in the IR would file real
 // drops of short headings ("Note", "Usage") as demoted.
 function demotedTo(j, placed, headings, blocks, claimed) {
-  const num = (x) => typeof x === "number";
-  const lo = placed.slice(0, j).filter(num).at(-1) ?? -1;
-  const hi = placed.slice(j + 1).find(num) ?? blocks.length;
+  const [lo, hi] = irWindow(placed, j - 1, j + 1, blocks);
   const k = headingKey(headings[j].text);
   for (let i = lo + 1; i < hi; i++) {
     const b = blocks[i];
     if (claimed.has(i) || b.type === "heading" || typeof b.text !== "string") continue;
     if (headingKey(b.text).startsWith(k)) { claimed.add(i); return b; }
+  }
+  return null;
+}
+
+// A missing code block is demoted when its text sits inside a prose block in the same
+// section (Defuddle flattens <details> and some editors into paragraphs). Containment is safe
+// for code as it is not for headings only above a length floor; shorter code stays a diff.
+const DEMOTE_MIN_CODE = 20;
+function codeDemotedTo(code, placed, blocks) {
+  if (codeKey(code.key).length < DEMOTE_MIN_CODE) return null;
+  const [lo, hi] = irWindow(placed, code.under, code.under + 1, blocks);
+  for (let i = lo + 1; i < hi; i++) {
+    const b = blocks[i];
+    const text = b.type === "list" ? b.items.join(" ") : b.text;
+    if (b.type !== "heading" && typeof text === "string" && codeKey(text).includes(codeKey(code.key))) return b;
   }
   return null;
 }
@@ -145,9 +163,10 @@ export function auditSourceLoss(html, blocks, title = "") {
     else losses.push(ir.loss(`source heading not extracted (h${h.level}): ${h.text}`, "source-heading-diff", h.raw));
   });
   for (const code of src.codes) {
-    if (!take(irc.codes, codeKey(code.key))) {
-      losses.push(ir.loss(`source code block not extracted: ${code.key.slice(0, 80)}`, "source-code-diff", code.raw));
-    }
+    if (take(irc.codes, codeKey(code.key))) continue;
+    const to = codeDemotedTo(code, placed, blocks);
+    if (to) losses.push(ir.loss(`source code block demoted to ${to.type}: ${code.key.slice(0, 80)}`, "source-code-demoted", code.raw));
+    else losses.push(ir.loss(`source code block not extracted: ${code.key.slice(0, 80)}`, "source-code-diff", code.raw));
   }
   for (const { rows, raw } of src.tables) {
     if (!tableSurvived(rows, irc.tables, irc.fullText)) {

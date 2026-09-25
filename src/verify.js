@@ -103,6 +103,14 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("loss-audit", "demoted", "at position only",
     JSON.stringify(src(demo)) === JSON.stringify(["source-heading-demoted", "source-heading-diff"]) && demo[0].text === "Note:");
 
+  // Code flattened into prose in its own section is demoted; the same text in another section,
+  // or code under the length floor, is a diff.
+  const long = "const answer = compute(41) + 1;";
+  const code = auditSourceLoss(`<main><h2>A</h2><pre>${long}</pre><pre>ls -la</pre><h2>B</h2><pre>${long.replace("41", "40")}</pre><h2>C</h2></main>`,
+    [Hd("A"), P(`Run \`${long}\` then ls -la`), Hd("B"), Hd("C"), P(long.replace("41", "40"))]);
+  record("loss-audit", "demoted", "code in prose, same section only",
+    JSON.stringify(src(code)) === JSON.stringify(["source-code-demoted", "source-code-diff", "source-code-diff"]));
+
   // A scope with nothing to audit while the IR has structure is reported, not silently clean.
   const blind = auditSourceLoss("<html><body><p>x</p></body></html>", [Hd("Real")]);
   record("loss-audit", "scope", "empty scope reported", JSON.stringify(src(blind)) === JSON.stringify(["audit-scope-empty"]));

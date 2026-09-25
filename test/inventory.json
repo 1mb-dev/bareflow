@@ -193,13 +193,7 @@
         { "kind": "code", "key": "$ deno init --npm vite my-vue-app" }
       ]
     },
-    "known_fp": [
-      { "kind": "code", "key": "# npm 7+, extra double-dash is needed: $ npm create vite@lat" },
-      { "kind": "code", "key": "$ yarn create vite my-vue-app --template vue" },
-      { "kind": "code", "key": "$ pnpm create vite my-vue-app --template vue" },
-      { "kind": "code", "key": "$ bun create vite my-vue-app --template vue" },
-      { "kind": "code", "key": "$ deno init --npm vite my-vue-app --template vue" }
-    ],
+    "known_fp": [],
     "known_miss": []
   },
   "vite-guide-features": {
@@ -218,9 +212,7 @@
         { "kind": "code", "key": "/// <reference types=\"vite/client\"" }
       ]
     },
-    "known_fp": [
-      { "kind": "code", "key": "/// <reference types=\"vite/client\" />" }
-    ],
+    "known_fp": [],
     "known_miss": []
   },
   "k8s-pods": {
@@ -288,8 +280,7 @@
       ]
     },
     "known_fp": [
-      { "kind": "heading", "key": "How does React know which state to return?" },
-      { "kind": "code", "key": "let componentHooks = []; let currentHookIndex = 0; // How us" }
+      { "kind": "heading", "key": "How does React know which state to return?" }
     ],
     "known_miss": []
   },
@@ -362,12 +353,7 @@
       { "kind": "heading", "key": "Import Tailwind CSS" },
       { "kind": "heading", "key": "Start your build process" },
       { "kind": "heading", "key": "Start using Tailwind in your HTML" },
-      { "kind": "code", "key": "npm create vite@latest my-projectcd my-project" },
-      { "kind": "code", "key": "npm install tailwindcss @tailwindcss/vite" },
-      { "kind": "code", "key": "import { defineConfig } from 'vite'import tailwindcss from '" },
-      { "kind": "code", "key": "@import \"tailwindcss\";" },
-      { "kind": "code", "key": "npm run dev" },
-      { "kind": "code", "key": "<!doctype html><html><head> <meta charset=\"UTF-8\"> <meta nam" }
+      { "kind": "code", "key": "npm run dev" }
     ],
     "known_miss": []
   },
