@@ -46,9 +46,14 @@ export function section(id, title, opts = {}) {
   return { id, title, ...(opts.url ? { url: opts.url } : {}), blocks: [], losses: [], children: [] };
 }
 
-// Document is the tree root: document -> section -> block.
-export function document({ id, title, source, generator, sections }) {
-  return { schema: SCHEMA, id, title, source, generator, sections };
+// Document is the tree root: document -> section -> block. scope says what the sections cover
+// (one page, or a prev/next window onto a docs section, never the whole section); breadcrumbs
+// is where the page sits in the site.
+export const SCOPE_KINDS = new Set(["page", "window"]);
+export const SIBLING_STATUS = new Set(["attached", "unfetched", "failed", "blocked", "absent"]);
+
+export function document({ id, title, source, generator, scope, breadcrumbs, sections }) {
+  return { schema: SCHEMA, id, title, source, generator, scope, breadcrumbs, sections };
 }
 
 const fail = (path, msg) => { throw new Error(`IR contract violation at ${path}: ${msg}`); };
@@ -61,6 +66,14 @@ export function validate(doc) {
     fail("source", "url, fingerprint, and retrievedAt required");
   if (!doc.generator || typeof doc.generator.version !== "string" || typeof doc.generator.extractor !== "string" || typeof doc.generator.extractorVersion !== "string")
     fail("generator", "version, extractor, and extractorVersion required");
+  if (!doc.scope || !SCOPE_KINDS.has(doc.scope.kind)) fail("scope.kind", "page | window");
+  for (const r of ["prev", "next"]) {
+    const s = doc.scope.siblings?.[r];
+    if (!s || !SIBLING_STATUS.has(s.status)) fail(`scope.siblings.${r}`, "status: attached | unfetched | failed | blocked | absent");
+    if ((s.status === "absent") !== (s.url === undefined)) fail(`scope.siblings.${r}.url`, "present unless absent");
+  }
+  if (!Array.isArray(doc.breadcrumbs) || !doc.breadcrumbs.every((c) => typeof c?.url === "string" && typeof c.title === "string"))
+    fail("breadcrumbs", "array of { title, url }");
   if (!Array.isArray(doc.sections) || doc.sections.length === 0) fail("sections", "must be non-empty");
   for (const s of doc.sections) validateSection(s, "sections");
   return doc;

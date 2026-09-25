@@ -1,7 +1,6 @@
-// Navigation shell: wraps a page in a section tree built from its own navigation
-// (breadcrumbs, rel=next/prev/up). When sibling content is provided (canonical url -> blocks),
-// the prev/next sections carry real blocks instead of empty stubs. Order is preserved: prev
-// before page before next. This is not a crawl; it attaches only the provided siblings.
+// Navigation: reads a page's own nav (rel=prev/next/up, breadcrumbs) and composes the page
+// with whichever prev/next siblings were attached. This is not a crawl; it attaches only the
+// provided siblings, and doc.scope says what the result covers.
 import { parseHTML } from "linkedom";
 import * as ir from "./ir.js";
 
@@ -46,77 +45,34 @@ export function extractNav(html, url) {
   return { rel, breadcrumbs };
 }
 
-// Build a Document whose section tree reflects the page's position in the docs site:
-// breadcrumb ancestors wrap the page, and prev/next are ordered siblings, each with content
-// when siblingBlocks supplies it. nav is extractNav's result for this page.
-export function compose({ url, html, nav, title, blocks, losses = [], source, generator, siblingBlocks = {} }) {
+// Build a Document: the page plus whichever prev/next siblings were attached, in order. The
+// result is a window onto the docs section, not the section, and says so in doc.scope; where
+// the page sits (breadcrumbs, else rel=up) is doc.breadcrumbs, not empty ancestor sections.
+// nav is extractNav's result for this page; siblings maps prev/next to { status, url?, title?,
+// blocks?, losses? } with status attached | unfetched | failed | blocked | absent.
+export function compose({ url, html, nav, title, blocks, losses = [], source, generator, siblings }) {
   const page = ir.section(ir.stableId(url), title || norm(extractPageTitle(html)) || url, { url });
   page.blocks = blocks;
   page.losses = losses;
 
-  const mk = (r, fallback) => {
-    if (!r || !r.url) return null;
-    const sb = siblingBlocks[r.url];
-    const s = ir.section(ir.stableId(r.url), (sb && sb.title) || r.title || fallback, { url: r.url });
-    if (sb) { s.blocks = sb.blocks; s.losses = sb.losses ?? []; }
-    return s;
+  const attached = (r) => {
+    const s = siblings[r];
+    if (s.status !== "attached") return null;
+    const sec = ir.section(ir.stableId(s.url), s.title || nav.rel[r]?.title || s.url, { url: s.url });
+    sec.blocks = s.blocks;
+    sec.losses = s.losses;
+    return sec;
   };
-  const prev = mk(nav.rel.prev, "Previous");
-  const next = mk(nav.rel.next, "Next");
+  const sections = [attached("prev"), page, attached("next")].filter(Boolean);
 
-  // Ancestor chain from breadcrumbs wraps the page. A crumb that links to the page itself is
-  // the page, not an ancestor: skip it, or its section id collides with the page and the
-  // prev/next splice below targets the wrong parent, dropping the siblings.
-  let root = page;
-  for (let i = nav.breadcrumbs.length - 1; i >= 0; i--) {
-    const a = nav.breadcrumbs[i];
-    if (ir.stableId(a.url) === page.id) continue;
-    const s = ir.section(ir.stableId(a.url), a.title, { url: a.url });
-    s.children.push(root);
-    root = s;
-  }
-  if (root === page && nav.rel.up) {
-    const up = ir.section(ir.stableId(nav.rel.up.url), nav.rel.up.title || "Parent", { url: nav.rel.up.url });
-    up.children.push(page);
-    root = up;
-  }
+  // A crumb that links to the page itself is the page, not a place above it.
+  const trail = nav.breadcrumbs.filter((c) => c.url !== url);
+  const breadcrumbs = trail.length ? trail : nav.rel.up ? [{ title: nav.rel.up.title, url: nav.rel.up.url }] : [];
 
-  if (root === page) {
-    // No parent: the document's top-level sections are the ordered siblings.
-    return ir.document({
-      id: ir.stableId(url),
-      title: title || "Document",
-      source,
-      generator,
-      sections: [prev, page, next].filter(Boolean),
-    });
-  }
+  const status = (r) => ({ status: siblings[r].status, ...(siblings[r].url ? { url: siblings[r].url } : {}) });
+  const scope = { kind: sections.length > 1 ? "window" : "page", siblings: { prev: status("prev"), next: status("next") } };
 
-  // Siblings go around the page in its immediate parent's children list.
-  const parent = immediateParent(root, page.id) ?? root;
-  const idx = parent.children.indexOf(page);
-  if (idx >= 0) {
-    if (prev) parent.children.splice(idx, 0, prev);
-    const after = parent.children.indexOf(page);
-    if (next) parent.children.splice(after + 1, 0, next);
-  }
-
-  return ir.document({
-    id: ir.stableId(url),
-    title: title || nav.rel.up?.title || "Document",
-    source,
-    generator,
-    sections: [root],
-  });
-}
-
-function immediateParent(node, targetId) {
-  for (const c of node.children) {
-    if (c.id === targetId) return node;
-    const found = immediateParent(c, targetId);
-    if (found) return found;
-  }
-  return null;
+  return ir.document({ id: ir.stableId(url), title: title || "Document", source, generator, scope, breadcrumbs, sections });
 }
 
 function extractPageTitle(html) {

@@ -24,18 +24,20 @@ function separateLosses(extracted, html, title) {
   return { blocks, losses };
 }
 
-// Fetch, extract, and partition one sibling (a canonical URL from extractNav) into blocks +
-// losses. A dead sibling returns null so it degrades to a title-only stub rather than failing
-// the whole document.
+// Fetch, extract, and partition one sibling (a canonical URL from extractNav). A dead or
+// blocked sibling is a status in doc.scope, not a failure of the whole document.
 async function buildSibling(surl, fetch) {
   // SSRF pre-check: sibling URLs come from page nav (untrusted), so reject a literal private
   // address before the fetch. Hostnames still rely on fetchSnapshot's pinned lookup.
-  if (isPrivateIp(new URL(surl).hostname.replace(/^\[|\]$/g, ""))) return null;
-  let docHtml;
-  try { docHtml = (await fetch(surl)).html; } catch { return null; }
-  const sex = await extract(docHtml, surl);
-  const { blocks, losses } = separateLosses(contentToBlocks(sex.contentHtml), docHtml, sex.title);
-  return { url: surl, title: sex.title, blocks, losses };
+  if (isPrivateIp(new URL(surl).hostname.replace(/^\[|\]$/g, ""))) return { status: "blocked", url: surl };
+  try {
+    const docHtml = (await fetch(surl)).html;
+    const sex = await extract(docHtml, surl);
+    const { blocks, losses } = separateLosses(contentToBlocks(sex.contentHtml), docHtml, sex.title);
+    return { status: "attached", url: surl, title: sex.title, blocks, losses };
+  } catch {
+    return { status: "failed", url: surl };
+  }
 }
 
 export async function run({ url, html, retrievedAt, fetch = fetchSnapshot }) {
@@ -53,18 +55,20 @@ export async function run({ url, html, retrievedAt, fetch = fetchSnapshot }) {
   const ex = await extract(snap.html, url);
   const { blocks, losses } = separateLosses(contentToBlocks(ex.contentHtml), snap.html, ex.title);
 
-  // Nav is parsed once and drives both the frontier and the section tree. Sibling content is
-  // fetched only on a live run; a pinned html snapshot never auto-fetches. rel=up stays a
-  // title-only structural parent, like the breadcrumb ancestors.
+  // Nav is parsed once and drives both the frontier and the document. Sibling content is
+  // fetched only on a live run; a pinned html snapshot never auto-fetches.
   const nav = extractNav(snap.html, snap.finalUrl);
-  const frontier = html == null ? [nav.rel.prev, nav.rel.next].filter((r) => r?.url) : [];
-  const built = await Promise.all(frontier.map((r) => buildSibling(r.url, fetch)));
-  const siblingBlocks = {};
-  for (const b of built) if (b) siblingBlocks[b.url] = { title: b.title, blocks: b.blocks, losses: b.losses };
+  const siblings = {};
+  await Promise.all(["prev", "next"].map(async (r) => {
+    const link = nav.rel[r];
+    siblings[r] = !link ? { status: "absent" }
+      : html != null ? { status: "unfetched", url: link.url }
+      : await buildSibling(link.url, fetch);
+  }));
 
   const source = { url, finalUrl: snap.finalUrl, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint };
   const generator = { name: "mdflow", version: VERSION, extractor: EXTRACTOR, extractorVersion: EXTRACTOR_VERSION };
-  const doc = compose({ url: snap.finalUrl, html: snap.html, nav, title: ex.title, blocks, losses, source, generator, siblingBlocks });
+  const doc = compose({ url: snap.finalUrl, html: snap.html, nav, title: ex.title, blocks, losses, source, generator, siblings });
   validate(doc);
 
   return { doc, markdown: renderMarkdown(doc), snapshot: snap, extract: ex };

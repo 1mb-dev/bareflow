@@ -5,8 +5,19 @@
 
 export function renderMarkdown(doc) {
   const out = [];
+  const note = scopeNote(doc.scope);
+  if (note) out.push(note, "");
   for (const s of doc.sections) renderSection(s, 1, out);
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+}
+
+// One line saying what the document covers, from doc.scope. Silent for a lone page with no
+// siblings to speak of.
+function scopeNote(scope) {
+  const { prev, next } = scope.siblings;
+  if (prev.status === "absent" && next.status === "absent") return "";
+  const what = scope.kind === "window" ? "a prev/next window onto the section, not the whole section" : "this page only";
+  return `> **Scope:** ${what} (prev: ${prev.status}, next: ${next.status})`;
 }
 
 // A title that is the first heading plus a site suffix ("Title - Site", "Title | Site") repeats

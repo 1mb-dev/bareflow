@@ -51,6 +51,11 @@ for (const [id, spec] of Object.entries(inventory)) {
   const { doc } = await run({ url: spec.url, html, retrievedAt: FIXED });
   record(id, "schema", SCHEMA, doc.schema === SCHEMA);
 
+  // A pinned snapshot is one page; nav it does not follow is reported, never an empty section.
+  const empty = [...(function* all(ss) { for (const s of ss) { yield s; yield* all(s.children); } })(doc.sections)].filter((s) => !s.blocks.length && !s.children.length);
+  record(id, "scope", "page, siblings unfetched or absent, no empty section",
+    doc.scope.kind === "page" && ["prev", "next"].every((r) => ["unfetched", "absent"].includes(doc.scope.siblings[r].status)) && !empty.length);
+
   const nav = scoreNav(html, spec.url, spec.nav);
   for (const f of nav.fp) record(id, "nav", `wrong sibling ${f}`, false);
   const loss = scoreLoss(html, doc, spec);
@@ -149,7 +154,8 @@ for (const [id, spec] of Object.entries(inventory)) {
     auditSourceLoss(tbl, [P("Name Kind Size Mode")]).length === 1 && auditSourceLoss(tbl, [P("alpha")]).length === 0);
 
   // Bug 15: a site-suffixed title that repeats the first heading is not rendered twice.
-  const suffixed = renderMarkdown({ sections: [{ title: "What is Ownership? - The Rust Programming Language", blocks: [Hd("What Is Ownership?")], losses: [], children: [] }] });
+  const suffixed = renderMarkdown({ scope: { kind: "page", siblings: { prev: { status: "absent" }, next: { status: "absent" } } },
+    sections: [{ title: "What is Ownership? - The Rust Programming Language", blocks: [Hd("What Is Ownership?")], losses: [], children: [] }] });
   record("render", "title", "site-suffixed title deduped", suffixed === "## What Is Ownership?\n");
 
   // Bug 13: a figcaption next to an image is kept.
@@ -158,8 +164,9 @@ for (const [id, spec] of Object.entries(inventory)) {
 }
 
 // Document-unit round-trip: a live run over frozen pages follows rel=next through the injected
-// fetch; the sibling's blocks equal its own single-page run, order is prev < page < next (the
-// dead prev degrades to a stub), and the composed document is deterministic.
+// fetch; the sibling's blocks equal its own single-page run, order is page < next, the dead
+// prev is a status in doc.scope (not a stub section), and the composed document is
+// deterministic.
 {
   const introUrl = "https://docs.python.org/3/tutorial/introduction.html";
   const cfUrl = "https://docs.python.org/3/tutorial/controlflow.html";
@@ -169,8 +176,12 @@ for (const [id, spec] of Object.entries(inventory)) {
   });
   const composed = await run({ url: introUrl, fetch, retrievedAt: FIXED });
   const secs = composed.doc.sections;
-  record("document-unit", "order", "prev < page < next",
-    secs.length === 3 && secs[0].url.endsWith("interpreter.html") && secs[1].url === introUrl && secs[2].url === cfUrl);
+  const { scope } = composed.doc;
+  record("document-unit", "order", "page < next, dead prev only in scope",
+    secs.length === 2 && secs[0].url === introUrl && secs[1].url === cfUrl && scope.kind === "window" &&
+    scope.siblings.prev.status === "failed" && scope.siblings.prev.url.endsWith("interpreter.html") && scope.siblings.next.status === "attached");
+  record("document-unit", "render", "scope line first",
+    composed.markdown.startsWith("> **Scope:** a prev/next window onto the section, not the whole section (prev: failed, next: attached)"));
 
   const cfSingle = await run({ url: cfUrl, fetch, retrievedAt: FIXED });
   const next = findSection(composed.doc, cfUrl);
@@ -202,6 +213,10 @@ for (const [id, spec] of Object.entries(inventory)) {
     const { doc } = await run({ url, fetch: pagesFetch({ [url]: html, ...sib }), retrievedAt: FIXED });
     record("document-unit", "integrity", "breadcrumb page-url keeps prev/next",
       textOf(findSection(doc, prevUrl)).includes("Prev content") && textOf(findSection(doc, nextUrl)).includes("Next content"));
+    record("document-unit", "breadcrumbs", "trail in doc.breadcrumbs, self excluded, not sections",
+      JSON.stringify(doc.breadcrumbs) === JSON.stringify([{ title: "Docs", url: "https://example.com/docs/" }]) && doc.sections.length === 3);
+    const up = await run({ url, fetch: pagesFetch({ [url]: page('<link rel="up" href="/docs/" title="Docs">') }), retrievedAt: FIXED });
+    record("document-unit", "breadcrumbs", "rel=up without a trail", up.doc.breadcrumbs.length === 1 && up.doc.breadcrumbs[0].url === "https://example.com/docs/" && up.doc.sections.length === 1);
   }
 
   // 11: an upper-cased host in the nav href still reaches the sibling.
@@ -258,8 +273,9 @@ for (const [id, spec] of Object.entries(inventory)) {
     if (u === pageUrl) return snap(u, `<html><head><link rel="next" href="http://169.254.169.254/"></head><body><main><h1>Page</h1></main></body></html>`);
     throw new Error("unexpected sibling fetch " + u);
   };
-  await run({ url: pageUrl, fetch: spy, retrievedAt: FIXED });
-  record("wiring", "ssrf", "private sibling rejected before fetch", fetched.length === 1 && fetched[0] === pageUrl);
+  const { doc } = await run({ url: pageUrl, fetch: spy, retrievedAt: FIXED });
+  record("wiring", "ssrf", "private sibling rejected before fetch", fetched.length === 1 && fetched[0] === pageUrl &&
+    doc.scope.siblings.next.status === "blocked" && doc.sections.length === 1);
 }
 
 // Agent surface: cache key + HTTP handler boundary.
