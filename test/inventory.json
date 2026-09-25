@@ -4,6 +4,7 @@
     "url": "https://docs.python.org/3/tutorial/introduction.html",
     "sha256": "0a5e2d589d54b68cf99d0746bdae10360e7949732d0adde2b45ac48bbe916926",
     "nav": { "prev": "https://docs.python.org/3/tutorial/interpreter.html", "next": "https://docs.python.org/3/tutorial/controlflow.html" },
+    "flattened": false,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "Table of Contents" },
@@ -44,6 +45,7 @@
     "url": "https://docs.python.org/3/tutorial/controlflow.html",
     "sha256": "f8bb2fb921f054f10765b269ccd4642fb0335eedb06571f8313608ad73834f72",
     "nav": { "prev": "https://docs.python.org/3/tutorial/introduction.html", "next": "https://docs.python.org/3/tutorial/datastructures.html" },
+    "flattened": false,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "Table of Contents" },
@@ -66,6 +68,7 @@
     "url": "https://docs.python.org/3/tutorial/datastructures.html",
     "sha256": "f536c1b0da7a25d30302c0483717f4c91e926a8a41fab3def62dd1173579ba3f",
     "nav": { "prev": "https://docs.python.org/3/tutorial/controlflow.html", "next": "https://docs.python.org/3/tutorial/modules.html" },
+    "flattened": false,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "Table of Contents" },
@@ -88,6 +91,7 @@
     "url": "https://docs.python.org/3/tutorial/modules.html",
     "sha256": "d98700e7357a696c662147b25e8355b65d7f6c564b16914b59b40a9095abe16c",
     "nav": { "prev": "https://docs.python.org/3/tutorial/datastructures.html", "next": "https://docs.python.org/3/tutorial/inputoutput.html" },
+    "flattened": false,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "Table of Contents" },
@@ -113,6 +117,7 @@
     "url": "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html",
     "sha256": "d9c8d249ca1f968b407ac99e721dd6b5799ee784a8c673d262c142a4162973ec",
     "nav": { "prev": "https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html", "next": "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html" },
+    "flattened": false,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "Keyboard shortcuts" },
@@ -127,6 +132,7 @@
     "url": "https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html",
     "sha256": "d95202704da71a0b545ab38217829ab0a48d92d1b7460a2086cefb68b18c2076",
     "nav": { "prev": "https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html", "next": "https://doc.rust-lang.org/book/ch04-03-slices.html" },
+    "flattened": false,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "Keyboard shortcuts" },
@@ -141,6 +147,7 @@
     "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter",
     "sha256": "98881014959f1262ad3a1f351d55ae401928d08ad94b6d7312f27100fd56c9a3",
     "nav": { "prev": "none", "next": "none" },
+    "flattened": false,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "In this article" },
@@ -159,6 +166,7 @@
     "url": "https://caniuse.com/css-grid",
     "sha256": "c5bf91cbf83c29502189873645467c79060a118796f11c4cf207aa8b0517ee91",
     "nav": { "prev": "none", "next": "none" },
+    "flattened": false,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "Can I use..." },
@@ -171,13 +179,16 @@
       ]
     },
     "known_fp": [],
-    "known_miss": []
+    "known_miss": [
+      { "kind": "heading", "key": "Global usage" }
+    ]
   },
   "vite-guide": {
     "fixture": "vite-guide.html",
     "url": "https://vitejs.dev/guide/",
     "sha256": "ac58fe396a2000fc73118853b19ec9f722c41efc7f83ee549e3808d37fd8f095",
     "nav": { "prev": "none", "next": "https://vitejs.dev/guide/philosophy" },
+    "flattened": false,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "Introduction" },
@@ -201,6 +212,7 @@
     "url": "https://vite.dev/guide/features",
     "sha256": "8ed14238b2ca9a1d3cb5022d6330c6eea540fb6feb97f12546ac9b8190deabdf",
     "nav": { "prev": "https://vite.dev/guide/why", "next": "https://vite.dev/guide/cli" },
+    "flattened": false,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "Introduction" },
@@ -220,6 +232,7 @@
     "url": "https://kubernetes.io/docs/concepts/workloads/pods/",
     "sha256": "b9a4f59b4079b5ed883f8dda33d54937a596fd2a52d3aafae9eb8d98d0cb713d",
     "nav": { "prev": "none", "next": "none" },
+    "flattened": false,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "KubeCon + CloudNativeCon North America 2026" },
@@ -241,6 +254,7 @@
     "url": "https://docs.djangoproject.com/en/6.1/topics/http/views/",
     "sha256": "a0ec501e2b5aab0ac0a48b677c8bad9912b4bc6782dffbd55ffe015378164ff1",
     "nav": { "prev": "https://docs.djangoproject.com/en/6.1/topics/http/urls/", "next": "https://docs.djangoproject.com/en/6.1/topics/http/decorators/" },
+    "flattened": false,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "Additional Information" },
@@ -267,6 +281,7 @@
     "url": "https://react.dev/learn/state-a-components-memory",
     "sha256": "bd26816c8bd33e6f550a338334751244d9d565b957b4b88805a7646d451d6b07",
     "nav": { "prev": "https://react.dev/learn/responding-to-events", "next": "https://react.dev/learn/render-and-commit" },
+    "flattened": false,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "GET STARTED" },
@@ -280,7 +295,7 @@
       ]
     },
     "known_fp": [
-      { "kind": "heading", "key": "How does React know which state to return?" }
+      { "kind": "heading", "key": "How does React know which state to return?", "why": "heading lands mid-paragraph inside the flattened Deep Dive box; the starts-with rule (fork 5) declines it" }
     ],
     "known_miss": []
   },
@@ -289,6 +304,7 @@
     "url": "https://tailwindcss.com/docs/installation",
     "sha256": "f3e1d6ab781c4edf4d2e375f199f577e4885481cc443ccdb7a40fd30ad117275",
     "nav": { "prev": "none", "next": "none" },
+    "flattened": true,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "Getting started" },
@@ -340,20 +356,12 @@
       ]
     },
     "known_fp": [
-      { "kind": "heading", "key": "Installation" },
-      { "kind": "heading", "key": "Using Vite" },
-      { "kind": "heading", "key": "Using PostCSS" },
-      { "kind": "heading", "key": "Tailwind CLI" },
-      { "kind": "heading", "key": "Framework Guides" },
-      { "kind": "heading", "key": "Play CDN" },
-      { "kind": "heading", "key": "Installing Tailwind CSS as a Vite plugin" },
-      { "kind": "heading", "key": "Create your project" },
-      { "kind": "heading", "key": "Install Tailwind CSS" },
-      { "kind": "heading", "key": "Configure the Vite plugin" },
-      { "kind": "heading", "key": "Import Tailwind CSS" },
-      { "kind": "heading", "key": "Start your build process" },
-      { "kind": "heading", "key": "Start using Tailwind in your HTML" },
-      { "kind": "code", "key": "npm run dev" }
+      { "kind": "heading", "key": "Installation", "why": "tab link to a sibling install page; no landmark, so the page-wide scope includes it" },
+      { "kind": "heading", "key": "Using Vite", "why": "tab link to a sibling install page; no landmark, so the page-wide scope includes it" },
+      { "kind": "heading", "key": "Using PostCSS", "why": "tab link to a sibling install page; no landmark, so the page-wide scope includes it" },
+      { "kind": "heading", "key": "Tailwind CLI", "why": "tab link to a sibling install page; no landmark, so the page-wide scope includes it" },
+      { "kind": "heading", "key": "Framework Guides", "why": "tab link to a sibling install page; no landmark, so the page-wide scope includes it" },
+      { "kind": "heading", "key": "Play CDN", "why": "tab link to a sibling install page; no landmark, so the page-wide scope includes it" }
     ],
     "known_miss": []
   },
@@ -362,6 +370,121 @@
     "url": "https://go.dev/doc/faq",
     "sha256": "6ff7e86bad4c6fb71f61a3f46028bca7cc128857e728b153803c6ab282e6f129",
     "nav": { "prev": "none", "next": "none" },
-    "audit": false
+    "flattened": false,
+    "labels": {
+      "chrome": [
+        { "kind": "heading", "key": "Release Notes" },
+        { "kind": "heading", "key": "Code of Conduct" },
+        { "kind": "heading", "key": "Brand Guidelines" },
+        { "kind": "heading", "key": "Contribute Guide" },
+        { "kind": "heading", "key": "Get connected" }
+      ]
+    },
+    "known_fp": [],
+    "known_miss": []
+  },
+  "github-blog-rust": {
+    "fixture": "github-blog-rust.html",
+    "url": "https://github.blog/ai-and-ml/generative-ai/migrating-the-github-copilot-runtime-to-rust-using-copilot/",
+    "sha256": "5da90503c288f5e33e814579a94bd28d65cd758f437b153a1982f447c813817a",
+    "nav": { "prev": "none", "next": "none" },
+    "flattened": true,
+    "labels": {
+      "chrome": [
+        { "kind": "heading", "key": "Categories" },
+        { "kind": "heading", "key": "Tags:" },
+        { "kind": "heading", "key": "Written by" },
+        { "kind": "heading", "key": "Stephen Toub" },
+        { "kind": "heading", "key": "Table of Contents" },
+        { "kind": "heading", "key": "More on AI agents" },
+        { "kind": "heading", "key": "Your contributors are AI-first now" },
+        { "kind": "heading", "key": "How we built an internal data analytics agent" },
+        { "kind": "heading", "key": "Related posts" },
+        { "kind": "heading", "key": "Should you read the code" },
+        { "kind": "heading", "key": "Marketing ops as code" },
+        { "kind": "heading", "key": "GitHub Copilot app for Beginners" },
+        { "kind": "heading", "key": "Explore more from GitHub" },
+        { "kind": "heading", "key": "Docs" },
+        { "kind": "heading", "key": "GitHub" },
+        { "kind": "heading", "key": "Customer stories" },
+        { "kind": "heading", "key": "GitHub Universe 2026" },
+        { "kind": "heading", "key": "We do newsletters, too" },
+        { "kind": "heading", "key": "Site-wide Links" },
+        { "kind": "heading", "key": "Product" },
+        { "kind": "heading", "key": "Platform" },
+        { "kind": "heading", "key": "Support" },
+        { "kind": "heading", "key": "Company" }
+      ],
+      "demoted": [
+        { "kind": "heading", "key": "Why we needed to port" },
+        { "kind": "code", "key": "const client = new CopilotClient(); awai" },
+        { "kind": "heading", "key": "What it looked like before" },
+        { "kind": "heading", "key": "In-place porting strategy" },
+        { "kind": "heading", "key": "Getting going" },
+        { "kind": "table", "key": "Period | Pull requests | Median changed " },
+        { "kind": "heading", "key": "Interop" },
+        { "kind": "table", "key": "SDK | Native bridge | In-process client " },
+        { "kind": "heading", "key": "What the session data shows" },
+        { "kind": "table", "key": "Metric | Count | Events | 12,760,995 | U" },
+        { "kind": "heading", "key": "It’s all about caching" },
+        { "kind": "heading", "key": "Yes, static analysis helps" },
+        { "kind": "heading", "key": "Agents like reading" },
+        { "kind": "table", "key": "Tool | Calls | Median | Measured hours |" },
+        { "kind": "table", "key": "Command family | Calls | Median | Measur" },
+        { "kind": "heading", "key": "Model selection" },
+        { "kind": "heading", "key": "Working with agent fleets" },
+        { "kind": "heading", "key": "Code review at scale" },
+        { "kind": "code", "key": "Squash into a single commit, then rebase" },
+        { "kind": "heading", "key": "Automating the inner loop" },
+        { "kind": "heading", "key": "Two migrations in one" },
+        { "kind": "heading", "key": "How much unsafe?" },
+        { "kind": "table", "key": "Why the unsafe block exists | Blocks | S" },
+        { "kind": "heading", "key": "The regressions" },
+        { "kind": "table", "key": "Repository | Jan–Apr, before the rewrite" },
+        { "kind": "heading", "key": "If it compiles, it compiles" },
+        { "kind": "heading", "key": "Perf, perf, and more perf" },
+        { "kind": "table", "key": "Scenario | May 12 | Aug 21 out-of-proces" },
+        { "kind": "heading", "key": "What the port cost" },
+        { "kind": "heading", "key": "Lessons learned" },
+        { "kind": "heading", "key": "What’s next?" }
+      ]
+    },
+    "known_fp": [
+      { "kind": "heading", "key": "Tags:", "why": "post metadata (tags, author bio) inside main" },
+      { "kind": "heading", "key": "Written by", "why": "post metadata (tags, author bio) inside main" },
+      { "kind": "heading", "key": "Stephen Toub", "why": "post metadata (tags, author bio) inside main" },
+      { "kind": "heading", "key": "Related posts", "why": "related-posts rail inside main" },
+      { "kind": "heading", "key": "Should you read the code, is RAG dead, and did Skills kill MCP?", "why": "related-posts rail inside main" },
+      { "kind": "heading", "key": "Marketing ops as code: Automating events from planning to follow-up on GitHub", "why": "related-posts rail inside main" },
+      { "kind": "heading", "key": "GitHub Copilot app for Beginners: Using the diff, terminal, and browser", "why": "related-posts rail inside main" },
+      { "kind": "heading", "key": "We do newsletters, too", "why": "newsletter signup inside main" }
+    ],
+    "known_miss": []
+  },
+  "devto-event-loop": {
+    "fixture": "devto-event-loop.html",
+    "url": "https://dev.to/lydiahallie/javascript-visualized-event-loop-3dif",
+    "sha256": "6d2798fc91a237b47f769ea573754df0cead39bf18f7a71efbfef656833fdee1",
+    "nav": { "prev": "none", "next": "none" },
+    "flattened": false,
+    "labels": {
+      "chrome": [
+        { "kind": "heading", "key": "DEV Community" },
+        { "kind": "heading", "key": "JavaScript Visualized (7 Part Series)" },
+        { "kind": "heading", "key": "JavaScript Visualized (7 Part Series)" },
+        { "kind": "heading", "key": "Top comments" },
+        { "kind": "code", "key": "invoke bar" },
+        { "kind": "code", "key": "let id = setTimeout" },
+        { "kind": "code", "key": "let c = 0" },
+        { "kind": "heading", "key": "More from Lydia Hallie" }
+      ]
+    },
+    "known_fp": [
+      { "kind": "heading", "key": "Top comments (189)", "why": "comment thread, which dev.to nests inside the post's article element" },
+      { "kind": "code", "key": "invoke bar. bar returns a setTimeout function.", "why": "comment thread, which dev.to nests inside the post's article element" },
+      { "kind": "code", "key": "let id = setTimeout( () => { return \"hey\"}, 1000); console.l", "why": "comment thread, which dev.to nests inside the post's article element" },
+      { "kind": "code", "key": "let c = 0; let id = setInterval(()=> { console.log(c++) },20", "why": "comment thread, which dev.to nests inside the post's article element" }
+    ],
+    "known_miss": []
   }
 }

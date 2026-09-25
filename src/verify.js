@@ -36,14 +36,10 @@ for (const [id, spec] of Object.entries(inventory)) {
 
   const nav = scoreNav(html, spec.url, spec.nav);
   for (const f of nav.fp) record(id, "nav", `wrong sibling ${f}`, false);
-  const row = { id, nav };
-  if (spec.audit !== false) {
-    const loss = scoreLoss(html, doc, spec);
-    for (const e of loss.errors) record(id, "truth", e, false);
-    if (!loss.errors.length) record(id, "truth", "labels resolve; findings match baseline", true);
-    row.loss = loss.counts;
-  }
-  truth.push(row);
+  const loss = scoreLoss(html, doc, spec);
+  for (const e of loss.errors) record(id, "truth", e, false);
+  if (!loss.errors.length) record(id, "truth", "labels resolve; findings match baseline", true);
+  truth.push({ id, nav, loss: loss.counts, flat: loss.flat });
 
   // Determinism: same snapshot + pinned retrievedAt -> byte-identical IR.
   const { doc: again } = await run({ url: spec.url, html, retrievedAt: FIXED });
@@ -73,6 +69,8 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("truth-harness", "fails on", "new false positive", fails(withLosses(false, "Kept"), {}, /^new false positive/));
   record("truth-harness", "fails on", "stale known_fp", fails(doc, { known_fp: [H("Kept")] }, /stale/));
   record("truth-harness", "fails on", "ambiguous label", fails(doc, { labels: { lost: [H("")] } }, /ambiguous/));
+  record("truth-harness", "fails on", "known_fp without why", fails(withLosses(false, "Kept"), { known_fp: [H("Kept")] }, /without a why/));
+  record("truth-harness", "fails on", "flattened label not emitted", fails(doc, { flattened: true }, /not emitted/));
 }
 
 // Mutation test: drop a known code block from the IR; the audit must flag it as a loss.
@@ -110,6 +108,13 @@ for (const [id, spec] of Object.entries(inventory)) {
     [Hd("A"), P(`Run \`${long}\` then ls -la`), Hd("B"), Hd("C"), P(long.replace("41", "40"))]);
   record("loss-audit", "demoted", "code in prose, same section only",
     JSON.stringify(src(code)) === JSON.stringify(["source-code-demoted", "source-code-diff", "source-code-diff"]));
+
+  // Flattened page: one doc-level finding; blocks whose text survives are demoted wherever
+  // they sit, a block whose text is gone stays a diff.
+  const flatSrc = "<main>" + ["One", "Two", "Three", "Four", "Five"].map((h) => `<h2>${h} heading</h2><p>x</p>`).join("") + "</main>";
+  const flat = auditSourceLoss(flatSrc, [P("One heading x Two heading x Three heading x Four heading x")]);
+  record("loss-audit", "flattened", "doc finding, survivors demoted, absent block a diff",
+    JSON.stringify(src(flat)) === JSON.stringify(["extract-flattened", ...Array(4).fill("source-heading-demoted"), "source-heading-diff"]));
 
   // A scope with nothing to audit while the IR has structure is reported, not silently clean.
   const blind = auditSourceLoss("<html><body><p>x</p></body></html>", [Hd("Real")]);
@@ -324,15 +329,17 @@ for (const r of results) console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.id}  ${r.ki
 
 // Truth scores. Loss P/R is over headings, code, and tables only: prose is not audited.
 // Known FPs and misses count against P/R; the baseline only stops them failing the gate.
-const sum = { tp: 0, fp: 0, miss: 0, lost: 0, ntp: 0, nfp: 0, nmiss: 0 };
+const sum = { tp: 0, fp: 0, miss: 0, lost: 0, ntp: 0, nfp: 0, nmiss: 0, ftp: 0, ffp: 0, fmiss: 0 };
 console.log("\nfixture                          loss P   R     (tp/fp/miss)   nav P   R     (tp/fp/miss)");
-for (const { id, nav, loss } of truth) {
+for (const { id, nav, loss, flat } of truth) {
   sum.ntp += nav.tp; sum.nfp += nav.fp.length; sum.nmiss += nav.miss.length;
-  const l = loss ? `${pr(loss.tp, loss.tp + loss.fp).padEnd(5)} ${pr(loss.tp, loss.lost).padEnd(5)} ${`${loss.tp}/${loss.fp}/${loss.miss}`.padEnd(14)}` : "(not audited)".padEnd(26);
-  if (loss) { sum.tp += loss.tp; sum.fp += loss.fp; sum.miss += loss.miss; sum.lost += loss.lost; }
+  sum.tp += loss.tp; sum.fp += loss.fp; sum.miss += loss.miss; sum.lost += loss.lost;
+  if (flat.emitted && flat.labelled) sum.ftp++; else if (flat.emitted) sum.ffp++; else if (flat.labelled) sum.fmiss++;
+  const l = `${pr(loss.tp, loss.tp + loss.fp).padEnd(5)} ${pr(loss.tp, loss.lost).padEnd(5)} ${`${loss.tp}/${loss.fp}/${loss.miss}`.padEnd(14)}`;
   console.log(`${id.padEnd(32)} ${l} ${pr(nav.tp, nav.tp + nav.fp.length).padEnd(5)} ${pr(nav.tp, nav.tp + nav.miss.length).padEnd(5)} ${nav.tp}/${nav.fp.length}/${nav.miss.length}`);
 }
 console.log(`${"all".padEnd(32)} ${pr(sum.tp, sum.tp + sum.fp).padEnd(5)} ${pr(sum.tp, sum.lost).padEnd(5)} ${`${sum.tp}/${sum.fp}/${sum.miss}`.padEnd(14)} ${pr(sum.ntp, sum.ntp + sum.nfp).padEnd(5)} ${pr(sum.ntp, sum.ntp + sum.nmiss).padEnd(5)} ${sum.ntp}/${sum.nfp}/${sum.nmiss}`);
+console.log(`${"page: extract-flattened".padEnd(32)} tp/fp/miss ${sum.ftp}/${sum.ffp}/${sum.fmiss}`);
 console.log(`\n${results.length - failed.length}/${results.length} assertions passed (wired, not verified)`);
 if (failed.length) {
   console.log("FAILED:");

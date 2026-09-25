@@ -15,8 +15,9 @@ the output, never silently passed through.
 
 Phase 1. The core pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented, with a
 versioned snapshot, a navigation shell, structured loss markers, and a truth gate that scores
-the loss audit and nav detection against hand-labelled frozen fixtures (loss precision 0.57,
-recall 1.00: the remaining false positives are on pages the extractor flattens into prose). The document-unit composer follows rel=prev/next to
+the loss audit and nav detection against hand-labelled frozen fixtures (over 17 pages: loss
+precision 0.50, recall 0.95; 0 false positives on 13 of them, the rest are chrome inside the
+page's main landmark such as comments, related posts, and author bios). The document-unit composer follows rel=prev/next to
 attach real sibling content (bounded, not a crawl). Extraction is composed (Defuddle), not
 built from scratch; the moat is the contract downstream of extraction.
 

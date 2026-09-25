@@ -6,10 +6,12 @@
 import { parseHTML } from "linkedom";
 import * as ir from "./ir.js";
 
-// Chrome inside the scope: the standard navigation roles plus one site pattern the truth
-// fixtures need (k8s feedback). aside is not chrome inside main (caniuse usage data); bare
-// header/footer are sectioning content inside main or article, chrome only page-wide.
-const SKIP = "nav, [role='navigation'], [role='banner'], [id*='feedback']";
+// Chrome inside the scope: the standard navigation roles, aside, plus one site pattern the
+// truth fixtures need (k8s feedback). aside costs one miss (caniuse usage data sits in one)
+// and saves five FPs (golang's link sidebar); both sit inside article, so no standard rule
+// separates them. Bare header/footer are sectioning content inside main or article, chrome
+// only page-wide.
+const SKIP = "nav, aside, [role='navigation'], [role='banner'], [id*='feedback']";
 const SKIP_PAGE = `${SKIP}, header, footer`;
 
 // \p{Cf} (ZWSP in VitePress headings, BOM) is invisible and must not break identity.
@@ -17,9 +19,10 @@ const norm = (s) => (s || "").replace(/\p{Cf}/gu, "").replace(/\s+/g, " ").trim(
 const aggressive = (s) => norm(s).toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 
 // Strip a leading section number ("3.1.", "3.1.1.") so source and IR headings compare even
-// when one side drops the numbering.
+// when one side drops the numbering. Whitespace-free: inline code in a heading joins with or
+// without a space ("the ?: operator" in source, "the?: operator" in the IR).
 function headingKey(t) {
-  return norm(t).replace(/^\d+(\.\d+)*\.?\s+/, "").toLowerCase();
+  return norm(t).replace(/^\d+(\.\d+)*\.?\s+/, "").replace(/\s/g, "").toLowerCase();
 }
 // Code lines rendered as <div>s join without a newline in textContent; the IR has one.
 const codeKey = (s) => norm(s).replace(/\s/g, "");
@@ -144,10 +147,29 @@ function codeDemotedTo(code, placed, blocks) {
   return null;
 }
 
+// Flattened: the source has structure and the IR kept almost none of it (one paragraph for
+// a whole page). The thresholds were fitted on one page (tailwind) and checked out of sample
+// (github-blog-rust fires, devto-event-loop does not); a new hit is a labelling task.
+const FLAT_MIN_SOURCE = 5, FLAT_MAX_RATIO = 0.1;
+function flattened(src, blocks) {
+  const n = src.headings.length + src.codes.length;
+  const kept = blocks.filter((b) => ["heading", "code", "table", "list"].includes(b.type)).length;
+  return n >= FLAT_MIN_SOURCE && kept / n <= FLAT_MAX_RATIO;
+}
+
 export function auditSourceLoss(html, blocks, title = "") {
   const src = sourceBlocks(html);
   const irc = irCounts(blocks);
   const losses = [];
+
+  // On a flattened page every surviving block is prose, so a per-block finding whose text is in
+  // the IR is a demotion wherever it sits; one whose text is gone stays a diff.
+  const flat = flattened(src, blocks);
+  const flatText = flat ? codeKey(blocks.map((b) => b.text ?? b.code ?? (b.items || []).join(" ")).join(" ")).toLowerCase() : "";
+  const survives = (raw) => flat && flatText.includes(codeKey(raw).toLowerCase());
+  if (flat) {
+    losses.push(ir.loss(`extraction flattened: ${src.headings.length} headings and ${src.codes.length} code blocks exist only as prose`, "extract-flattened"));
+  }
 
   if (!src.headings.length && !src.codes.length && !src.tables.length &&
       blocks.some((b) => b.type === "heading" || b.type === "code" || b.type === "table")) {
@@ -158,13 +180,13 @@ export function auditSourceLoss(html, blocks, title = "") {
   const claimed = new Set();
   src.headings.forEach((h, j) => {
     if (placed[j] !== null) return;
-    const to = demotedTo(j, placed, src.headings, blocks, claimed);
+    const to = demotedTo(j, placed, src.headings, blocks, claimed) ?? (survives(h.text) ? { type: "prose" } : null);
     if (to) losses.push(ir.loss(`source heading demoted to ${to.type} (h${h.level}): ${h.text}`, "source-heading-demoted", h.raw));
     else losses.push(ir.loss(`source heading not extracted (h${h.level}): ${h.text}`, "source-heading-diff", h.raw));
   });
   for (const code of src.codes) {
     if (take(irc.codes, codeKey(code.key))) continue;
-    const to = codeDemotedTo(code, placed, blocks);
+    const to = codeDemotedTo(code, placed, blocks) ?? (survives(code.key) ? { type: "prose" } : null);
     if (to) losses.push(ir.loss(`source code block demoted to ${to.type}: ${code.key.slice(0, 80)}`, "source-code-demoted", code.raw));
     else losses.push(ir.loss(`source code block not extracted: ${code.key.slice(0, 80)}`, "source-code-diff", code.raw));
   }

@@ -5,7 +5,8 @@
 // Universe: every h1-h6, pre, and table under documentElement (not body: linkedom can parse
 // content outside body). Each block is `present` unless labelled lost | demoted | chrome.
 // A label is {kind, key}; key is the block's normalized text or a prefix of it (an exact match
-// wins), and must not match two distinct blocks.
+// wins), and must not match two distinct blocks. `flattened` labels the page as a whole and is
+// scored as its own row, not pooled into block precision. Every known_fp entry carries a `why`.
 import { parseHTML } from "linkedom";
 import { walk } from "./ir.js";
 import { extractNav } from "./compose.js";
@@ -53,7 +54,7 @@ function irTexts(doc) {
 
 function auditLosses(doc) {
   const out = [];
-  const rec = (s) => { for (const l of s.losses) if (AUDIT_KIND[l.source] || l.source === "audit-scope-empty") out.push(l); s.children.forEach(rec); };
+  const rec = (s) => { for (const l of s.losses) if (AUDIT_KIND[l.source] || l.source === "audit-scope-empty" || l.source === "extract-flattened") out.push(l); s.children.forEach(rec); };
   doc.sections.forEach(rec);
   return out.map((l) => ({
     source: l.source,
@@ -109,7 +110,13 @@ export function scoreLoss(html, doc, spec) {
   const pool = items.map((it) => ({ ...it }));
   let tp = 0, demoted = 0;
   const fps = [];
-  for (const f of auditLosses(doc)) {
+  const findings = auditLosses(doc);
+  const flatEmitted = findings.some((f) => f.source === "extract-flattened");
+  if (flatEmitted && !spec.flattened) errors.push("extract-flattened on a page labelled not flattened");
+  if (!flatEmitted && spec.flattened) errors.push("page labelled flattened but extract-flattened not emitted");
+  for (const e of spec.known_fp || []) if (!e.why) errors.push(`known_fp without a why: ${e.kind} "${e.key}"`);
+  for (const f of findings) {
+    if (f.source === "extract-flattened") continue;
     if (f.source === "audit-scope-empty") { errors.push("audit scope empty: the auditor could not read this fixture"); continue; }
     const want = f.source.endsWith("-demoted") ? "demoted" : "lost";
     const i = pool.findIndex((it) => !it.taken && it.kind === f.kind && loose(it.text) === loose(f.text));
@@ -132,6 +139,7 @@ export function scoreLoss(html, doc, spec) {
     fps,
     misses,
     counts: { universe: items.length, lost, tp, fp: fps.length, miss: misses.length, demoted },
+    flat: { labelled: !!spec.flattened, emitted: flatEmitted },
     precision: tp + fps.length ? tp / (tp + fps.length) : null,
     recall: lost ? tp / lost : null,
   };
