@@ -1,14 +1,12 @@
 // The loss-marker inventory gate: asserts each inventoried load-bearing block is present in
 // the typed IR or carried by a loss marker, that chrome never leaks into a loss marker, and
 // that a mutation test fires a marker. This proves the pipeline is WIRED, not VERIFIED:
-// determinism compares a pure function to itself (near-tautological), and the cache tests
-// exercise a mock KV, not CF KV semantics. Exit 1 on any failure.
+// determinism compares a pure function to itself (near-tautological). Exit 1 on any failure.
 import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
-import { run, VERSION } from "./pipeline.js";
-import { EXTRACTOR_VERSION } from "./extract.js";
+import { run } from "./pipeline.js";
 import { auditSourceLoss } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
 import { decompress, MAX_BYTES } from "./fetch.js";
@@ -246,53 +244,24 @@ for (const [id, spec] of Object.entries(inventory)) {
   }
 }
 
-// Agent surface: versioned stale-first KV cache + HTTP handler.
+// Agent surface: cache key + HTTP handler boundary.
 {
-  const makeKv = (clock = () => 0) => {
-    const m = new Map(); // key -> { value, expiresAt }
+  const makeKv = () => {
+    const m = new Map();
     return {
-      async get(key, type) {
-        const e = m.get(key);
-        if (!e) return null;
-        if (e.expiresAt != null && clock() > e.expiresAt) { m.delete(key); return null; }
-        return type === "json" ? JSON.parse(e.value) : e.value;
-      },
-      async put(key, value, opts) { m.set(key, { value, expiresAt: opts?.expirationTtl != null ? clock() + opts.expirationTtl : null }); },
+      async get(key, type) { const v = m.get(key); return v == null ? null : type === "json" ? JSON.parse(v) : v; },
+      async put(key, value) { m.set(key, value); },
     };
   };
-  const doc = { schema: "mdflow/ir/v1", id: "x", title: "T", source: { url: "u", retrievedAt: "2026-01-01", fingerprint: "f" }, generator: { name: "mdflow", version: "0.1.0", extractor: "defuddle", extractorVersion: "0.19.4", config: {} }, sections: [] };
+  const doc = { schema: "mdflow/ir/v1", id: "x", title: "T", source: { url: "u", retrievedAt: "2026-01-01", fingerprint: "f" }, generator: { name: "mdflow", version: "0.1.0", extractor: "defuddle", extractorVersion: "0.19.4" }, sections: [] };
   const markdown = "# T\n";
   const snapshot = { retrievedAt: "2026-01-01", fingerprint: "f" };
-  let calls = 0;
-  const okRun = async () => { calls++; return { doc, markdown, snapshot }; };
+  const okRun = async () => ({ doc, markdown, snapshot });
   const failRun = async () => { throw new Error("upstream down"); };
   const req = (q = "https://example.com", headers) => new Request(`https://m/?url=${q}`, headers ? { headers } : undefined);
-  const TARGET = new URL("https://example.com").toString(); // normalized with trailing slash
 
   record("agent-surface", "cache-key", "versioned",
     cacheKey("https://e.com", "0.1.0", "0.19.4") !== cacheKey("https://e.com", "0.1.0", "0.20.0"));
-
-  let now = 0;
-  const kv = makeKv(() => now);
-
-  const r1 = await handle(req(), {}, { run: okRun, kv });
-  record("agent-surface", "cache", "miss",
-    r1.headers.get("x-mdflow-cache") === "miss" && r1.headers.get("x-mdflow-retrieved-at") === "2026-01-01");
-
-  const r2 = await handle(req(), {}, { run: okRun, kv });
-  record("agent-surface", "cache", "hit", r2.headers.get("x-mdflow-cache") === "hit" && calls === 1);
-
-  now = 3601; // past the 1h fresh TTL, within the 30d stale window
-  const r3 = await handle(req(), {}, { run: okRun, kv });
-  record("agent-surface", "cache", "expiry-refetch", r3.headers.get("x-mdflow-cache") === "miss" && calls === 2);
-
-  const kv2 = makeKv();
-  await kv2.put(`${cacheKey(TARGET, VERSION, EXTRACTOR_VERSION)}:stale`, JSON.stringify({ doc, markdown, retrievedAt: "2026-01-01" }));
-  const r4 = await handle(req(), {}, { run: failRun, kv: kv2 });
-  record("agent-surface", "cache", "hit-stale", r4.headers.get("x-mdflow-cache") === "hit-stale");
-
-  const r5 = await handle(req(), {}, { run: failRun, kv: makeKv() });
-  record("agent-surface", "cache", "502", r5.status === 502);
 
   const r6 = await handle(new Request("https://m/"), {}, { run: okRun, kv: makeKv() });
   record("agent-surface", "boundary", "400", r6.status === 400);

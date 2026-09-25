@@ -1,7 +1,6 @@
 // Versioned, stale-first document cache over a KV store (Cloudflare KV interface).
 // The cache key hashes the full output-affecting tuple: url + mdflow version + extractor
-// version. A change to any of them invalidates the cache. Config is empty today; if it ever
-// becomes non-empty it must be added to the key.
+// version. A change to any of them invalidates the cache.
 import { createHash } from "node:crypto";
 
 const sha = (s) => createHash("sha256").update(s).digest("hex").slice(0, 16);

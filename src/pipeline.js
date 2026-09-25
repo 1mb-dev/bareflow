@@ -1,6 +1,6 @@
 // The core pipeline: fetch -> extract -> IR -> {markdown, json}. Deterministic for a
-// fixed snapshot AND pinned retrievedAt: same html + same config + same version + same
-// retrievedAt -> same document. Live fetch bakes in the retrieval time, so live runs differ.
+// fixed snapshot AND pinned retrievedAt: same html + same version + same retrievedAt -> same
+// document. Live fetch bakes in the retrieval time, so live runs differ.
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { fetchSnapshot } from "./fetch.js";
@@ -44,9 +44,7 @@ async function buildSibling(surl, shtml, fetch) {
   return { canonical, title: sex.title, blocks, losses };
 }
 
-export const DEFAULT_CONFIG = {};
-
-export async function run({ url, html, siblings = {}, config = DEFAULT_CONFIG, retrievedAt, fetch = fetchSnapshot }) {
+export async function run({ url, html, siblings = {}, retrievedAt, fetch = fetchSnapshot }) {
   let snap;
   if (html != null) {
     snap = {
@@ -77,7 +75,7 @@ export async function run({ url, html, siblings = {}, config = DEFAULT_CONFIG, r
   for (const b of built) if (b) siblingBlocks[b.canonical] = { title: b.title, blocks: b.blocks, losses: b.losses };
 
   const source = { url, finalUrl: snap.finalUrl, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint };
-  const generator = { name: "mdflow", version: VERSION, extractor: EXTRACTOR, extractorVersion: EXTRACTOR_VERSION, config };
+  const generator = { name: "mdflow", version: VERSION, extractor: EXTRACTOR, extractorVersion: EXTRACTOR_VERSION };
   const doc = compose({ url: snap.finalUrl, html: snap.html, title: ex.title, blocks, losses, source, generator, siblingBlocks });
   validate(doc);
 

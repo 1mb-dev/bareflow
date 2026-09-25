@@ -60,7 +60,6 @@ export function validate(doc) {
     fail("source", "url, fingerprint, and retrievedAt required");
   if (!doc.generator || typeof doc.generator.version !== "string" || typeof doc.generator.extractor !== "string" || typeof doc.generator.extractorVersion !== "string")
     fail("generator", "version, extractor, and extractorVersion required");
-  if (doc.generator.config === undefined) fail("generator.config", "required");
   if (!Array.isArray(doc.sections) || doc.sections.length === 0) fail("sections", "must be non-empty");
   for (const s of doc.sections) validateSection(s, "sections");
   return doc;

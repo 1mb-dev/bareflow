@@ -15,7 +15,7 @@ the output, never silently passed through.
 
 Phase 1. The core pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented, with a
 versioned snapshot, a navigation shell, structured loss markers, and a loss-marker inventory
-gate over frozen fixtures (40/40, wired not verified). The document-unit composer follows rel=prev/next to
+gate over frozen fixtures (35/35, wired not verified). The document-unit composer follows rel=prev/next to
 attach real sibling content (bounded, not a crawl). Extraction is composed (Defuddle), not
 built from scratch; the moat is the contract downstream of extraction.
 
