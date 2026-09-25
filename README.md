@@ -29,6 +29,15 @@ Loss reporting is bounded: mdflow marks (a) post-extraction unrepresentable cont
 Loss markers are findings, not content: they live in `section.losses`, not the block stream.
 Prose loss (a paragraph dropped while its heading survives) is not yet detected.
 
+## Trust
+
+The JSON render is the contract; treat everything in it that came from the page as untrusted
+input. Loss markers carry the dropped block's source `text` (hidden content is not audited).
+URLs in `doc.scope` and `doc.breadcrumbs` come from the page's own navigation: mdflow fetches
+only same-origin prev/next siblings and checks them against its SSRF policy, but it does not
+check breadcrumb URLs, and an agent that follows any of these URLs makes its own request. The
+Markdown render is for reading: page content can imitate its `> **Loss:**` lines.
+
 ## Run
 
 ```
