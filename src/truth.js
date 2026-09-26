@@ -203,12 +203,13 @@ export function scoreLoss(html, doc, spec) {
 
 // Structure of the present blocks the IR kept: blocks out of source order (those off the longest
 // run in IR order), headings at another level, and code or tables filed under another heading.
-// A section title is a level-1 heading at the section's start. Each diff is {kind, text}, with
+// A section title is a heading at the section's start with no level: it is the root, whatever
+// level the page gave it. Each diff is {kind, text}, with
 // kind order | level | section and text the source block's.
 function structureDiffs(items, doc) {
   const seq = [];
   const rec = (s) => {
-    seq.push({ kind: "heading", key: loose(headingText(s.title)), level: 1 });
+    seq.push({ kind: "heading", key: loose(headingText(s.title)), level: null });
     for (const b of s.blocks) {
       if (b.type === "heading") seq.push({ kind: "heading", key: loose(headingText(b.text)), level: b.level });
       else if (b.type === "code") seq.push({ kind: "code", key: loose(vnorm(b.code)) });
@@ -224,7 +225,7 @@ function structureDiffs(items, doc) {
     const at = it.label === "present" ? seq.findIndex((e, i) => !used.has(i) && e.kind === it.kind && e.key === loose(it.text)) : -1;
     if (at >= 0) { used.add(at); matched.push({ it, at }); }
     if (it.kind === "heading") {
-      if (at >= 0 && seq[at].level !== it.level) diffs.push({ kind: "level", text: it.text, detail: `h${it.level} -> h${seq[at].level}` });
+      if (at >= 0 && seq[at].level !== null && seq[at].level !== it.level) diffs.push({ kind: "level", text: it.text, detail: `h${it.level} -> h${seq[at].level}` });
       under = { it, at };
       continue;
     }

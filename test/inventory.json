@@ -282,10 +282,7 @@
       ]
     },
     "known_fp": [],
-    "known_miss": [],
-    "known_structure": [
-      { "kind": "level", "key": "Writing views", "why": "Defuddle keeps the site suffix in the title, so the h1 is not taken as the title and stays in the body as an h2" }
-    ]
+    "known_miss": []
   },
   "react-state-memory": {
     "fixture": "react-state-memory.html",
@@ -393,10 +390,7 @@
       ]
     },
     "known_fp": [],
-    "known_miss": [],
-    "known_structure": [
-      { "kind": "level", "key": "Frequently Asked Questions (FAQ)", "why": "Defuddle keeps the site suffix in the title, so the h1 is not taken as the title and stays in the body as an h2" }
-    ]
+    "known_miss": []
   },
   "github-blog-rust": {
     "fixture": "github-blog-rust.html",

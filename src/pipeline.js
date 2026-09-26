@@ -8,6 +8,7 @@ import { extract, EXTRACTOR, EXTRACTOR_VERSION } from "./extract.js";
 import { contentToBlocks } from "./to-ir.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { isIP } from "node:net";
+import { parseHTML } from "linkedom";
 import { isPrivateIp } from "./ssrf.js";
 import { compose, extractNav } from "./compose.js";
 import { validate } from "./ir.js";
@@ -19,10 +20,22 @@ const sha = (s) => createHash("sha256").update(s).digest("hex").slice(0, 16);
 
 // Split extraction output into content blocks and loss markers, then append the source-loss
 // audit's drops. Loss markers are findings, not content, so they live in section.losses.
-function separateLosses(extracted, html, title) {
-  const blocks = restoreCodeLayout(html, extracted.filter((b) => b.type !== "loss"));
+function separateLosses(extracted, html, extractedTitle) {
+  const { title, blocks } = promoteTitle(extractedTitle, html, restoreCodeLayout(html, extracted.filter((b) => b.type !== "loss")));
   const losses = [...extracted.filter((b) => b.type === "loss"), ...auditSourceLoss(html, blocks, title)];
-  return { blocks, losses };
+  return { title, blocks, losses };
+}
+
+// A site title is the page's heading plus a site name ("Path | Node.js Documentation"), and the
+// extractor sometimes keeps the wrong half. When the extracted title or the page's <title> has a
+// part equal to the leading heading, that heading is the title and leaves the body.
+const SITE_SEP = /\s+[|\-–—·:]\s+/;
+function promoteTitle(title, html, blocks) {
+  const lead = blocks[0]?.type === "heading" ? blocks[0].text.trim() : "";
+  const names = (t) => (t || "").split(SITE_SEP).map((p) => p.trim().toLowerCase());
+  const matches = (t) => lead && names(t).includes(lead.toLowerCase());
+  if (matches(title) || matches(parseHTML(html).document.querySelector("title")?.textContent)) return { title: lead, blocks: blocks.slice(1) };
+  return { title, blocks };
 }
 
 // Fetch, extract, and partition one sibling (a canonical URL from extractNav). A dead or
@@ -37,8 +50,8 @@ async function buildSibling(surl, fetch) {
     const docHtml = sib.html;
     // Extract against the URL actually read, so relative links resolve after a redirect.
     const sex = await extract(docHtml, sib.finalUrl ?? surl);
-    const { blocks, losses } = separateLosses(contentToBlocks(sex.contentHtml), docHtml, sex.title);
-    return { status: "attached", url: surl, title: sex.title, blocks, losses };
+    const { title, blocks, losses } = separateLosses(contentToBlocks(sex.contentHtml), docHtml, sex.title);
+    return { status: "attached", url: surl, title, blocks, losses };
   } catch {
     return { status: "failed", url: surl };
   }
@@ -57,7 +70,7 @@ export async function run({ url, html, retrievedAt, fetch = fetchSnapshot }) {
   }
 
   const ex = await extract(snap.html, snap.finalUrl);
-  const { blocks, losses } = separateLosses(contentToBlocks(ex.contentHtml), snap.html, ex.title);
+  const { title, blocks, losses } = separateLosses(contentToBlocks(ex.contentHtml), snap.html, ex.title);
 
   // Nav is parsed once and drives both the frontier and the document. Sibling content is
   // fetched only on a live run; a pinned html snapshot never auto-fetches.
@@ -72,7 +85,7 @@ export async function run({ url, html, retrievedAt, fetch = fetchSnapshot }) {
 
   const source = { url, finalUrl: snap.finalUrl, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint };
   const generator = { name: "mdflow", version: VERSION, extractor: EXTRACTOR, extractorVersion: EXTRACTOR_VERSION };
-  const doc = compose({ url: snap.finalUrl, html: snap.html, nav, title: ex.title, blocks, losses, source, generator, siblings });
+  const doc = compose({ url: snap.finalUrl, html: snap.html, nav, title, blocks, losses, source, generator, siblings });
   validate(doc);
 
   return { doc, markdown: renderMarkdown(doc), snapshot: snap, extract: ex };

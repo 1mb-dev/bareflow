@@ -240,6 +240,14 @@ for (const [id, spec] of Object.entries(inventory)) {
     sections: [{ title: "T", blocks: [P("a"), P("b"), { type: "list", ordered: false, items: ["x"] }, P("c")], losses: [], children: [] }] });
   record("render", "blocks", "blank line between blocks", sep === "# T\n\na\n\nb\n\n- x\n\nc\n");
 
+  // The leading heading becomes the title when a site title names it ("Path | Site"); a heading the
+  // title does not name stays in the body.
+  const titled = (t, h) => run({ url: "https://example.com/p", html: `<html><head><title>${t}</title></head><body><main><h2>${h}</h2><p>Body text for the page.</p></main></body></html>`, retrievedAt: FIXED });
+  const [{ doc: named }, { doc: other }] = await Promise.all([titled("Path | Site Docs v2", "Path"), titled("Guide | Site", "Install")]);
+  record("pipeline", "title", "leading heading promoted only when the site title names it",
+    named.title === "Path" && named.sections[0].blocks[0].type !== "heading" && !named.sections[0].losses.length &&
+    other.sections[0].blocks[0].text === "Install");
+
   // Bug 13: a figcaption next to an image is kept.
   const fig = contentToBlocks('<figure><img src="a.png" alt="A"><figcaption>Figure caption</figcaption></figure>');
   record("to-ir", "figure", "figcaption kept with image", fig.length === 2 && fig[1].text === "Figure caption");
