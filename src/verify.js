@@ -1,7 +1,7 @@
 // The gate: scores the loss audit and nav detection against hand-labelled truth
-// (test/inventory.json, via src/truth.js), fails on any false positive or miss not named in the
-// fixture's known_fp / known_miss baseline, and checks wiring, mutation, SSRF, and the handler
-// boundary. Determinism compares a pure function to itself (near-tautological). Exit 1 on any
+// (test/inventory.json, via src/truth.js), fails on any false positive, miss, code drift, or
+// structure diff not named in the fixture's known_* baseline, and checks wiring, mutation, SSRF,
+// and the handler boundary. Determinism compares a pure function to itself (near-tautological). Exit 1 on any
 // failure.
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -65,7 +65,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   const loss = scoreLoss(html, doc, spec);
   for (const e of loss.errors) record(id, "truth", e, false);
   if (!loss.errors.length) record(id, "truth", "labels resolve; findings match baseline", true);
-  truth.push({ id, nav, loss: loss.counts, flat: loss.flat });
+  truth.push({ id, nav, loss: loss.counts, flat: loss.flat, structure: loss.structure });
 
   // Determinism: same snapshot + pinned retrievedAt -> byte-identical IR.
   const { doc: again } = await run({ url: spec.url, html, retrievedAt: FIXED });
@@ -101,6 +101,16 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("truth-harness", "fails on", "demoted finding on a lost block", fails(demotedFinding, lost, /^new false positive \(lost\)/));
   record("truth-harness", "fails on", "demoted label whose text is gone", fails(withLosses(true), { labels: { demoted: [H("Gone")] } }, /labelled demoted but text not in IR/));
   record("truth-harness", "fails on", "lost label on a block in the IR", fails(doc, lost, /labelled lost but in IR/));
+  // Structure: a moved block, a changed level, and a block under a heading the source lacks each
+  // fail; a known_structure entry that no longer fires is stale.
+  const reshaped = (f) => ({ ...doc, sections: [{ ...page, blocks: f(page.blocks) }] });
+  const codeFirst = reshaped((bs) => [...bs.filter((b) => b.type === "code"), ...bs.filter((b) => b.type !== "code")]);
+  const leveled = reshaped((bs) => bs.map((b) => (b.text === "Kept" ? { ...b, level: 3 } : b)));
+  const extra = reshaped((bs) => bs.flatMap((b) => (b.type === "code" ? [{ type: "heading", level: 3, text: "Extra" }, b] : [b])));
+  record("truth-harness", "fails on", "structure: order, level, section, stale",
+    fails(codeFirst, {}, /^structure changed \(order\)/) && fails(leveled, {}, /^structure changed \(level\)/) &&
+    fails(extra, {}, /^structure changed \(section\)/) && errors(doc, {}).length === 0 &&
+    fails(doc, { known_structure: [{ kind: "order", key: "Kept", why: "w" }] }, /stale/));
   // Partial layout loss: one line's relative indent gone, everything else intact.
   const py = "<html><body><main><h1>T</h1><pre>if x:\n    y = 1\n    z = 2</pre></main></body></html>";
   const pyDoc = await run({ url, html: py, retrievedAt: FIXED });
@@ -404,16 +414,17 @@ for (const r of results) console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.id}  ${r.ki
 
 // Truth scores. Loss P/R is over headings, code, and tables only: prose is not audited.
 // Known FPs and misses count against P/R; the baseline only stops them failing the gate.
-const sum = { tp: 0, fp: 0, miss: 0, lost: 0, ntp: 0, nfp: 0, nmiss: 0, ftp: 0, ffp: 0, fmiss: 0 };
-console.log("\nfixture                          loss P   R     (tp/fp/miss)   nav P   R     (tp/fp/miss)");
-for (const { id, nav, loss, flat } of truth) {
+const sum = { tp: 0, fp: 0, miss: 0, lost: 0, ntp: 0, nfp: 0, nmiss: 0, ftp: 0, ffp: 0, fmiss: 0, st: 0 };
+console.log("\nfixture                          loss P   R     (tp/fp/miss)   nav P   R     (tp/fp/miss)  structure");
+for (const { id, nav, loss, flat, structure } of truth) {
+  sum.st += structure;
   sum.ntp += nav.tp; sum.nfp += nav.fp.length; sum.nmiss += nav.miss.length;
   sum.tp += loss.tp; sum.fp += loss.fp; sum.miss += loss.miss; sum.lost += loss.lost;
   if (flat.emitted && flat.labelled) sum.ftp++; else if (flat.emitted) sum.ffp++; else if (flat.labelled) sum.fmiss++;
   const l = `${pr(loss.tp, loss.tp + loss.fp).padEnd(5)} ${pr(loss.tp, loss.lost).padEnd(5)} ${`${loss.tp}/${loss.fp}/${loss.miss}`.padEnd(14)}`;
-  console.log(`${id.padEnd(32)} ${l} ${pr(nav.tp, nav.tp + nav.fp.length).padEnd(5)} ${pr(nav.tp, nav.tp + nav.miss.length).padEnd(5)} ${nav.tp}/${nav.fp.length}/${nav.miss.length}`);
+  console.log(`${id.padEnd(32)} ${l} ${pr(nav.tp, nav.tp + nav.fp.length).padEnd(5)} ${pr(nav.tp, nav.tp + nav.miss.length).padEnd(5)} ${`${nav.tp}/${nav.fp.length}/${nav.miss.length}`.padEnd(13)} ${structure}`);
 }
-console.log(`${"all".padEnd(32)} ${pr(sum.tp, sum.tp + sum.fp).padEnd(5)} ${pr(sum.tp, sum.lost).padEnd(5)} ${`${sum.tp}/${sum.fp}/${sum.miss}`.padEnd(14)} ${pr(sum.ntp, sum.ntp + sum.nfp).padEnd(5)} ${pr(sum.ntp, sum.ntp + sum.nmiss).padEnd(5)} ${sum.ntp}/${sum.nfp}/${sum.nmiss}`);
+console.log(`${"all".padEnd(32)} ${pr(sum.tp, sum.tp + sum.fp).padEnd(5)} ${pr(sum.tp, sum.lost).padEnd(5)} ${`${sum.tp}/${sum.fp}/${sum.miss}`.padEnd(14)} ${pr(sum.ntp, sum.ntp + sum.nfp).padEnd(5)} ${pr(sum.ntp, sum.ntp + sum.nmiss).padEnd(5)} ${`${sum.ntp}/${sum.nfp}/${sum.nmiss}`.padEnd(13)} ${sum.st}`);
 console.log(`${"page: extract-flattened".padEnd(32)} tp/fp/miss ${sum.ftp}/${sum.ffp}/${sum.fmiss}`);
 console.log(`\n${results.length - failed.length}/${results.length} assertions passed`);
 if (failed.length) {

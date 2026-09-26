@@ -41,6 +41,12 @@
     "known_miss": [],
     "known_code_drift": [
       { "kind": "code", "key": "+---+---+", "why": "Defuddle trims the leading spaces of a <pre>'s first line, so the diagram's first row shifts one column" }
+    ],
+    "known_structure": [
+      { "kind": "order", "key": "3.2. First Steps Towards Programming", "why": "Defuddle drops 3.1 and its subsections (labelled lost) and moves 3.2 with its first code blocks up after the page's first code block" },
+      { "kind": "order", "key": ">>> # Fibonacci series:", "why": "Defuddle drops 3.1 and its subsections (labelled lost) and moves 3.2 with its first code blocks up after the page's first code block" },
+      { "kind": "order", "key": ">>> i = 256*256", "why": "Defuddle drops 3.1 and its subsections (labelled lost) and moves 3.2 with its first code blocks up after the page's first code block" },
+      { "kind": "order", "key": ">>> a, b = 0, 1", "why": "Defuddle drops 3.1 and its subsections (labelled lost) and moves 3.2 with its first code blocks up after the page's first code block" }
     ]
   },
   "python-tutorial-controlflow": {
@@ -279,7 +285,10 @@
       ]
     },
     "known_fp": [],
-    "known_miss": []
+    "known_miss": [],
+    "known_structure": [
+      { "kind": "level", "key": "Writing views", "why": "Defuddle keeps the site suffix in the title, so the h1 is not taken as the title and stays in the body as an h2" }
+    ]
   },
   "react-state-memory": {
     "fixture": "react-state-memory.html",
@@ -387,7 +396,10 @@
       ]
     },
     "known_fp": [],
-    "known_miss": []
+    "known_miss": [],
+    "known_structure": [
+      { "kind": "level", "key": "Frequently Asked Questions (FAQ)", "why": "Defuddle keeps the site suffix in the title, so the h1 is not taken as the title and stays in the body as an h2" }
+    ]
   },
   "github-blog-rust": {
     "fixture": "github-blog-rust.html",

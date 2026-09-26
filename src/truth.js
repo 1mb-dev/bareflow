@@ -47,7 +47,8 @@ function universe(html) {
       : tableText([...el.querySelectorAll("th, td")].map((c) => c.textContent));
     const raw = kind === "code" ? el.textContent : null;
     const cells = kind === "table" ? [...el.querySelectorAll("td")].map((c) => loose(vnorm(c.textContent))).filter(Boolean) : null;
-    if (text) out.push({ kind, text, raw, cells, label: "present" });
+    const level = kind === "heading" ? Number(tag[1]) : null;
+    if (text) out.push({ kind, text, raw, cells, level, label: "present" });
   }
   return out;
 }
@@ -167,16 +168,70 @@ export function scoreLoss(html, doc, spec) {
   for (const f of fps) if (!knownFp.includes(f)) errors.push(`new false positive (${f.label}): ${f.kind} "${f.text.slice(0, 80)}"`);
   for (const m of misses) if (!knownMiss.includes(m)) errors.push(`new miss: ${m.kind} "${m.text.slice(0, 80)}"`);
 
+  // Structure is baselined like the rest: a new diff fails, a stale known_structure entry fails.
+  const structure = structureDiffs(items, doc);
+  const [knownStruct, structErrs] = resolve(spec.known_structure || [], structure, "known_structure");
+  errors.push(...structErrs.map((e) => `${e} (stale: remove it)`));
+  for (const e of spec.known_structure || []) if (!e.why) errors.push(`known_structure without a why: ${e.kind} "${e.key}"`);
+  for (const d of structure) if (!knownStruct.includes(d)) errors.push(`structure changed (${d.kind}): "${d.text.slice(0, 60)}" ${d.detail.slice(0, 80)}`);
+
   const lost = items.filter((it) => it.label === "lost").length;
   return {
     errors,
     fps,
     misses,
     counts: { universe: items.length, lost, tp, fp: fps.length, miss: misses.length, demoted },
+    structure: structure.length,
     flat: { labelled: !!spec.flattened, emitted: flatEmitted },
     precision: tp + fps.length ? tp / (tp + fps.length) : null,
     recall: lost ? tp / lost : null,
   };
+}
+
+// Structure of the present blocks the IR kept: blocks out of source order (those off the longest
+// run in IR order), headings at another level, and code or tables filed under another heading.
+// A section title is a level-1 heading at the section's start. Each diff is {kind, text}, with
+// kind order | level | section and text the source block's.
+function structureDiffs(items, doc) {
+  const seq = [];
+  const rec = (s) => {
+    seq.push({ kind: "heading", key: loose(headingText(s.title)), level: 1 });
+    for (const b of s.blocks) {
+      if (b.type === "heading") seq.push({ kind: "heading", key: loose(headingText(b.text)), level: b.level });
+      else if (b.type === "code") seq.push({ kind: "code", key: loose(vnorm(b.code)) });
+      else if (b.type === "table") seq.push({ kind: "table", key: loose(tableText([...b.headers, ...b.rows.flat()])) });
+    }
+    s.children.forEach(rec);
+  };
+  doc.sections.forEach(rec);
+
+  const used = new Set(), matched = [], diffs = [];
+  let under = null; // nearest source heading so far, with its IR position if kept
+  for (const it of items) {
+    const at = it.label === "present" ? seq.findIndex((e, i) => !used.has(i) && e.kind === it.kind && e.key === loose(it.text)) : -1;
+    if (at >= 0) { used.add(at); matched.push({ it, at }); }
+    if (it.kind === "heading") {
+      if (at >= 0 && seq[at].level !== it.level) diffs.push({ kind: "level", text: it.text, detail: `h${it.level} -> h${seq[at].level}` });
+      under = { it, at };
+      continue;
+    }
+    if (at < 0 || !under || under.at < 0) continue;
+    let h = at;
+    while (--h >= 0 && seq[h].kind !== "heading");
+    if (h !== under.at) diffs.push({ kind: "section", text: it.text, detail: `under "${h >= 0 ? seq[h].key : "-"}", not "${under.it.text}"` });
+  }
+  // Longest increasing run of IR positions (O(n log n)); every matched block off it is out of order.
+  const tails = [], prev = [];
+  matched.forEach(({ at }, i) => {
+    let lo = 0, hi = tails.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (matched[tails[mid]].at < at) lo = mid + 1; else hi = mid; }
+    prev[i] = lo ? tails[lo - 1] : -1;
+    tails[lo] = i;
+  });
+  const inRun = new Set();
+  for (let i = tails.at(-1) ?? -1; i >= 0; i = prev[i]) inRun.add(i);
+  matched.forEach(({ it }, i) => { if (!inRun.has(i)) diffs.push({ kind: "order", text: it.text, detail: `${it.kind} out of source order` }); });
+  return diffs;
 }
 
 // Score nav detection: truth is the page's visible prev/next, "none" when it has none.
