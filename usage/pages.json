@@ -97,5 +97,23 @@
     "fixture": "kubernetes_io_docs_tasks_configure_pod_container_configure_liveness_readiness_startup_probes.html",
     "sha256": "ff9e5c4db34fa5b2bf78de75213ae57d538c9eb61351eb301f501d7831e67111",
     "retrievedAt": "2026-09-26T16:00:42.682Z"
+  },
+  "playwright_dev_docs_test_cli.html": {
+    "task": "U3",
+    "role": "prev",
+    "url": "https://playwright.dev/docs/test-cli",
+    "finalUrl": "https://playwright.dev/docs/test-cli",
+    "fixture": "playwright_dev_docs_test_cli.html",
+    "sha256": "0db9854609523669a057702b484e62c4b56f15218485a8b65438bccfce115cac",
+    "retrievedAt": "2026-09-26T16:24:54.490Z"
+  },
+  "playwright_dev_docs_test_use_options.html": {
+    "task": "U3",
+    "role": "next",
+    "url": "https://playwright.dev/docs/test-use-options",
+    "finalUrl": "https://playwright.dev/docs/test-use-options",
+    "fixture": "playwright_dev_docs_test_use_options.html",
+    "sha256": "867ae73b539e93b1493d38ccb0984e053eb6c78c577a1f4561790ee6e53473c4",
+    "retrievedAt": "2026-09-26T16:24:54.927Z"
   }
 }
