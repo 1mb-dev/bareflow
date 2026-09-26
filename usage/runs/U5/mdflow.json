@@ -1,0 +1,528 @@
+{
+  "schema": "mdflow/ir/v1",
+  "id": "e1c0be00b2d1f039",
+  "title": "Configure Liveness, Readiness and Startup Probes",
+  "source": {
+    "url": "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/",
+    "finalUrl": "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/",
+    "retrievedAt": "2026-09-26T16:00:42.682Z",
+    "fingerprint": "ff9e5c4db34fa5b2"
+  },
+  "generator": {
+    "name": "mdflow",
+    "version": "0.1.0",
+    "extractor": "defuddle",
+    "extractorVersion": "0.19.4"
+  },
+  "scope": {
+    "kind": "page",
+    "siblings": {
+      "prev": {
+        "status": "absent"
+      },
+      "next": {
+        "status": "absent"
+      }
+    }
+  },
+  "breadcrumbs": [
+    {
+      "title": "Kubernetes Documentation",
+      "url": "https://kubernetes.io/docs/"
+    },
+    {
+      "title": "Tasks",
+      "url": "https://kubernetes.io/docs/tasks/"
+    },
+    {
+      "title": "Configure Pods and Containers",
+      "url": "https://kubernetes.io/docs/tasks/configure-pod-container/"
+    }
+  ],
+  "sections": [
+    {
+      "id": "e1c0be00b2d1f039",
+      "title": "Configure Liveness, Readiness and Startup Probes",
+      "url": "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "This page shows how to configure liveness, readiness and startup probes for containers."
+        },
+        {
+          "type": "paragraph",
+          "text": "For more information about probes, see [Liveness, Readiness and Startup Probes](https://kubernetes.io/docs/concepts/workloads/pods/probes/)."
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Before you begin"
+        },
+        {
+          "type": "paragraph",
+          "text": "You need to have a Kubernetes cluster, and the kubectl command-line tool must be configured to communicate with your cluster. It is recommended to run this tutorial on a cluster with at least two nodes that are not acting as control plane hosts. If you do not already have a cluster, you can create one by using [minikube](https://minikube.sigs.k8s.io/docs/tutorials/multi_node/) or you can use one of these Kubernetes playgrounds:"
+        },
+        {
+          "type": "list",
+          "ordered": false,
+          "items": [
+            "[iximiuz Labs](https://labs.iximiuz.com/playgrounds?category=kubernetes&filter=all)",
+            "[Killercoda](https://killercoda.com/playgrounds/scenario/kubernetes)",
+            "[KodeKloud](https://kodekloud.com/public-playgrounds)"
+          ]
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Define a liveness command"
+        },
+        {
+          "type": "paragraph",
+          "text": "Many applications running for long periods of time eventually transition to broken states, and cannot recover except by being restarted. Kubernetes provides liveness probes to detect and remedy such situations."
+        },
+        {
+          "type": "paragraph",
+          "text": "In this exercise, you create a Pod that runs a container based on the `registry.k8s.io/busybox:1.27.2` image. Here is the configuration file for the Pod:"
+        },
+        {
+          "type": "code",
+          "lang": "yaml",
+          "code": "apiVersion: v1\nkind: Pod\nmetadata:\n  labels:\n    test: liveness\n  name: liveness-exec\nspec:\n  containers:\n  - name: liveness\n    image: registry.k8s.io/busybox:1.27.2\n    args:\n    - /bin/sh\n    - -c\n    - touch /tmp/healthy; sleep 30; rm -f /tmp/healthy; sleep 600\n    livenessProbe:\n      exec:\n        command:\n        - cat\n        - /tmp/healthy\n      initialDelaySeconds: 5\n      periodSeconds: 5"
+        },
+        {
+          "type": "paragraph",
+          "text": "In the configuration file, you can see that the Pod has a single `Container`. The `periodSeconds` field specifies that the kubelet should perform a liveness probe every 5 seconds. The `initialDelaySeconds` field tells the kubelet that it should wait 5 seconds before performing the first probe. To perform a probe, the kubelet executes the command `cat /tmp/healthy` in the target container. If the command succeeds, it returns 0, and the kubelet considers the container to be alive and healthy. If the command returns a non-zero value, the kubelet kills the container and restarts it."
+        },
+        {
+          "type": "paragraph",
+          "text": "When the container starts, it executes this command:"
+        },
+        {
+          "type": "code",
+          "lang": "shell",
+          "code": "/bin/sh -c \"touch /tmp/healthy; sleep 30; rm -f /tmp/healthy; sleep 600\""
+        },
+        {
+          "type": "paragraph",
+          "text": "For the first 30 seconds of the container's life, there is a `/tmp/healthy` file. So during the first 30 seconds, the command `cat /tmp/healthy` returns a success code. After 30 seconds, `cat /tmp/healthy` returns a failure code."
+        },
+        {
+          "type": "paragraph",
+          "text": "Create the Pod:"
+        },
+        {
+          "type": "code",
+          "lang": "shell",
+          "code": "kubectl apply -f https://k8s.io/examples/pods/probe/exec-liveness.yaml"
+        },
+        {
+          "type": "paragraph",
+          "text": "Within 30 seconds, view the Pod events:"
+        },
+        {
+          "type": "code",
+          "lang": "shell",
+          "code": "kubectl describe pod liveness-exec"
+        },
+        {
+          "type": "paragraph",
+          "text": "The output indicates that no liveness probes have failed yet:"
+        },
+        {
+          "type": "code",
+          "lang": "none",
+          "code": "Type    Reason     Age   From               Message\n----    ------     ----  ----               -------\nNormal  Scheduled  11s   default-scheduler  Successfully assigned default/liveness-exec to node01\nNormal  Pulling    9s    kubelet, node01    Pulling image \"registry.k8s.io/busybox:1.27.2\"\nNormal  Pulled     7s    kubelet, node01    Successfully pulled image \"registry.k8s.io/busybox:1.27.2\"\nNormal  Created    7s    kubelet, node01    Created container liveness\nNormal  Started    7s    kubelet, node01    Started container liveness"
+        },
+        {
+          "type": "paragraph",
+          "text": "After 35 seconds, view the Pod events again:"
+        },
+        {
+          "type": "code",
+          "lang": "shell",
+          "code": "kubectl describe pod liveness-exec"
+        },
+        {
+          "type": "paragraph",
+          "text": "At the bottom of the output, there are messages indicating that the liveness probes have failed, and the failed containers have been killed and recreated."
+        },
+        {
+          "type": "code",
+          "lang": "none",
+          "code": "Type     Reason     Age                From               Message\n----     ------     ----               ----               -------\nNormal   Scheduled  57s                default-scheduler  Successfully assigned default/liveness-exec to node01\nNormal   Pulling    55s                kubelet, node01    Pulling image \"registry.k8s.io/busybox:1.27.2\"\nNormal   Pulled     53s                kubelet, node01    Successfully pulled image \"registry.k8s.io/busybox:1.27.2\"\nNormal   Created    53s                kubelet, node01    Created container liveness\nNormal   Started    53s                kubelet, node01    Started container liveness\nWarning  Unhealthy  10s (x3 over 20s)  kubelet, node01    Liveness probe failed: cat: can't open '/tmp/healthy': No such file or directory\nNormal   Killing    10s                kubelet, node01    Container liveness failed liveness probe, will be restarted"
+        },
+        {
+          "type": "paragraph",
+          "text": "Wait another 30 seconds, and verify that the container has been restarted:"
+        },
+        {
+          "type": "code",
+          "lang": "shell",
+          "code": "kubectl get pod liveness-exec"
+        },
+        {
+          "type": "paragraph",
+          "text": "The output shows that `RESTARTS` has been incremented. Note that the `RESTARTS` counter increments as soon as a failed container comes back to the running state:"
+        },
+        {
+          "type": "code",
+          "lang": "none",
+          "code": "NAME            READY     STATUS    RESTARTS   AGE\nliveness-exec   1/1       Running   1          1m"
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Define a liveness HTTP request"
+        },
+        {
+          "type": "paragraph",
+          "text": "Another kind of liveness probe uses an HTTP GET request. Here is the configuration file for a Pod that runs a container based on the `registry.k8s.io/e2e-test-images/agnhost` image."
+        },
+        {
+          "type": "code",
+          "lang": "yaml",
+          "code": "apiVersion: v1\nkind: Pod\nmetadata:\n  labels:\n    test: liveness\n  name: liveness-http\nspec:\n  containers:\n  - name: liveness\n    image: registry.k8s.io/e2e-test-images/agnhost:2.40\n    args:\n    - liveness\n    livenessProbe:\n      httpGet:\n        path: /healthz\n        port: 8080\n        httpHeaders:\n        - name: Custom-Header\n          value: Awesome\n      initialDelaySeconds: 3\n      periodSeconds: 3"
+        },
+        {
+          "type": "paragraph",
+          "text": "In the configuration file, you can see that the Pod has a single container. The `periodSeconds` field specifies that the kubelet should perform a liveness probe every 3 seconds. The `initialDelaySeconds` field tells the kubelet that it should wait 3 seconds before performing the first probe. To perform a probe, the kubelet sends an HTTP GET request to the server that is running in the container and listening on port 8080. If the handler for the server's `/healthz` path returns a success code, the kubelet considers the container to be alive and healthy. If the handler returns a failure code, the kubelet kills the container and restarts it."
+        },
+        {
+          "type": "paragraph",
+          "text": "Any code greater than or equal to 200 and less than 400 indicates success. Any other code indicates failure."
+        },
+        {
+          "type": "paragraph",
+          "text": "You can see the source code for the server in [server.go](https://github.com/kubernetes/kubernetes/blob/master/test/images/agnhost/liveness/server.go)."
+        },
+        {
+          "type": "paragraph",
+          "text": "For the first 10 seconds that the container is alive, the `/healthz` handler returns a status of 200. After that, the handler returns a status of 500."
+        },
+        {
+          "type": "code",
+          "lang": "go",
+          "code": "http.HandleFunc(\"/healthz\", func(w http.ResponseWriter, r *http.Request) {\n    duration := time.Now().Sub(started)\n    if duration.Seconds() > 10 {\n        w.WriteHeader(500)\n        w.Write([]byte(fmt.Sprintf(\"error: %v\", duration.Seconds())))\n    } else {\n        w.WriteHeader(200)\n        w.Write([]byte(\"ok\"))\n    }\n})"
+        },
+        {
+          "type": "paragraph",
+          "text": "The kubelet starts performing health checks 3 seconds after the container starts. So the first couple of health checks will succeed. But after 10 seconds, the health checks will fail, and the kubelet will kill and restart the container."
+        },
+        {
+          "type": "paragraph",
+          "text": "To try the HTTP liveness check, create a Pod:"
+        },
+        {
+          "type": "code",
+          "lang": "shell",
+          "code": "kubectl apply -f https://k8s.io/examples/pods/probe/http-liveness.yaml"
+        },
+        {
+          "type": "paragraph",
+          "text": "After 10 seconds, view Pod events to verify that liveness probes have failed and the container has been restarted:"
+        },
+        {
+          "type": "code",
+          "lang": "shell",
+          "code": "kubectl describe pod liveness-http"
+        },
+        {
+          "type": "paragraph",
+          "text": "In releases after v1.13, local HTTP proxy environment variable settings do not affect the HTTP liveness probe."
+        },
+        {
+          "type": "heading",
+          "level": 3,
+          "text": "Use HTTP/2 cleartext (h2c) with HTTP probes"
+        },
+        {
+          "type": "paragraph",
+          "text": "Feature state: Alpha since Kubernetes v1.37; disabled by default"
+        },
+        {
+          "type": "paragraph",
+          "text": "More information about this feature To use this feature, you (or a cluster administrator) will need to enable the [H2CContainerProbe](https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/#H2CContainerProbe) feature gate for all relevant components in your cluster.See [Enable Or Disable Feature Gates](https://kubernetes.io/docs/tasks/administer-cluster/configure-feature-gates/) for more information."
+        },
+        {
+          "type": "paragraph",
+          "text": "By default the `kubelet` sends HTTP/1.1 requests when executing an HTTP probe. If your application serves health endpoints only over HTTP/2 cleartext (h2c), you can add the `protocol` field to the `httpGet` field in the probe specification and specify a value of `HTTP2`. This requires the `H2CContainerProbe` [feature gate](https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/) to be enabled on both the `kube-apiserver` and the `kubelet`."
+        },
+        {
+          "type": "code",
+          "lang": "yaml",
+          "code": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: h2c-app\nspec:\n  containers:\n  - name: app\n    image: registry.k8s.io/e2e-test-images/agnhost:2.64.0\n    command: [\"/agnhost\", \"h2c-server\", \"--port=8080\"]\n    ports:\n    - containerPort: 8080\n    livenessProbe:\n      httpGet:\n        path: /healthz\n        port: 8080\n        protocol: HTTP2\n      initialDelaySeconds: 5\n      periodSeconds: 10"
+        },
+        {
+          "type": "paragraph",
+          "text": "When `protocol` is set to `HTTP2`, the `kubelet` connects using HTTP/2 cleartext (h2c) — HTTP/2 over plain TCP without TLS. The following configurations aren't supported:"
+        },
+        {
+          "type": "list",
+          "ordered": false,
+          "items": [
+            "`protocol: HTTP2` and `scheme: HTTPS`",
+            "`protocol: HTTP2` and a value in the `host` field"
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "If the feature gate is disabled, the API server removes the `protocol` field from new or updated Pods."
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Define a TCP liveness probe"
+        },
+        {
+          "type": "paragraph",
+          "text": "A third type of liveness probe uses a TCP socket. With this configuration, the kubelet will attempt to open a socket to your container on the specified port. If it can establish a connection, the container is considered healthy, if it can't it is considered a failure."
+        },
+        {
+          "type": "code",
+          "lang": "yaml",
+          "code": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: goproxy\n  labels:\n    app: goproxy\nspec:\n  containers:\n  - name: goproxy\n    image: registry.k8s.io/goproxy:0.1\n    ports:\n    - containerPort: 8080\n    readinessProbe:\n      tcpSocket:\n        port: 8080\n      initialDelaySeconds: 15\n      periodSeconds: 10\n    livenessProbe:\n      tcpSocket:\n        port: 8080\n      initialDelaySeconds: 15\n      periodSeconds: 10"
+        },
+        {
+          "type": "paragraph",
+          "text": "As you can see, configuration for a TCP check is quite similar to an HTTP check. This example uses both readiness and liveness probes. The kubelet will run the first liveness probe 15 seconds after the container starts. This will attempt to connect to the `goproxy` container on port 8080. If the liveness probe fails, the container will be restarted. The kubelet will continue to run this check every 10 seconds."
+        },
+        {
+          "type": "paragraph",
+          "text": "In addition to the liveness probe, this configuration includes a readiness probe. The kubelet will run the first readiness probe 15 seconds after the container starts. Similar to the liveness probe, this will attempt to connect to the `goproxy` container on port 8080. If the probe succeeds, the Pod will be marked as ready and will receive traffic from services. If the readiness probe fails, the pod will be marked unready and will not receive traffic from any services."
+        },
+        {
+          "type": "paragraph",
+          "text": "To try the TCP liveness check, create a Pod:"
+        },
+        {
+          "type": "code",
+          "lang": "shell",
+          "code": "kubectl apply -f https://k8s.io/examples/pods/probe/tcp-liveness-readiness.yaml"
+        },
+        {
+          "type": "paragraph",
+          "text": "After 15 seconds, view Pod events to verify that liveness probes:"
+        },
+        {
+          "type": "code",
+          "lang": "shell",
+          "code": "kubectl describe pod goproxy"
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Define a gRPC liveness probe"
+        },
+        {
+          "type": "paragraph",
+          "text": "Feature state: Stable since Kubernetes v1.27"
+        },
+        {
+          "type": "paragraph",
+          "text": "If your application implements the [gRPC Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md), this example shows how to configure Kubernetes to use it for application liveness checks. Similarly you can configure readiness and startup probes."
+        },
+        {
+          "type": "paragraph",
+          "text": "Here is an example manifest:"
+        },
+        {
+          "type": "code",
+          "lang": "yaml",
+          "code": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: etcd-with-grpc\nspec:\n  containers:\n  - name: etcd\n    image: registry.k8s.io/etcd:3.5.1-0\n    command: [ \"/usr/local/bin/etcd\", \"--data-dir\",  \"/var/lib/etcd\", \"--listen-client-urls\", \"http://0.0.0.0:2379\", \"--advertise-client-urls\", \"http://127.0.0.1:2379\", \"--log-level\", \"debug\"]\n    ports:\n    - containerPort: 2379\n    livenessProbe:\n      grpc:\n        port: 2379\n      initialDelaySeconds: 10"
+        },
+        {
+          "type": "paragraph",
+          "text": "To try the gRPC liveness check, create a Pod using the command below. In the example below, the etcd pod is configured to use gRPC liveness probe."
+        },
+        {
+          "type": "code",
+          "lang": "shell",
+          "code": "kubectl apply -f https://k8s.io/examples/pods/probe/grpc-liveness.yaml"
+        },
+        {
+          "type": "paragraph",
+          "text": "After 15 seconds, view Pod events to verify that the liveness check has not failed:"
+        },
+        {
+          "type": "code",
+          "lang": "shell",
+          "code": "kubectl describe pod etcd-with-grpc"
+        },
+        {
+          "type": "paragraph",
+          "text": "When using a gRPC probe, there are some technical details to be aware of:"
+        },
+        {
+          "type": "list",
+          "ordered": false,
+          "items": [
+            "The probes run against the pod IP address or its hostname. Be sure to configure your gRPC endpoint to listen on the Pod's IP address.",
+            "The probes connect over plaintext by default. See [Use TLS with gRPC probes](#grpc-probe-tls) for how to enable TLS.",
+            "There are no error codes for built-in probes. All errors are considered as probe failures.",
+            "If `ExecProbeTimeout` feature gate is set to `false`, grpc-health-probe does **not** respect the `timeoutSeconds` setting (which defaults to 1s), while built-in probe would fail on timeout."
+          ]
+        },
+        {
+          "type": "heading",
+          "level": 3,
+          "text": "Use TLS with gRPC probes"
+        },
+        {
+          "type": "paragraph",
+          "text": "Feature state: Alpha since Kubernetes v1.37; disabled by default"
+        },
+        {
+          "type": "paragraph",
+          "text": "More information about this feature To use this feature, you (or a cluster administrator) will need to enable the [GRPCContainerProbeTLS](https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/#GRPCContainerProbeTLS) feature gate for all relevant components in your cluster.See [Enable Or Disable Feature Gates](https://kubernetes.io/docs/tasks/administer-cluster/configure-feature-gates/) for more information."
+        },
+        {
+          "type": "paragraph",
+          "text": "By default the `kubelet` connects to gRPC health endpoints over plaintext. If your application serves gRPC only over TLS, you can add the `mode` field to the `grpc` field in the probe specification and specify a value of `TLS`. This requires the `GRPCContainerProbeTLS` [feature gate](https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/) to be enabled on both the `kube-apiserver` and the `kubelet`."
+        },
+        {
+          "type": "code",
+          "lang": "yaml",
+          "code": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: grpc-tls-app\nspec:\n  containers:\n  - name: app\n    image: registry.k8s.io/e2e-test-images/agnhost:2.40\n    command: [\"/agnhost\", \"grpc-health-checking\", \"--port=8443\"]\n    ports:\n    - containerPort: 8443\n    livenessProbe:\n      grpc:\n        port: 8443\n        mode: TLS\n      initialDelaySeconds: 5\n      periodSeconds: 10"
+        },
+        {
+          "type": "paragraph",
+          "text": "When `mode` is set to `TLS`, the `kubelet` connects over TLS with `InsecureSkipVerify` and does not verify the server certificate. This matches the behavior of HTTPS probes. Certificate verification is not supported."
+        },
+        {
+          "type": "paragraph",
+          "text": "If the feature gate is disabled, the `kube-apiserver` removes the `mode` field from new or updated Pods."
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Use a named port"
+        },
+        {
+          "type": "paragraph",
+          "text": "You can use a named [port](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#ports) for HTTP and TCP probes. gRPC probes do not support named ports."
+        },
+        {
+          "type": "paragraph",
+          "text": "For example:"
+        },
+        {
+          "type": "code",
+          "lang": "yaml",
+          "code": "ports:\n- name: liveness-port\n  containerPort: 8080\n\nlivenessProbe:\n  httpGet:\n    path: /healthz\n    port: liveness-port"
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Protect slow starting containers with startup probes"
+        },
+        {
+          "type": "paragraph",
+          "text": "Sometimes, you have to deal with applications that require additional startup time on their first initialization. In such cases, it can be tricky to set up liveness probe parameters without compromising the fast response to deadlocks that motivated such a probe. The solution is to set up a startup probe with the same command, HTTP or TCP check, with a `failureThreshold * periodSeconds` long enough to cover the worst case startup time."
+        },
+        {
+          "type": "paragraph",
+          "text": "So, the previous example would become:"
+        },
+        {
+          "type": "code",
+          "lang": "yaml",
+          "code": "ports:\n- name: liveness-port\n  containerPort: 8080\n\nlivenessProbe:\n  httpGet:\n    path: /healthz\n    port: liveness-port\n  failureThreshold: 1\n  periodSeconds: 10\n\nstartupProbe:\n  httpGet:\n    path: /healthz\n    port: liveness-port\n  failureThreshold: 30\n  periodSeconds: 10"
+        },
+        {
+          "type": "paragraph",
+          "text": "Thanks to the startup probe, the application will have a maximum of 5 minutes (30 * 10 = 300s) to finish its startup. Once the startup probe has succeeded once, the liveness probe takes over to provide a fast response to container deadlocks. If the startup probe never succeeds, the container is killed after 300s and subject to the pod's `restartPolicy`."
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "Define readiness probes"
+        },
+        {
+          "type": "paragraph",
+          "text": "Sometimes, applications are temporarily unable to serve traffic. For example, an application might need to load large data or configuration files during startup, or depend on external services after startup. In such cases, you don't want to kill the application, but you don't want to send it requests either. Kubernetes provides readiness probes to detect and mitigate these situations. A pod with containers reporting that they are not ready does not receive traffic through Kubernetes Services."
+        },
+        {
+          "type": "paragraph",
+          "text": "Note:"
+        },
+        {
+          "type": "paragraph",
+          "text": "Readiness probes run on the container during its whole lifecycle."
+        },
+        {
+          "type": "paragraph",
+          "text": "Caution:"
+        },
+        {
+          "type": "paragraph",
+          "text": "The readiness and liveness probes do not depend on each other to succeed. If you want to wait before executing a readiness probe, you should use"
+        },
+        {
+          "type": "paragraph",
+          "text": "initialDelaySeconds"
+        },
+        {
+          "type": "paragraph",
+          "text": "or a"
+        },
+        {
+          "type": "paragraph",
+          "text": "startupProbe"
+        },
+        {
+          "type": "paragraph",
+          "text": "."
+        },
+        {
+          "type": "paragraph",
+          "text": "Readiness probes are configured similarly to liveness probes. The only difference is that you use the `readinessProbe` field instead of the `livenessProbe` field."
+        },
+        {
+          "type": "code",
+          "lang": "yaml",
+          "code": "readinessProbe:\n  exec:\n    command:\n    - /bin/cat\n    - /tmp/healthy\n  initialDelaySeconds: 5\n  periodSeconds: 5"
+        },
+        {
+          "type": "paragraph",
+          "text": "Configuration for HTTP and TCP readiness probes also remains identical to liveness probes."
+        },
+        {
+          "type": "paragraph",
+          "text": "Readiness and liveness probes can be used in parallel for the same container. Using both can ensure that traffic does not reach a container that is not ready for it, and that containers are restarted when they fail."
+        },
+        {
+          "type": "heading",
+          "level": 2,
+          "text": "What's next"
+        },
+        {
+          "type": "list",
+          "ordered": false,
+          "items": [
+            "Learn more about [Liveness, Readiness and Startup Probes](https://kubernetes.io/docs/concepts/workloads/pods/probes/).",
+            "For the full specification of probe-related fields, see the API reference: [Pod](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/), [Container](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#Container), [Probe](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#Probe)"
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "Last modified June 30, 2026 at 3:26 PM PST: [KEP-5999: Add docs for HTTP/2 cleartext (h2c) support in container probes (alpha) (751b927b5a)](https://github.com/kubernetes/website/commit/751b927b5a6869aab39fc81350f0b55b3c035216)"
+        }
+      ],
+      "losses": [
+        {
+          "type": "loss",
+          "reason": "source heading demoted to paragraph (h4): Note:",
+          "source": "source-heading-demoted",
+          "text": "Note:"
+        },
+        {
+          "type": "loss",
+          "reason": "source heading demoted to paragraph (h4): Caution:",
+          "source": "source-heading-demoted",
+          "text": "Caution:"
+        }
+      ],
+      "children": []
+    }
+  ]
+}
