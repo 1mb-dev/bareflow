@@ -28,9 +28,6 @@ coverage.*
 node_modules/
 npm-debug.log*
 
-# Eval: generated snapshots + extractor output (regenerate via eval/src)
-eval/data/
-
 # Python
 __pycache__/
 *.pyc
