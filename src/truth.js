@@ -11,11 +11,12 @@ import { parseHTML } from "linkedom";
 import { walk } from "./ir.js";
 import { extractNav, canonicalUrl } from "./compose.js";
 
-// Lines of a code block as layout: \p{Cf} removed, trailing whitespace, blank edge lines and
-// repeated blank lines dropped (blank-line counts are not syntax; Defuddle collapses them),
-// common leading indentation removed.
+// Lines of a code block as layout: \p{Cf} removed, NBSP read as a space (an entity in page
+// text, not indentation the author chose), trailing whitespace, blank edge lines and repeated
+// blank lines dropped (blank-line counts are not syntax; Defuddle collapses them), common
+// leading indentation removed.
 function lineLayout(code) {
-  const lines = (code || "").replace(/\p{Cf}/gu, "").replace(/\n\s*\n(\s*\n)+/g, "\n\n").split("\n").map((l) => l.replace(/\s+$/, ""));
+  const lines = (code || "").replace(/\p{Cf}/gu, "").replace(/\u00a0/g, " ").replace(/\n\s*\n(\s*\n)+/g, "\n\n").split("\n").map((l) => l.replace(/\s+$/, ""));
   while (lines.length && !lines[0]) lines.shift();
   while (lines.length && !lines.at(-1)) lines.pop();
   const indent = Math.min(...lines.filter(Boolean).map((l) => l.match(/^\s*/)[0].length));
@@ -67,9 +68,16 @@ function universe(html) {
 }
 
 // Section titles count as headings: the page h1 becomes the page section's title, not a block.
+// A site title ("Configuration | Playwright") also counts as each of its parts, since it carries
+// the page's h1 under the site name.
+const SITE_SEP = /\s+[|\-–—·:]\s+/;
 function irTexts(doc) {
   const m = { heading: [], code: [], table: [] };
-  const titles = (s) => { m.heading.push(loose(headingText(s.title))); s.children.forEach(titles); };
+  const titles = (s) => {
+    const parts = s.title.split(SITE_SEP);
+    m.heading.push(loose(headingText(s.title)), ...(parts.length > 1 ? parts.map((p) => loose(headingText(p))) : []));
+    s.children.forEach(titles);
+  };
   doc.sections.forEach(titles);
   for (const { block: b } of walk(doc)) {
     if (b.type === "heading") m.heading.push(loose(headingText(b.text)));
