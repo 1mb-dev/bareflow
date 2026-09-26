@@ -501,5 +501,29 @@
       { "kind": "code", "key": "let c = 0; let id = setInterval(()=> { console.log(c++) },20", "why": "comment thread, which dev.to nests inside the post's article element" }
     ],
     "known_miss": []
+  },
+  "nodejs-path": {
+    "fixture": "nodejs-path.html",
+    "url": "https://nodejs.org/api/path.html",
+    "sha256": "55e5df3bf6621d73b006b811b2a34382ea97b93f39eb332eb4def1047f0897f1",
+    "nav": { "prev": "none", "next": "none" },
+    "flattened": false,
+    "labels": {
+      "chrome": [
+        { "kind": "heading", "key": "Node.js v26.10.0 documentation" }
+      ],
+      "lost": [
+        { "kind": "table", "key": "Version | Changesv6.0.0Passing a non-string" },
+        { "kind": "table", "key": "Version | Changesv6.0.0Passing a non-string" },
+        { "kind": "table", "key": "Version | Changesv6.0.0Passing a non-string" },
+        { "kind": "table", "key": "Version | Changesv19.0.0" },
+        { "kind": "table", "key": "Version | Changesv24.8.0" },
+        { "kind": "table", "key": "Version | Changesv15.3.0Exposed as require('path/posix')" },
+        { "kind": "table", "key": "Version | Changesv6.8.0" },
+        { "kind": "table", "key": "Version | Changesv15.3.0Exposed as require('path/win32')" }
+      ]
+    },
+    "known_fp": [],
+    "known_miss": []
   }
 }
