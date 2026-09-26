@@ -39,9 +39,6 @@
     },
     "known_fp": [],
     "known_miss": [],
-    "known_code_drift": [
-      { "kind": "code", "key": "+---+---+", "why": "Defuddle trims the leading spaces of a <pre>'s first line, so the diagram's first row shifts one column" }
-    ],
     "known_structure": [
       { "kind": "order", "key": "3.2. First Steps Towards Programming", "why": "Defuddle drops 3.1 and its subsections (labelled lost) and moves 3.2 with its first code blocks up after the page's first code block" },
       { "kind": "order", "key": ">>> # Fibonacci series:", "why": "Defuddle drops 3.1 and its subsections (labelled lost) and moves 3.2 with its first code blocks up after the page's first code block" },

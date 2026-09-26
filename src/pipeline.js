@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { fetchSnapshot } from "./fetch.js";
 import { extract, EXTRACTOR, EXTRACTOR_VERSION } from "./extract.js";
 import { contentToBlocks } from "./to-ir.js";
-import { auditSourceLoss } from "./loss-audit.js";
+import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { isIP } from "node:net";
 import { isPrivateIp } from "./ssrf.js";
 import { compose, extractNav } from "./compose.js";
@@ -20,7 +20,7 @@ const sha = (s) => createHash("sha256").update(s).digest("hex").slice(0, 16);
 // Split extraction output into content blocks and loss markers, then append the source-loss
 // audit's drops. Loss markers are findings, not content, so they live in section.losses.
 function separateLosses(extracted, html, title) {
-  const blocks = extracted.filter((b) => b.type !== "loss");
+  const blocks = restoreCodeLayout(html, extracted.filter((b) => b.type !== "loss"));
   const losses = [...extracted.filter((b) => b.type === "loss"), ...auditSourceLoss(html, blocks, title)];
   return { blocks, losses };
 }

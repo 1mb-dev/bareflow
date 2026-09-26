@@ -192,6 +192,22 @@ function codeDemotedTo(lo, hi, code, blocks, keys, budget, prose) {
   return null;
 }
 
+// Defuddle trims the leading whitespace of a <pre>'s first line, which shifts that line against
+// the rest (diagrams, indented snippets). A code block whose source differs only there takes the
+// source's text back; any other difference is left to the audit.
+export function restoreCodeLayout(html, blocks) {
+  const sources = new Map(); // first-line-trimmed text -> untrimmed source texts, in order
+  for (const { raw } of sourceBlocks(html).codes) {
+    const text = raw.replace(/^\s*\n/, "").replace(/\s+$/, "");
+    const trimmed = text.replace(/^[ \t]+/, "");
+    if (text === trimmed) continue;
+    if (!sources.has(trimmed)) sources.set(trimmed, []);
+    sources.get(trimmed).push(text);
+  }
+  if (!sources.size) return blocks;
+  return blocks.map((b) => (b.type === "code" && sources.get(b.code)?.length ? { ...b, code: sources.get(b.code).shift() } : b));
+}
+
 // Flattened: the source has structure and the IR kept almost none of it (one paragraph for
 // a whole page). The thresholds were fitted on one page (tailwind) and checked out of sample
 // (github-blog-rust fires, devto-event-loop does not); a new hit is a labelling task.

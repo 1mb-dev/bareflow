@@ -9,7 +9,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { run } from "./pipeline.js";
-import { auditSourceLoss } from "./loss-audit.js";
+import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
 import { decompress, MAX_BYTES } from "./fetch.js";
 import { cacheKey } from "./cache.js";
@@ -166,6 +166,14 @@ for (const [id, spec] of Object.entries(inventory)) {
     JSON.stringify(src(twice)) === JSON.stringify(["source-code-demoted", "source-code-diff"]) &&
     JSON.stringify(src(auditSourceLoss(quoted, [Hd("A"), P(`Run ${long} now`), Hd("B")]))) === JSON.stringify(["source-code-diff"]) &&
     JSON.stringify(src(auditSourceLoss(quoted, [Hd("A"), P(`Run ${long} now`), P(long), Hd("B")]))) === JSON.stringify(["source-code-demoted"]));
+
+  // A first line whose leading whitespace Defuddle trimmed is restored from the source; a block
+  // that differs in any other way is left for the audit.
+  const C = (code) => ({ type: "code", code });
+  const art = "<main><pre>  +--+\n  |a|\n  +--+</pre><pre>x = 1</pre></main>";
+  const back = restoreCodeLayout(art, [C("+--+\n  |a|\n  +--+"), C("+--+\n |a|\n  +--+"), C("x = 1")]);
+  record("loss-audit", "layout", "trimmed first line restored from source, other drift left",
+    back[0].code === "  +--+\n  |a|\n  +--+" && back[1].code === "+--+\n |a|\n  +--+" && back[2].code === "x = 1");
 
   // Flattened page: one doc-level finding; blocks whose text survives are demoted wherever
   // they sit, a block whose text is gone stays a diff.
