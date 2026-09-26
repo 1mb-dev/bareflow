@@ -111,6 +111,9 @@ for (const [id, spec] of Object.entries(inventory)) {
     fails(codeFirst, {}, /^structure changed \(order\)/) && fails(leveled, {}, /^structure changed \(level\)/) &&
     fails(extra, {}, /^structure changed \(section\)/) && errors(doc, {}).length === 0 &&
     fails(doc, { known_structure: [{ kind: "order", key: "Kept", why: "w" }] }, /stale/));
+  // Truth reads a <pre> with bare text as a whole: an intact inline-code command is present.
+  const cmd = "<html><body><main><h1>T</h1><pre>$ npm install <code>mdflow-package-name</code> --save-dev</pre></main></body></html>";
+  record("truth-harness", "passes on", "bare pre text around inline code", scoreLoss(cmd, (await run({ url, html: cmd, retrievedAt: FIXED })).doc, {}).errors.length === 0);
   // Partial layout loss: one line's relative indent gone, everything else intact.
   const py = "<html><body><main><h1>T</h1><pre>if x:\n    y = 1\n    z = 2</pre></main></body></html>";
   const pyDoc = await run({ url, html: py, retrievedAt: FIXED });
@@ -180,6 +183,12 @@ for (const [id, spec] of Object.entries(inventory)) {
   const back = restoreCodeLayout(art, [C("+--+\n  |a|\n  +--+"), C("+--+\n |a|\n  +--+"), C("x = 1")]);
   record("loss-audit", "layout", "trimmed first line restored from source, other drift left",
     back[0].code === "  +--+\n  |a|\n  +--+" && back[1].code === "+--+\n |a|\n  +--+" && back[2].code === "x = 1");
+  // Copies that share a trimmed text pair in order: the unindented one does not take the indent.
+  const pair = restoreCodeLayout("<main><pre>x\n  y</pre><pre>  x\n  y</pre></main>", [C("x\n  y"), C("x\n  y")]);
+  record("loss-audit", "layout", "same trimmed text restored by position", pair[0].code === "x\n  y" && pair[1].code === "  x\n  y");
+  // A <pre> with bare text around an inline <code> is code as a whole.
+  const inline = auditSourceLoss("<main><pre>$ npm install <code>mdflow-package-name</code> --save-dev</pre></main>", [C("$ npm install mdflow-package-name --save-dev")]);
+  record("loss-audit", "identity", "bare pre text around inline code kept", inline.length === 0);
 
   // Flattened page: one doc-level finding; blocks whose text survives are demoted wherever
   // they sit, a block whose text is gone stays a diff.
@@ -230,10 +239,6 @@ for (const [id, spec] of Object.entries(inventory)) {
     auditSourceLoss(tbl, [P("alpha")]).length === 0 &&
     JSON.stringify(src(auditSourceLoss(one, [Hd("A")]))) === JSON.stringify(["source-table-diff"]));
 
-  // Bug 15: a site-suffixed title that repeats the first heading is not rendered twice.
-  const suffixed = renderMarkdown({ scope: { kind: "page", siblings: { prev: { status: "absent" }, next: { status: "absent" } } },
-    sections: [{ title: "What is Ownership? - The Rust Programming Language", blocks: [Hd("What Is Ownership?")], losses: [], children: [] }] });
-  record("render", "title", "site-suffixed title deduped", suffixed === "## What Is Ownership?\n");
 
   // Blocks are separated by a blank line, so paragraphs and a list stay distinct in Markdown.
   const sep = renderMarkdown({ scope: { kind: "page", siblings: { prev: { status: "absent" }, next: { status: "absent" } } },
@@ -243,10 +248,10 @@ for (const [id, spec] of Object.entries(inventory)) {
   // The leading heading becomes the title when a site title names it ("Path | Site"); a heading the
   // title does not name stays in the body.
   const titled = (t, h) => run({ url: "https://example.com/p", html: `<html><head><title>${t}</title></head><body><main><h2>${h}</h2><p>Body text for the page.</p></main></body></html>`, retrievedAt: FIXED });
-  const [{ doc: named }, { doc: other }] = await Promise.all([titled("Path | Site Docs v2", "Path"), titled("Guide | Site", "Install")]);
-  record("pipeline", "title", "leading heading promoted only when the site title names it",
+  const [{ doc: named }, { doc: other }, { doc: brand }] = await Promise.all([titled("Path | Site Docs v2", "Path"), titled("Guide | Site", "Install"), titled("Getting Started | Acme", "Acme")]);
+  record("pipeline", "title", "leading heading promoted only when the title's page part names it",
     named.title === "Path" && named.sections[0].blocks[0].type !== "heading" && !named.sections[0].losses.length &&
-    other.sections[0].blocks[0].text === "Install");
+    other.sections[0].blocks[0].text === "Install" && brand.title !== "Acme" && brand.sections[0].blocks[0].text === "Acme");
 
   // Bug 13: a figcaption next to an image is kept.
   const fig = contentToBlocks('<figure><img src="a.png" alt="A"><figcaption>Figure caption</figcaption></figure>');

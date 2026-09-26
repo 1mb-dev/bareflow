@@ -37,11 +37,13 @@ const AUDIT_KIND = {
 };
 const LABELS = ["lost", "demoted", "chrome"];
 
-// The code in a <pre> is its top-level <code> elements when it has any; the rest (toggles,
-// language labels, copy buttons) is interface.
+// The code in a <pre> is its top-level <code> elements when all its text sits in elements; the
+// rest (toggles, language labels, copy buttons) is interface. Bare text in the <pre> makes the
+// whole <pre> code.
 function codeOf(pre) {
   const codes = [...pre.querySelectorAll("code")].filter((c) => !c.parentElement.closest("code"));
-  return codes.length ? codes.map((c) => c.textContent).join("\n") : pre.textContent;
+  const bare = [...pre.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+  return codes.length && !bare ? codes.map((c) => c.textContent).join("\n") : pre.textContent;
 }
 // A heading's text without same-page anchors that hold only a glyph (#, ¶, §).
 function withoutPermalinks(h) {
@@ -68,14 +70,14 @@ function universe(html) {
 }
 
 // Section titles count as headings: the page h1 becomes the page section's title, not a block.
-// A site title ("Configuration | Playwright") also counts as each of its parts, since it carries
-// the page's h1 under the site name.
-const SITE_SEP = /\s+[|\-–—·:]\s+/;
+// A site title ("Configuration | Playwright") also counts as its page part (the first), which
+// carries the page's h1; the site-name part does not.
+const SITE_SEP = /\s+[|\-\u2013\u2014\u00b7:]\s+/;
 function irTexts(doc) {
   const m = { heading: [], code: [], table: [] };
   const titles = (s) => {
     const parts = s.title.split(SITE_SEP);
-    m.heading.push(loose(headingText(s.title)), ...(parts.length > 1 ? parts.map((p) => loose(headingText(p))) : []));
+    m.heading.push(loose(headingText(s.title)), ...(parts.length > 1 ? [loose(headingText(parts[0]))] : []));
     s.children.forEach(titles);
   };
   doc.sections.forEach(titles);
@@ -230,7 +232,8 @@ function structureDiffs(items, doc) {
   const used = new Set(), matched = [], diffs = [];
   let under = null; // nearest source heading so far, with its IR position if kept
   for (const it of items) {
-    const at = it.label === "present" ? seq.findIndex((e, i) => !used.has(i) && e.kind === it.kind && e.key === loose(it.text)) : -1;
+    const key = loose(it.text);
+    const at = it.label === "present" ? seq.findIndex((e, i) => !used.has(i) && e.kind === it.kind && e.key === key) : -1;
     if (at >= 0) { used.add(at); matched.push({ it, at }); }
     if (it.kind === "heading") {
       if (at >= 0 && seq[at].level !== null && seq[at].level !== it.level) diffs.push({ kind: "level", text: it.text, detail: `h${it.level} -> h${seq[at].level}` });

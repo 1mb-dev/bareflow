@@ -20,21 +20,8 @@ function scopeNote(scope) {
   return `> **Scope:** ${what} (prev: ${prev.status}, next: ${next.status})`;
 }
 
-// A title that is the first heading plus a site suffix ("Title - Site", "Title | Site") repeats
-// the heading.
-const SUFFIX = /^\s*[-|–—·:]\s/;
-function repeatsTitle(heading, title) {
-  const h = heading.toLowerCase(), t = title.toLowerCase();
-  return t === h || (t.startsWith(h) && SUFFIX.test(t.slice(h.length)));
-}
-
 function renderSection(s, depth, out) {
-  // Suppress the section title when the leading heading already says it.
-  const first = s.blocks[0];
-  if (!(first?.type === "heading" && repeatsTitle(first.text, s.title))) {
-    out.push(`${"#".repeat(Math.min(depth, 6))} ${s.title}`);
-    out.push("");
-  }
+  out.push(`${"#".repeat(Math.min(depth, 6))} ${s.title}`, "");
   // A blank line after every block: without it adjacent paragraphs merge, and a paragraph after
   // a list continues the list's last item.
   for (const b of s.blocks) out.push(renderBlock(b), "");

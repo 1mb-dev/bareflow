@@ -42,11 +42,13 @@ function auditScope(document) {
   return { root: document.documentElement, skip: SKIP_PAGE };
 }
 
-// A <pre> that holds <code> keeps its code there; its other children are interface (a flavor
-// toggle, a language label, a copy button). Without <code>, the whole <pre> is code.
+// A <pre> whose text all sits in elements, some of them <code>, keeps its code in the <code>;
+// the other elements are interface (a flavor toggle, a language label, a copy button). A <pre>
+// with bare text of its own ("$ npm install <code>pkg</code>") is code as a whole.
 function preText(pre) {
   const codes = [...pre.querySelectorAll("code")].filter((c) => !c.parentElement.closest("code"));
-  return codes.length ? codes.map((c) => c.textContent).join("\n") : pre.textContent;
+  const bare = [...pre.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+  return codes.length && !bare ? codes.map((c) => c.textContent).join("\n") : pre.textContent;
 }
 
 // A same-page anchor whose only text is a glyph is a permalink, not heading text ("Path#").
@@ -59,7 +61,17 @@ function headingText(h) {
   return c.textContent;
 }
 
+// One parse per page: the pipeline reads the source three times (layout restore, title, audit).
+let last = { html: null, src: null };
 function sourceBlocks(html) {
+  if (last.html !== html) last = { html, src: readSource(html) };
+  return last.src;
+}
+
+// The page's <title> text, from the same parse the audit uses.
+export const sourceTitle = (html) => sourceBlocks(html).title;
+
+function readSource(html) {
   const { document } = parseHTML(html);
   const { root, skip } = auditScope(document);
 
@@ -87,7 +99,8 @@ function sourceBlocks(html) {
     if (raw.length) tables.push({ rows: rows.map((r) => r.map(norm)), raw: raw.join(" | ") });
   }
   let prose; // walked only if a code block goes missing
-  return { headings, codes, tables, prose: () => (prose ??= proseText(document, root, skip)) };
+  const title = document.querySelector("title")?.textContent ?? "";
+  return { headings, codes, tables, title, prose: () => (prose ??= proseText(document, root, skip)) };
 }
 
 // Whitespace-free text of the scope outside code, headings, and chrome: what the source already
@@ -217,18 +230,24 @@ function codeDemotedTo(lo, hi, code, blocks, keys, budget, prose) {
 
 // Defuddle trims the leading whitespace of a <pre>'s first line, which shifts that line against
 // the rest (diagrams, indented snippets). A code block whose source differs only there takes the
-// source's text back; any other difference is left to the audit.
+// source's text back; any other difference is left to the audit. Blocks that share a trimmed
+// text pair with their source copies in order, indented or not, so no block borrows another's
+// indent.
 export function restoreCodeLayout(html, blocks) {
-  const sources = new Map(); // first-line-trimmed text -> untrimmed source texts, in order
+  const sources = new Map(); // first-line-trimmed text -> source texts, in document order
+  let indented = false;
   for (const { raw } of sourceBlocks(html).codes) {
     const text = raw.replace(/^\s*\n/, "").replace(/\s+$/, "");
     const trimmed = text.replace(/^[ \t]+/, "");
-    if (text === trimmed) continue;
+    indented ||= text !== trimmed;
     if (!sources.has(trimmed)) sources.set(trimmed, []);
     sources.get(trimmed).push(text);
   }
-  if (!sources.size) return blocks;
-  return blocks.map((b) => (b.type === "code" && sources.get(b.code)?.length ? { ...b, code: sources.get(b.code).shift() } : b));
+  if (!indented) return blocks;
+  return blocks.map((b) => {
+    const text = b.type === "code" ? sources.get(b.code)?.shift() : undefined;
+    return text !== undefined && text !== b.code ? { ...b, code: text } : b;
+  });
 }
 
 // Flattened: the source has structure and the IR kept almost none of it (one paragraph for
