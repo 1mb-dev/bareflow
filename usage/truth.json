@@ -1,0 +1,108 @@
+{
+  "U1": {
+    "fixture": "docs_sqlalchemy_org_en_20_tutorial_orm_related_objects_html.html",
+    "url": "https://docs.sqlalchemy.org/en/20/tutorial/orm_related_objects.html",
+    "sha256": "a44e0486e6ffbfbc6abb2af46110089cc62d7fc2498f2c36516dd8f8077ae62a",
+    "nav": {
+      "prev": "https://docs.sqlalchemy.org/en/20/tutorial/orm_data_manipulation.html",
+      "next": "https://docs.sqlalchemy.org/en/20/tutorial/further_reading.html"
+    },
+    "flattened": false,
+    "labels": {
+      "chrome": [
+        {
+          "kind": "heading",
+          "key": "SQLAlchemy 2.0 Documentation"
+        },
+        {
+          "kind": "heading",
+          "key": "SQLAlchemy 2.0 Documentation"
+        },
+        {
+          "kind": "heading",
+          "key": "SQLAlchemy Unified Tutorial"
+        }
+      ]
+    }
+  },
+  "U2": {
+    "fixture": "docs_astral_sh_uv_guides_integration_github.html",
+    "url": "https://docs.astral.sh/uv/guides/integration/github/",
+    "sha256": "b84c79921161095b6dd911a57c74ef691ab0ae213d15e96d354e8268a59ac299",
+    "nav": {
+      "prev": "https://docs.astral.sh/uv/guides/integration/marimo/",
+      "next": "https://docs.astral.sh/uv/guides/integration/gitlab/"
+    },
+    "flattened": false,
+    "labels": {}
+  },
+  "U3": {
+    "fixture": "playwright_dev_docs_test_configuration.html",
+    "url": "https://playwright.dev/docs/test-configuration",
+    "sha256": "5272635388c6062b2faf6c844c438f68105de35397fda45922bfa29606c7bfbc",
+    "nav": {
+      "prev": "https://playwright.dev/docs/test-cli",
+      "next": "https://playwright.dev/docs/test-use-options"
+    },
+    "flattened": false,
+    "labels": {}
+  },
+  "U4": {
+    "fixture": "doc_rust_lang_org_book_ch12_05_working_with_environment_variables_html.html",
+    "url": "https://doc.rust-lang.org/book/ch12-05-working-with-environment-variables.html",
+    "sha256": "f25f798cba2f34bae74bd75ceb7681aa6e9cd5db6a06ddf137d22ee31e91d5eb",
+    "nav": {
+      "prev": "https://doc.rust-lang.org/book/ch12-04-testing-the-librarys-functionality.html",
+      "next": "https://doc.rust-lang.org/book/ch12-06-writing-to-stderr-instead-of-stdout.html"
+    },
+    "flattened": false,
+    "labels": {
+      "chrome": [
+        {
+          "kind": "heading",
+          "key": "Keyboard shortcuts"
+        },
+        {
+          "kind": "heading",
+          "key": "The Rust Programming Language"
+        }
+      ]
+    }
+  },
+  "U5": {
+    "fixture": "kubernetes_io_docs_tasks_configure_pod_container_configure_liveness_readiness_startup_probes.html",
+    "url": "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/",
+    "sha256": "ff9e5c4db34fa5b2bf78de75213ae57d538c9eb61351eb301f501d7831e67111",
+    "nav": {
+      "prev": "none",
+      "next": "none"
+    },
+    "flattened": false,
+    "labels": {
+      "chrome": [
+        {
+          "kind": "heading",
+          "key": "KubeCon + CloudNativeCon North America 2026"
+        },
+        {
+          "kind": "heading",
+          "key": "Configure Liveness, Readiness and Startup Probes"
+        },
+        {
+          "kind": "heading",
+          "key": "Feedback"
+        }
+      ],
+      "demoted": [
+        {
+          "kind": "heading",
+          "key": "Note:"
+        },
+        {
+          "kind": "heading",
+          "key": "Caution:"
+        }
+      ]
+    }
+  }
+}
