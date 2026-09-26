@@ -229,6 +229,11 @@ for (const [id, spec] of Object.entries(inventory)) {
     sections: [{ title: "What is Ownership? - The Rust Programming Language", blocks: [Hd("What Is Ownership?")], losses: [], children: [] }] });
   record("render", "title", "site-suffixed title deduped", suffixed === "## What Is Ownership?\n");
 
+  // Blocks are separated by a blank line, so paragraphs and a list stay distinct in Markdown.
+  const sep = renderMarkdown({ scope: { kind: "page", siblings: { prev: { status: "absent" }, next: { status: "absent" } } },
+    sections: [{ title: "T", blocks: [P("a"), P("b"), { type: "list", ordered: false, items: ["x"] }, P("c")], losses: [], children: [] }] });
+  record("render", "blocks", "blank line between blocks", sep === "# T\n\na\n\nb\n\n- x\n\nc\n");
+
   // Bug 13: a figcaption next to an image is kept.
   const fig = contentToBlocks('<figure><img src="a.png" alt="A"><figcaption>Figure caption</figcaption></figure>');
   record("to-ir", "figure", "figcaption kept with image", fig.length === 2 && fig[1].text === "Figure caption");

@@ -35,8 +35,10 @@ function renderSection(s, depth, out) {
     out.push(`${"#".repeat(Math.min(depth, 6))} ${s.title}`);
     out.push("");
   }
-  for (const b of s.blocks) out.push(renderBlock(b));
-  for (const l of s.losses) out.push(renderLoss(l));
+  // A blank line after every block: without it adjacent paragraphs merge, and a paragraph after
+  // a list continues the list's last item.
+  for (const b of s.blocks) out.push(renderBlock(b), "");
+  for (const l of s.losses) out.push(renderLoss(l), "");
   for (const c of s.children) renderSection(c, depth + 1, out);
 }
 
