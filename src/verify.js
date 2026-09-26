@@ -415,7 +415,7 @@ for (const { id, nav, loss, flat } of truth) {
 }
 console.log(`${"all".padEnd(32)} ${pr(sum.tp, sum.tp + sum.fp).padEnd(5)} ${pr(sum.tp, sum.lost).padEnd(5)} ${`${sum.tp}/${sum.fp}/${sum.miss}`.padEnd(14)} ${pr(sum.ntp, sum.ntp + sum.nfp).padEnd(5)} ${pr(sum.ntp, sum.ntp + sum.nmiss).padEnd(5)} ${sum.ntp}/${sum.nfp}/${sum.nmiss}`);
 console.log(`${"page: extract-flattened".padEnd(32)} tp/fp/miss ${sum.ftp}/${sum.ffp}/${sum.fmiss}`);
-console.log(`\n${results.length - failed.length}/${results.length} assertions passed (wired, not verified)`);
+console.log(`\n${results.length - failed.length}/${results.length} assertions passed`);
 if (failed.length) {
   console.log("FAILED:");
   for (const r of failed) console.log(`  - ${r.id}: ${r.kind} ${r.text}`);
