@@ -63,7 +63,18 @@ function sourceBlocks(html) {
     const raw = rows.flat();
     if (raw.length) tables.push({ rows: rows.map((r) => r.map(norm)), raw: raw.join(" | ") });
   }
-  return { headings, codes, tables };
+  let prose; // walked only if a code block goes missing
+  return { headings, codes, tables, prose: () => (prose ??= proseText(document, root, skip)) };
+}
+
+// Whitespace-free text of the scope outside code, headings, and chrome: what the source already
+// says in prose. Code text in IR prose is evidence of demotion only beyond this.
+function proseText(document, root, skip) {
+  const out = [];
+  const walker = document.createTreeWalker(root, 4); // NodeFilter.SHOW_TEXT
+  const not = `pre, h1, h2, h3, h4, h5, h6, script, style, ${skip}`;
+  for (let n; (n = walker.nextNode());) if (!n.parentElement?.closest(not)) out.push(n.textContent);
+  return codeKey(out.join(""));
 }
 
 // Multiset counts of IR code and table blocks keyed by identity, plus the IR's full
@@ -165,11 +176,19 @@ function demotedTo(lo, hi, h, blocks, keys, claimed) {
 // A missing code block is demoted when its text sits inside a prose block in the same
 // section (Defuddle flattens <details> and some editors into paragraphs). Containment is safe
 // for code as it is not for headings only above a length floor; shorter code stays a diff.
+// Each key may be demoted only as many times as IR prose holds it beyond the source's own prose:
+// two identical blocks can't both claim one paragraph, and a dropped block the page also quotes
+// inline is lost, not demoted.
 const DEMOTE_MIN_CODE = 20;
-function codeDemotedTo(lo, hi, code, blocks, keys) {
+const count = (hay, k) => hay.split(k).length - 1;
+function codeDemotedTo(lo, hi, code, blocks, keys, budget, prose) {
   const k = codeKey(code.key);
   if (k.length < DEMOTE_MIN_CODE || (lo === -1 && hi === blocks.length)) return null;
-  for (let i = lo + 1; i < Math.min(hi, lo + 1 + DEMOTE_SCAN); i++) if (keys[i]?.code.includes(k)) return blocks[i];
+  if (!budget.has(k)) budget.set(k, keys.reduce((n, x) => n + (x ? count(x.code, k) : 0), 0) - count(prose(), k));
+  if (budget.get(k) <= 0) return null;
+  for (let i = lo + 1; i < Math.min(hi, lo + 1 + DEMOTE_SCAN); i++) {
+    if (keys[i]?.code.includes(k)) { budget.set(k, budget.get(k) - 1); return blocks[i]; }
+  }
   return null;
 }
 
@@ -222,9 +241,10 @@ export function auditSourceLoss(html, blocks, title = "") {
     if (to) losses.push(ir.loss(`source heading demoted to ${to.type} (h${h.level}): ${clip(h.text)}`, "source-heading-demoted", h.raw));
     else losses.push(ir.loss(`source heading not extracted (h${h.level}): ${clip(h.text)}`, "source-heading-diff", h.raw));
   });
+  const budget = new Map();
   for (const code of src.codes) {
     if (take(irc.codes, codeKey(code.key)) || full()) continue;
-    const to = codeDemotedTo(nb.before(code.under), nb.after(code.under + 1), code, blocks, keys) ?? (survives(code.key) ? { type: "prose" } : null);
+    const to = codeDemotedTo(nb.before(code.under), nb.after(code.under + 1), code, blocks, keys, budget, src.prose) ?? (survives(code.key) ? { type: "prose" } : null);
     if (to) losses.push(ir.loss(`source code block demoted to ${to.type}: ${clip(code.key, 80)}`, "source-code-demoted", code.raw));
     else losses.push(ir.loss(`source code block not extracted: ${clip(code.key, 80)}`, "source-code-diff", code.raw));
   }

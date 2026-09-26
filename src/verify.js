@@ -148,6 +148,14 @@ for (const [id, spec] of Object.entries(inventory)) {
     [Hd("A"), P(`Run \`${long}\` then ls -la`), Hd("B"), Hd("C"), P(long.replace("41", "40"))]);
   record("loss-audit", "demoted", "code in prose, same section only",
     JSON.stringify(src(code)) === JSON.stringify(["source-code-demoted", "source-code-diff", "source-code-diff"]));
+  // Claim set: one paragraph absorbs one demoted copy; code the source already quotes in prose
+  // is lost when its block drops, demoted only when the IR holds an extra copy.
+  const twice = auditSourceLoss(`<main><h2>A</h2><pre>${long}</pre><pre>${long}</pre><h2>B</h2></main>`, [Hd("A"), P(`Run ${long}`), Hd("B")]);
+  const quoted = `<main><h2>A</h2><p>Run ${long} now</p><pre>${long}</pre><h2>B</h2></main>`;
+  record("loss-audit", "demoted", "code claim set: one copy per prose occurrence, source prose excluded",
+    JSON.stringify(src(twice)) === JSON.stringify(["source-code-demoted", "source-code-diff"]) &&
+    JSON.stringify(src(auditSourceLoss(quoted, [Hd("A"), P(`Run ${long} now`), Hd("B")]))) === JSON.stringify(["source-code-diff"]) &&
+    JSON.stringify(src(auditSourceLoss(quoted, [Hd("A"), P(`Run ${long} now`), P(long), Hd("B")]))) === JSON.stringify(["source-code-demoted"]));
 
   // Flattened page: one doc-level finding; blocks whose text survives are demoted wherever
   // they sit, a block whose text is gone stays a diff.
