@@ -42,6 +42,23 @@ function auditScope(document) {
   return { root: document.documentElement, skip: SKIP_PAGE };
 }
 
+// A <pre> that holds <code> keeps its code there; its other children are interface (a flavor
+// toggle, a language label, a copy button). Without <code>, the whole <pre> is code.
+function preText(pre) {
+  const codes = [...pre.querySelectorAll("code")].filter((c) => !c.parentElement.closest("code"));
+  return codes.length ? codes.map((c) => c.textContent).join("\n") : pre.textContent;
+}
+
+// A same-page anchor whose only text is a glyph is a permalink, not heading text ("Path#").
+const PERMALINK = /^\s*[#¶§]\s*$/u;
+function headingText(h) {
+  const marks = [...h.querySelectorAll("a[href^='#']")].filter((a) => PERMALINK.test(a.textContent));
+  if (!marks.length) return h.textContent;
+  const c = h.cloneNode(true);
+  for (const a of c.querySelectorAll("a[href^='#']")) if (PERMALINK.test(a.textContent)) a.remove();
+  return c.textContent;
+}
+
 function sourceBlocks(html) {
   const { document } = parseHTML(html);
   const { root, skip } = auditScope(document);
@@ -50,17 +67,23 @@ function sourceBlocks(html) {
   const headings = [], codes = [], tables = [];
   for (const el of root.querySelectorAll("h1, h2, h3, h4, h5, h6, pre")) {
     if (el.closest(skip)) continue;
-    const t = norm(el.textContent);
-    if (el.tagName === "PRE") { if (t) codes.push({ key: t, raw: el.textContent, under: headings.length - 1 }); continue; }
-    const text = t.replace(/\s*¶\s*$/, "");
-    if (text) headings.push({ level: Number(el.tagName[1]), text, raw: el.textContent });
+    if (el.tagName === "PRE") {
+      const raw = preText(el);
+      if (norm(raw)) codes.push({ key: norm(raw), raw, under: headings.length - 1 });
+      continue;
+    }
+    const raw = headingText(el);
+    const text = norm(raw).replace(/\s*¶\s*$/, "");
+    if (text) headings.push({ level: Number(el.tagName[1]), text, raw });
   }
   // Innermost tables only: an outer (layout) table's rows and cells contain every nested
   // table, which multiplies the audit's output with nesting depth.
   for (const tbl of root.querySelectorAll("table")) {
     if (tbl.closest(skip) || tbl.querySelector("table")) continue;
     const rows = [...tbl.querySelectorAll("tr")].map((tr) => [...tr.querySelectorAll("th,td")].map((c) => c.textContent));
-    const raw = rows.flat();
+    // The finding's text is every cell in document order: walking rows would count the cells of a
+    // malformed table (a tbody parsed inside a th) twice.
+    const raw = [...tbl.querySelectorAll("th,td")].map((c) => c.textContent);
     if (raw.length) tables.push({ rows: rows.map((r) => r.map(norm)), raw: raw.join(" | ") });
   }
   let prose; // walked only if a code block goes missing

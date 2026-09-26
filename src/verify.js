@@ -143,6 +143,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   const src = (l) => l.map((x) => x.source);
   const P = (text) => ({ type: "paragraph", text });
   const Hd = (text) => ({ type: "heading", level: 2, text });
+  const C = (code) => ({ type: "code", code });
 
   // Demoted only at the heading's position: "Note:" between A and B is demoted; a "Usage"
   // heading whose only look-alike paragraph sits in another section is lost.
@@ -167,9 +168,14 @@ for (const [id, spec] of Object.entries(inventory)) {
     JSON.stringify(src(auditSourceLoss(quoted, [Hd("A"), P(`Run ${long} now`), Hd("B")]))) === JSON.stringify(["source-code-diff"]) &&
     JSON.stringify(src(auditSourceLoss(quoted, [Hd("A"), P(`Run ${long} now`), P(long), Hd("B")]))) === JSON.stringify(["source-code-demoted"]));
 
+  // A glyph-only same-page anchor is a permalink, not heading text; a <pre>'s code is its <code>,
+  // not its toolbar. "C#" keeps its glyph: it is text, not an anchor.
+  const ui = auditSourceLoss(`<main><h2>Path<a class="mark" href="#path">#</a></h2><h2>C#</h2><pre><input type="checkbox"><code>${long}</code><div><span>javascript</span><button>copy</button></div></pre></main>`,
+    [Hd("Path"), Hd("C#"), C(long)]);
+  record("loss-audit", "identity", "permalink glyph and code toolbar are not block text", ui.length === 0);
+
   // A first line whose leading whitespace Defuddle trimmed is restored from the source; a block
   // that differs in any other way is left for the audit.
-  const C = (code) => ({ type: "code", code });
   const art = "<main><pre>  +--+\n  |a|\n  +--+</pre><pre>x = 1</pre></main>";
   const back = restoreCodeLayout(art, [C("+--+\n  |a|\n  +--+"), C("+--+\n |a|\n  +--+"), C("x = 1")]);
   record("loss-audit", "layout", "trimmed first line restored from source, other drift left",

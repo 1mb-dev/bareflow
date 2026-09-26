@@ -36,16 +36,29 @@ const AUDIT_KIND = {
 };
 const LABELS = ["lost", "demoted", "chrome"];
 
+// The code in a <pre> is its top-level <code> elements when it has any; the rest (toggles,
+// language labels, copy buttons) is interface.
+function codeOf(pre) {
+  const codes = [...pre.querySelectorAll("code")].filter((c) => !c.parentElement.closest("code"));
+  return codes.length ? codes.map((c) => c.textContent).join("\n") : pre.textContent;
+}
+// A heading's text without same-page anchors that hold only a glyph (#, ¶, §).
+function withoutPermalinks(h) {
+  const c = h.cloneNode(true);
+  for (const a of c.querySelectorAll("a[href^='#']")) if (/^\s*[#¶§]\s*$/u.test(a.textContent)) a.remove();
+  return c.textContent;
+}
+
 function universe(html) {
   const { document } = parseHTML(html);
   const out = [];
   for (const el of document.documentElement.querySelectorAll("h1, h2, h3, h4, h5, h6, pre, table")) {
     const tag = el.tagName.toLowerCase();
     const kind = tag === "pre" ? "code" : tag === "table" ? "table" : "heading";
-    const text = kind === "heading" ? headingText(el.textContent)
-      : kind === "code" ? vnorm(el.textContent)
+    const text = kind === "heading" ? headingText(withoutPermalinks(el))
+      : kind === "code" ? vnorm(codeOf(el))
       : tableText([...el.querySelectorAll("th, td")].map((c) => c.textContent));
-    const raw = kind === "code" ? el.textContent : null;
+    const raw = kind === "code" ? codeOf(el) : null;
     const cells = kind === "table" ? [...el.querySelectorAll("td")].map((c) => loose(vnorm(c.textContent))).filter(Boolean) : null;
     const level = kind === "heading" ? Number(tag[1]) : null;
     if (text) out.push({ kind, text, raw, cells, level, label: "present" });
