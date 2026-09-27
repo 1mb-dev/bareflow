@@ -28,7 +28,7 @@ for (const [task, spec] of Object.entries(truth)) {
   await mkdir(dir, { recursive: true });
   const html = await readFile(join(HERE, "pages", spec.fixture), "utf8");
   const { doc } = await run({ url: spec.url, fetch: frozenFetch });
-  const json = JSON.stringify(doc, null, 2);
+  const json = JSON.stringify(doc);
   const plain = plainText(html);
   await writeFile(join(dir, "mdflow.json"), json + "\n");
   await writeFile(join(dir, "plain.txt"), plain);
