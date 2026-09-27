@@ -5,9 +5,9 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseHTML } from "linkedom";
 import { run } from "../src/pipeline.js";
 import { scoreLoss } from "../src/truth.js";
+import { plainText } from "./plain.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const pages = JSON.parse(await readFile(join(HERE, "pages.json"), "utf8"));
@@ -21,24 +21,6 @@ const frozenFetch = async (u) => {
   const html = await readFile(join(HERE, "pages", p.fixture), "utf8");
   return { url: u, finalUrl: p.finalUrl, status: 200, contentType: "text/html", bytes: Buffer.byteLength(html), html, fingerprint: p.sha256.slice(0, 16), retrievedAt: p.retrievedAt };
 };
-
-// Block elements end a line; pre keeps its text; script, style and hidden content are dropped.
-const BLOCK = new Set(["P", "DIV", "LI", "TR", "H1", "H2", "H3", "H4", "H5", "H6", "SECTION", "ARTICLE", "HEADER", "FOOTER", "NAV", "ASIDE", "MAIN", "BLOCKQUOTE", "DT", "DD", "TABLE", "UL", "OL", "FIGURE", "FIGCAPTION", "DETAILS", "SUMMARY", "BR", "HR"]);
-const DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "HEAD"]);
-function plainText(html) {
-  const { document } = parseHTML(html);
-  const out = [];
-  const walk = (n) => {
-    if (n.nodeType === 3) { out.push(n.textContent.replace(/\s+/g, " ")); return; }
-    if (n.nodeType !== 1 || DROP.has(n.tagName)) return;
-    if (n.tagName === "PRE") { out.push("\n", n.textContent, "\n"); return; }
-    if (n.tagName === "TD" || n.tagName === "TH") out.push(" | ");
-    for (const c of n.childNodes) walk(c);
-    if (BLOCK.has(n.tagName)) out.push("\n");
-  };
-  walk(document.documentElement);
-  return out.join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
-}
 
 const summary = {};
 for (const [task, spec] of Object.entries(truth)) {
