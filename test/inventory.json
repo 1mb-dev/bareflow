@@ -569,5 +569,126 @@
     },
     "known_fp": [],
     "known_miss": []
+  },
+  "docusaurus-jest-mock": {
+    "fixture": "docusaurus-jest-mock.html",
+    "url": "https://jestjs.io/docs/mock-functions",
+    "sha256": "8ffe90418b2e9f7d1aa34d0156daaa8a2a9e73d1b5a6237d4979b8cf6acec8ec",
+    "nav": { "prev": "https://jestjs.io/docs/setup-teardown", "next": "https://jestjs.io/docs/jest-platform" },
+    "flattened": false,
+    "labels": {},
+    "known_fp": [],
+    "known_miss": [],
+    "known_nav_miss": ["prev", "next"]
+  },
+  "docusaurus-markdown-features": {
+    "fixture": "docusaurus-markdown-features.html",
+    "url": "https://docusaurus.io/docs/markdown-features",
+    "sha256": "5aeb530a83f57c48d02f8db38566b7bbdf7dc9022e8efcf1cc71c52dccbe8237",
+    "nav": { "prev": "https://docusaurus.io/docs/blog", "next": "https://docusaurus.io/docs/markdown-features/react" },
+    "flattened": false,
+    "labels": {},
+    "known_fp": [],
+    "known_miss": [],
+    "known_nav_miss": ["prev", "next"]
+  },
+  "docusaurus-blog-release": {
+    "fixture": "docusaurus-blog-release.html",
+    "url": "https://docusaurus.io/blog/releases/3.5",
+    "sha256": "f6e6e74290ce8650cd3b82fdb5c9f0bfc03297ce6b53e2daa46a2ac64ecca3cd",
+    "nav": { "prev": "none", "next": "none" },
+    "flattened": false,
+    "labels": {
+      "chrome": [
+        { "kind": "heading", "key": "2026" },
+        { "kind": "heading", "key": "2025" },
+        { "kind": "heading", "key": "2024" },
+        { "kind": "heading", "key": "2023" },
+        { "kind": "heading", "key": "2022" },
+        { "kind": "heading", "key": "2021" },
+        { "kind": "heading", "key": "2020" },
+        { "kind": "heading", "key": "2019" },
+        { "kind": "heading", "key": "2018" },
+        { "kind": "heading", "key": "2017" }
+      ]
+    },
+    "known_fp": [],
+    "known_miss": []
+  },
+  "vitepress-vitest-mocking": {
+    "fixture": "vitepress-vitest-mocking.html",
+    "url": "https://vitest.dev/guide/mocking",
+    "sha256": "e6e51d12a3a186d3091efe7fd8f43adbdbbb0a1bf999dbd24dd2c18c347ac790",
+    "nav": { "prev": "https://vitest.dev/guide/snapshot", "next": "https://vitest.dev/guide/mocking/dates" },
+    "flattened": false,
+    "labels": {
+      "chrome": [
+        { "kind": "heading", "key": "Introduction" },
+        { "kind": "heading", "key": "Learn" },
+        { "kind": "heading", "key": "Browser Mode" },
+        { "kind": "heading", "key": "Authoring" },
+        { "kind": "heading", "key": "Workflow" },
+        { "kind": "heading", "key": "Quality & Debugging" },
+        { "kind": "heading", "key": "Performance" },
+        { "kind": "heading", "key": "Recipes" },
+        { "kind": "heading", "key": "Advanced" },
+        { "kind": "heading", "key": "Migration" },
+        { "kind": "heading", "key": "Mocking" }
+      ]
+    },
+    "known_fp": [],
+    "known_miss": [],
+    "known_nav_miss": ["prev", "next"]
+  },
+  "vitepress-pinia-state": {
+    "fixture": "vitepress-pinia-state.html",
+    "url": "https://pinia.vuejs.org/core-concepts/state.html",
+    "sha256": "399c713df61cd4da3125d32dd8681555834523207400f2c618dcd4d9bcb70ba7",
+    "nav": { "prev": "https://pinia.vuejs.org/core-concepts/", "next": "https://pinia.vuejs.org/core-concepts/getters.html" },
+    "flattened": false,
+    "labels": {
+      "chrome": [
+        { "kind": "heading", "key": "Introduction" },
+        { "kind": "heading", "key": "Core Concepts" },
+        { "kind": "heading", "key": "Server-Side Rendering (SSR)" },
+        { "kind": "heading", "key": "Cookbook" },
+        { "kind": "heading", "key": "CodeRabbit" },
+        { "kind": "heading", "key": "Become a sponsor" },
+        { "kind": "heading", "key": "VueMastery" },
+        { "kind": "heading", "key": "Controla" },
+        { "kind": "heading", "key": "Route Optimizer and Route Planner Software" },
+        { "kind": "heading", "key": "SendCloud" }
+      ]
+    },
+    "known_fp": [],
+    "known_miss": [],
+    "known_nav_miss": ["prev", "next"]
+  },
+  "vitepress-vue-computed": {
+    "fixture": "vitepress-vue-computed.html",
+    "url": "https://vuejs.org/guide/essentials/computed.html",
+    "sha256": "1d33d4b035e9796328ac5ec7375328ea944b79171a925816a6eb4aed32d101b6",
+    "nav": { "prev": "https://vuejs.org/guide/essentials/reactivity-fundamentals", "next": "https://vuejs.org/guide/essentials/class-and-style" },
+    "flattened": false,
+    "labels": {
+      "chrome": [
+        { "kind": "heading", "key": "Getting Started" },
+        { "kind": "heading", "key": "Essentials" },
+        { "kind": "heading", "key": "Components In-Depth" },
+        { "kind": "heading", "key": "Reusability" },
+        { "kind": "heading", "key": "Built-in Components" },
+        { "kind": "heading", "key": "Scaling Up" },
+        { "kind": "heading", "key": "TypeScript" },
+        { "kind": "heading", "key": "Extra Topics" },
+        { "kind": "heading", "key": "Best Practices" }
+      ],
+      "lost": [
+        { "kind": "code", "key": "const author = reactive({ name: 'John Doe', books: [ 'Vue 2 - Advanced Guide', '" },
+        { "kind": "code", "key": "<script setup> import { reactive, computed } from 'vue' const author = reactive(" }
+      ]
+    },
+    "known_fp": [],
+    "known_miss": [],
+    "known_nav_miss": ["prev", "next"]
   }
 }
