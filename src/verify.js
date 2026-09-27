@@ -374,6 +374,9 @@ for (const [id, spec] of Object.entries(inventory)) {
     const blocks = contentToBlocks('<div>Hello <b>world</b></div>');
     const text = blocks.map((b) => b.text || "").join(" ");
     record("to-ir", "text-node", "container text preserved", text.includes("Hello") && text.includes("world"));
+    const inl = contentToBlocks('<div><div class="callout-title">Note:</div><div>Use <code>x</code> or a <a href="/y">y</a>.<pre>code</pre>Then <span class="katex">z</span></div></div>');
+    record("to-ir", "inline-run", "text and inline elements are one paragraph; blocks and math break the run",
+      JSON.stringify(inl.map((b) => b.text ?? b.code)) === '["Note:","Use `x` or a [y](/y).","code","Then","z"]');
   }
 }
 

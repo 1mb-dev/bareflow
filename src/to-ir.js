@@ -4,6 +4,8 @@ import { parseHTML } from "linkedom";
 import * as ir from "./ir.js";
 
 const LOSSLESS_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD"]);
+// Math / interactive widgets often carry these classes.
+const MATH_CLASS = /math|katex|interactive|playground|live-?example/i;
 
 function inlineMarkdown(node, out = []) {
   for (const child of node.childNodes ?? []) {
@@ -149,9 +151,8 @@ function blockFor(el, out) {
     out.push(lossOf(el, `${tag.toLowerCase()} embed not representable`));
     return;
   }
-  // Math / interactive widgets often carry these classes.
-  const cls = el.getAttribute("class") || "";
-  if (/math|katex|interactive|playground|live-?example/i.test(cls)) {
+    const cls = el.getAttribute("class") || "";
+  if (MATH_CLASS.test(cls)) {
     const t = inlineMarkdown(el).trim();
     if (t) out.push(ir.paragraph(t)); else out.push(lossOf(el, "interactive or math content not representable"));
     return;
@@ -164,14 +165,7 @@ function blockFor(el, out) {
   // Div / section / article / header / footer: transparent containers, recurse.
   if (tag === "HR") return;
   if (tag === "DIV" || tag === "SECTION" || tag === "ARTICLE" || tag === "MAIN" || tag === "HEADER" || tag === "FOOTER" || tag === "ASIDE" || tag === "NAV" || tag === "SPAN") {
-    for (const c of el.childNodes) {
-      if (c.nodeType === 3) {
-        const t = (c.textContent ?? "").replace(/\s+/g, " ").trim();
-        if (t) out.push(ir.paragraph(t));
-      } else if (c.nodeType === 1) {
-        blockFor(c, out);
-      }
-    }
+    childBlocks(el, out);
     return;
   }
   // Unknown block element: capture as paragraph if it has text, else recurse.
@@ -179,19 +173,37 @@ function blockFor(el, out) {
   if (t) out.push(ir.paragraph(t));
 }
 
+const INLINE_TAGS = new Set(["A", "ABBR", "B", "BR", "CITE", "CODE", "DEL", "DFN", "EM", "I", "INS", "KBD", "MARK", "Q", "S", "SAMP", "SMALL", "SPAN", "STRONG", "SUB", "SUP", "TIME", "U", "VAR"]);
+const BLOCK_INSIDE = "p, div, pre, table, ul, ol, blockquote, figure, h1, h2, h3, h4, h5, h6";
+
+function isInline(node) {
+  if (node.nodeType === 3) return true;
+  if (node.nodeType !== 1 || !INLINE_TAGS.has(node.tagName)) return false;
+  return !MATH_CLASS.test(node.getAttribute("class") || "") && !node.querySelector(BLOCK_INSIDE);
+}
+
+// A container's children as blocks. Each run of text and inline elements is one paragraph: a
+// sentence with inline <code> in a bare <div> (k8s callouts) must not split per node.
+function childBlocks(el, out) {
+  let run = [];
+  const flush = () => {
+    const t = inlineMarkdown({ childNodes: run }).replace(/\s+/g, " ").trim();
+    if (t) out.push(ir.paragraph(t));
+    run = [];
+  };
+  for (const c of el.childNodes) {
+    if (isInline(c)) { run.push(c); continue; }
+    flush();
+    if (c.nodeType === 1) blockFor(c, out);
+  }
+  flush();
+}
+
 export function contentToBlocks(contentHtml) {
   // Wrap in a container: Defuddle's content is a fragment, and linkedom parses a
   // fragment with its top element as documentElement, leaving document.body empty.
   const { document } = parseHTML(`<div id="__mdflow">${contentHtml || ""}</div>`);
-  const root = document.querySelector("#__mdflow");
   const out = [];
-  for (const child of root.childNodes) {
-    if (child.nodeType === 3) {
-      const t = (child.textContent ?? "").replace(/\s+/g, " ").trim();
-      if (t) out.push(ir.paragraph(t));
-    } else if (child.nodeType === 1) {
-      blockFor(child, out);
-    }
-  }
+  childBlocks(document.querySelector("#__mdflow"), out);
   return out;
 }
