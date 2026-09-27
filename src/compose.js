@@ -80,23 +80,37 @@ export function extractNav(html, url) {
   return { rel, breadcrumbs };
 }
 
+// A sibling is projected, not summarized: its headings and code blocks, whole and verbatim, in
+// order, with a count of each block type left out. "full" keeps every block.
+const KEEP = new Set(["heading", "code"]);
+function project(blocks, mode) {
+  if (mode === "full") return { blocks, projection: { mode, omitted: {} } };
+  const omitted = {};
+  const kept = [];
+  for (const b of blocks) if (KEEP.has(b.type)) kept.push(b); else omitted[b.type] = (omitted[b.type] ?? 0) + 1;
+  return { blocks: kept, projection: { mode, omitted } };
+}
+
 // Build a Document: the page plus whichever prev/next siblings were attached, in order. The
 // result is a window onto the docs section, not the section, and says so in doc.scope; where
 // the page sits (breadcrumbs, else rel=up) is doc.breadcrumbs, not empty ancestor sections.
 // nav is extractNav's result for this page; siblings maps prev/next to { status, url?, via?,
-// title?, blocks?, losses? } with status attached | unfetched | failed | blocked | absent.
-export function compose({ url, nav, title, blocks, losses = [], source, generator, siblings }) {
+// title?, blocks?, losses? } with status attached | unfetched | failed | blocked | absent;
+// siblingMode is "headings+code" (the default) or "full".
+export function compose({ url, nav, title, blocks, losses = [], source, generator, siblings, siblingMode = "headings+code" }) {
   // Titles are page text on one line: a newline in <title> must not forge render lines.
   title = norm(title);
   const page = ir.section(ir.stableId(url), title || url, { url });
   page.blocks = blocks;
   page.losses = losses;
 
+  const projected = {};
   const attached = (r) => {
     const s = siblings[r];
     if (s.status !== "attached") return null;
     const sec = ir.section(ir.stableId(s.url), norm(s.title) || nav.rel[r]?.title || s.url, { url: s.url });
-    sec.blocks = s.blocks;
+    projected[r] = project(s.blocks, siblingMode);
+    sec.blocks = projected[r].blocks;
     sec.losses = s.losses;
     return sec;
   };
@@ -106,7 +120,12 @@ export function compose({ url, nav, title, blocks, losses = [], source, generato
   const trail = nav.breadcrumbs.filter((c) => !samePage(c.url, canonicalUrl(url) ?? url));
   const breadcrumbs = trail.length ? trail : nav.rel.up ? [{ title: nav.rel.up.title, url: nav.rel.up.url }] : [];
 
-  const status = (r) => ({ status: siblings[r].status, ...(siblings[r].url ? { url: siblings[r].url, via: siblings[r].via } : {}) });
+  // text_bytes is null for a sibling never read: an unseen page is not a free one.
+  const status = (r) => ({
+    status: siblings[r].status,
+    ...(siblings[r].url ? { url: siblings[r].url, via: siblings[r].via } : {}),
+    ...(projected[r] ? { projection: projected[r].projection, text_bytes: ir.textBytes(projected[r].blocks) } : { text_bytes: null }),
+  });
   const scope = { kind: sections.length > 1 ? "window" : "page", siblings: { prev: status("prev"), next: status("next") } };
 
   return ir.document({ id: ir.stableId(url), title: title || "Document", source, generator, scope, breadcrumbs, sections });

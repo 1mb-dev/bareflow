@@ -25,7 +25,10 @@ emitted 2 findings, both correct; that is too few to call precision. Nav precisi
 recall 0.88. The composer follows standard rel=prev/next (on `<link>` and `<a>`) and, where a
 page declares Docusaurus or VitePress as its generator and rel is silent, that generator's docs
 pager; `doc.scope` records which (`via: rel | pager`). It attaches real sibling content: a
-bounded window, marked as one in `doc.scope`, not a crawl. The IR is versioned (`mdflow/ir/v1`); that a pinned
+bounded window, marked as one in `doc.scope`, not a crawl. Siblings are projected by default:
+their headings and code blocks, whole and verbatim, with a count of each block type left out
+(`scope.siblings.*.projection`) and the UTF-8 bytes of what was kept (`text_bytes`, null for a
+sibling never read). `--siblings full` keeps every block. The IR is versioned (`mdflow/ir/v1`); that a pinned
 snapshot version serves a consumer is unproven until one pins it. Extraction is composed
 (Defuddle), not built from scratch; the moat is the contract downstream of extraction.
 
@@ -50,6 +53,7 @@ Markdown render carries no loss markers; read them from the JSON.
 npm install
 node bin/mdflow.js <url>          # Markdown
 node bin/mdflow.js <url> --json   # the typed IR
+node bin/mdflow.js <url> --siblings full   # siblings unprojected (worker: &siblings=full)
 npm run verify                    # truth gate: loss + nav precision/recall per fixture
 npm run reader                    # local reader: source | document | findings, http://127.0.0.1:4380/
 ```

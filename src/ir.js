@@ -51,6 +51,18 @@ export function section(id, title, opts = {}) {
 // is where the page sits in the site.
 export const SCOPE_KINDS = new Set(["page", "window"]);
 export const SIBLING_STATUS = new Set(["attached", "unfetched", "failed", "blocked", "absent"]);
+// An attached sibling is projected: whole verbatim blocks of the kept types, never a summary.
+export const PROJECTIONS = new Set(["headings+code", "full"]);
+
+// UTF-8 bytes of the text an agent reads in these blocks: prose, code, list items, table cells,
+// image alt. No keys or syntax, so the count is the same under every render. Changing what
+// counts is a schema change.
+const utf8 = new TextEncoder();
+export function textBytes(blocks) {
+  let n = 0;
+  for (const b of blocks) for (const s of [b.text, b.code, b.alt, ...(b.items ?? []), ...(b.headers ?? []), ...(b.rows ?? []).flat()]) if (typeof s === "string") n += utf8.encode(s).length;
+  return n;
+}
 
 export function document({ id, title, source, generator, scope, breadcrumbs, sections }) {
   return { schema: SCHEMA, id, title, source, generator, scope, breadcrumbs, sections };
@@ -72,6 +84,12 @@ export function validate(doc) {
     if (!s || !SIBLING_STATUS.has(s.status)) fail(`scope.siblings.${r}`, "status: attached | unfetched | failed | blocked | absent");
     if ((s.status === "absent") !== (s.url === undefined)) fail(`scope.siblings.${r}.url`, "present unless absent");
     if (s.url !== undefined && s.via !== "rel" && s.via !== "pager") fail(`scope.siblings.${r}.via`, "rel | pager, with url");
+    if (s.status === "attached") {
+      if (!Number.isInteger(s.text_bytes) || s.text_bytes < 0) fail(`scope.siblings.${r}.text_bytes`, "non-negative integer when attached");
+      const o = s.projection?.omitted;
+      if (!PROJECTIONS.has(s.projection?.mode) || !o || typeof o !== "object" || !Object.values(o).every((n) => Number.isInteger(n) && n > 0))
+        fail(`scope.siblings.${r}.projection`, "{ mode: headings+code | full, omitted: { type: count } }");
+    } else if (s.text_bytes !== null || s.projection !== undefined) fail(`scope.siblings.${r}`, "text_bytes null and no projection unless attached");
   }
   if (!Array.isArray(doc.breadcrumbs) || !doc.breadcrumbs.every((c) => typeof c?.url === "string" && typeof c.title === "string"))
     fail("breadcrumbs", "array of { title, url }");

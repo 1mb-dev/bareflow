@@ -56,7 +56,8 @@ async function buildSibling(surl, fetch) {
   }
 }
 
-export async function run({ url, html, retrievedAt, fetch = fetchSnapshot }) {
+// siblings: "headings+code" projects attached siblings (the default), "full" keeps every block.
+export async function run({ url, html, retrievedAt, fetch = fetchSnapshot, siblings: siblingMode = "headings+code" }) {
   let snap;
   if (html != null) {
     snap = {
@@ -83,7 +84,7 @@ export async function run({ url, html, retrievedAt, fetch = fetchSnapshot }) {
 
   const source = { url, finalUrl: snap.finalUrl, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint };
   const generator = { name: "mdflow", version: VERSION, extractor: EXTRACTOR, extractorVersion: EXTRACTOR_VERSION };
-  const doc = compose({ url: snap.finalUrl, nav, title, blocks, losses, source, generator, siblings });
+  const doc = compose({ url: snap.finalUrl, nav, title, blocks, losses, source, generator, siblings, siblingMode });
   validate(doc);
 
   return { doc, markdown: renderMarkdown(doc), snapshot: snap, extract: ex };

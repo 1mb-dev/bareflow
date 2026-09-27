@@ -57,14 +57,15 @@ export async function handle(request, env, deps = {}) {
   let safe;
   try { safe = assertSafeUrl(target); } catch (e) { return error(e.message, 400); }
 
-  const key = cacheKey(safe.toString(), VERSION, EXTRACTOR_VERSION);
+  const siblings = u.searchParams.get("siblings") === "full" ? "full" : "headings+code";
+  const key = cacheKey(safe.toString(), VERSION, EXTRACTOR_VERSION, siblings);
   const fresh = await getCached(kv, key);
   if (fresh) {
     return respond(json ? JSON.stringify(fresh.doc) : fresh.markdown, 200, json, { "x-mdflow-cache": "hit", "x-mdflow-retrieved-at": fresh.retrievedAt });
   }
 
   try {
-    const { doc, markdown, snapshot } = await runImpl({ url: safe.toString() });
+    const { doc, markdown, snapshot } = await runImpl({ url: safe.toString(), siblings });
     const value = { doc, markdown, retrievedAt: snapshot.retrievedAt };
     await putCached(kv, key, value, TTL);
     await putCached(kv, `${key}:stale`, value, STALE_TTL);

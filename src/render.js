@@ -17,7 +17,8 @@ function scopeNote(scope) {
   const { prev, next } = scope.siblings;
   if (prev.status === "absent" && next.status === "absent") return "";
   const what = scope.kind === "window" ? "a prev/next window onto the section, not the whole section" : "this page only";
-  return `> **Scope:** ${what} (prev: ${prev.status}, next: ${next.status})`;
+  const projected = [prev, next].some((s) => s.projection?.mode === "headings+code") ? "; siblings show headings and code only" : "";
+  return `> **Scope:** ${what} (prev: ${prev.status}, next: ${next.status}${projected})`;
 }
 
 function renderSection(s, depth, out) {
