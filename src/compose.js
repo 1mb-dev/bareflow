@@ -1,7 +1,7 @@
 // Navigation: reads a page's own nav (rel=prev/next/up, breadcrumbs) and composes the page
 // with whichever prev/next siblings were attached. This is not a crawl; it attaches only the
 // provided siblings, and doc.scope says what the result covers.
-import { parseHTML } from "linkedom";
+import { parseHtml } from "./html.js";
 import * as ir from "./ir.js";
 
 function norm(s) {
@@ -30,7 +30,7 @@ const samePage = (a, b) => {
 // different targets for one relation are ambiguous and attach neither: a wrong sibling is
 // worse than none.
 export function extractNav(html, url) {
-  const { document } = parseHTML(html);
+  const { document } = parseHtml(html);
   const page = canonicalUrl(url);
   const origin = page && new URL(page).origin;
   const found = {};
@@ -90,7 +90,7 @@ export function compose({ url, html, nav, title, blocks, losses = [], source, ge
 }
 
 function extractPageTitle(html) {
-  const { document } = parseHTML(html);
+  const { document } = parseHtml(html);
   const h1 = document.querySelector("h1");
   if (h1) return norm(h1.textContent);
   const t = document.querySelector("title");

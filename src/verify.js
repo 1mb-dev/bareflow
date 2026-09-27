@@ -256,6 +256,13 @@ for (const [id, spec] of Object.entries(inventory)) {
   // Bug 13: a figcaption next to an image is kept.
   const fig = contentToBlocks('<figure><img src="a.png" alt="A"><figcaption>Figure caption</figcaption></figure>');
   record("to-ir", "figure", "figcaption kept with image", fig.length === 2 && fig[1].text === "Figure caption");
+
+  // Optional end tags: htmlparser2 nests the tbody inside the open th (Playwright, nodejs).
+  const { doc: opt } = await run({ url: "https://example.com/t", retrievedAt: FIXED,
+    html: "<html><body><main><h2>Options</h2><table><thead><tr><th>Option<th>Description<tbody><tr><td><code>--a</code><td>First<tr><td>--b<td>Second<tfoot><tr><td>F<td>G</table><p>After the table.</p></main></body></html>" });
+  const optTable = opt.sections[0].blocks.find((b) => b.type === "table");
+  record("pipeline", "table", "optional end tags: header row alone, body rows as rows, nothing lost",
+    JSON.stringify(optTable?.headers) === '["Option","Description"]' && JSON.stringify(optTable?.rows) === '[["--a","First"],["--b","Second"],["F","G"]]' && !opt.sections[0].losses.length);
 }
 
 // Document-unit round-trip: a live run over frozen pages follows rel=next through the injected

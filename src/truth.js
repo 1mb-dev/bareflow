@@ -7,7 +7,7 @@
 // A label is {kind, key}; key is the block's normalized text or a prefix of it (an exact match
 // wins), and must not match two distinct blocks. `flattened` labels the page as a whole and is
 // scored as its own row, not pooled into block precision. Every known_fp entry carries a `why`.
-import { parseHTML } from "linkedom";
+import { parseHtml } from "./html.js";
 import { walk } from "./ir.js";
 import { extractNav, canonicalUrl } from "./compose.js";
 
@@ -53,7 +53,7 @@ function withoutPermalinks(h) {
 }
 
 function universe(html) {
-  const { document } = parseHTML(html);
+  const { document } = parseHtml(html);
   const out = [];
   for (const el of document.documentElement.querySelectorAll("h1, h2, h3, h4, h5, h6, pre, table")) {
     const tag = el.tagName.toLowerCase();

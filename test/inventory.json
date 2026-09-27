@@ -507,14 +507,14 @@
         { "kind": "heading", "key": "Node.js v26.10.0 documentation" }
       ],
       "lost": [
-        { "kind": "table", "key": "Version | Changesv6.0.0Passing a non-string" },
-        { "kind": "table", "key": "Version | Changesv6.0.0Passing a non-string" },
-        { "kind": "table", "key": "Version | Changesv6.0.0Passing a non-string" },
-        { "kind": "table", "key": "Version | Changesv19.0.0" },
-        { "kind": "table", "key": "Version | Changesv24.8.0" },
-        { "kind": "table", "key": "Version | Changesv15.3.0Exposed as require('path/posix')" },
-        { "kind": "table", "key": "Version | Changesv6.8.0" },
-        { "kind": "table", "key": "Version | Changesv15.3.0Exposed as require('path/win32')" }
+        { "kind": "table", "key": "Version | Changes | v6.0.0 | Passing a non-string" },
+        { "kind": "table", "key": "Version | Changes | v6.0.0 | Passing a non-string" },
+        { "kind": "table", "key": "Version | Changes | v6.0.0 | Passing a non-string" },
+        { "kind": "table", "key": "Version | Changes | v19.0.0" },
+        { "kind": "table", "key": "Version | Changes | v24.8.0" },
+        { "kind": "table", "key": "Version | Changes | v15.3.0 | Exposed as require('path/posix')" },
+        { "kind": "table", "key": "Version | Changes | v6.8.0" },
+        { "kind": "table", "key": "Version | Changes | v15.3.0 | Exposed as require('path/win32')" }
       ]
     },
     "known_fp": [],

@@ -1,7 +1,7 @@
 // Compose Defuddle as the extraction core. This module is the only place the extractor
 // is referenced: it takes raw HTML + url and returns Defuddle's content HTML + metadata.
 // The contract downstream (IR, composer, snapshot, loss) does not depend on Defuddle.
-import { parseHTML } from "linkedom";
+import { parseHtml } from "./html.js";
 import { Defuddle } from "defuddle/node";
 import { readFileSync } from "node:fs";
 
@@ -11,7 +11,7 @@ export const EXTRACTOR_VERSION = JSON.parse(
 ).version;
 
 export async function extract(html, url) {
-  const { document } = parseHTML(html);
+  const { document } = parseHtml(html);
   const res = await Defuddle(document, url);
   return {
     extractor: EXTRACTOR,

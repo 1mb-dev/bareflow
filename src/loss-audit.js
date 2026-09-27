@@ -3,7 +3,7 @@
 // blocks are counted and a dropped copy is still flagged. The scope is the page's own
 // landmark (see auditScope); chrome inside it is excluded by SKIP. A conservative heuristic,
 // not a content detector.
-import { parseHTML } from "linkedom";
+import { parseHtml } from "./html.js";
 import * as ir from "./ir.js";
 
 // Chrome inside the scope: the standard navigation roles, aside, plus one site pattern the
@@ -72,7 +72,7 @@ function sourceBlocks(html) {
 export const sourceTitle = (html) => sourceBlocks(html).title;
 
 function readSource(html) {
-  const { document } = parseHTML(html);
+  const { document } = parseHtml(html);
   const { root, skip } = auditScope(document);
 
   // One pass in document order, so each code block knows the heading it sits under.
@@ -93,8 +93,6 @@ function readSource(html) {
   for (const tbl of root.querySelectorAll("table")) {
     if (tbl.closest(skip) || tbl.querySelector("table")) continue;
     const rows = [...tbl.querySelectorAll("tr")].map((tr) => [...tr.querySelectorAll("th,td")].map((c) => c.textContent));
-    // The finding's text is every cell in document order: walking rows would count the cells of a
-    // malformed table (a tbody parsed inside a th) twice.
     const raw = [...tbl.querySelectorAll("th,td")].map((c) => c.textContent);
     if (raw.length) tables.push({ rows: rows.map((r) => r.map(norm)), raw: raw.join(" | ") });
   }
