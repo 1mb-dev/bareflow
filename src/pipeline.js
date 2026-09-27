@@ -78,8 +78,7 @@ export async function run({ url, html, retrievedAt, fetch = fetchSnapshot }) {
   await Promise.all(["prev", "next"].map(async (r) => {
     const link = nav.rel[r];
     siblings[r] = !link ? { status: "absent" }
-      : html != null ? { status: "unfetched", url: link.url }
-      : await buildSibling(link.url, fetch);
+      : { ...(html != null ? { status: "unfetched", url: link.url } : await buildSibling(link.url, fetch)), via: link.via };
   }));
 
   const source = { url, finalUrl: snap.finalUrl, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint };

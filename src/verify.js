@@ -18,6 +18,7 @@ import { isPrivateIp } from "./ssrf.js";
 import { handle } from "./worker.js";
 import { walk, validate, SCHEMA } from "./ir.js";
 import { renderMarkdown } from "./render.js";
+import { extractNav } from "./compose.js";
 import { parseHtml } from "./html.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 
@@ -463,6 +464,29 @@ for (const [id, spec] of Object.entries(inventory)) {
   const r9 = await handle(new Request("https://m/?url=https://example.com&format=json"), {}, { run: failRun, kv: makeKv() });
   const r9body = await r9.text();
   record("agent-surface", "boundary", "json-error", r9.headers.get("content-type") === "application/json" && JSON.parse(r9body).code === 502);
+}
+
+// Generator pagers: filled only for the declared generator's docs page, never over rel, and held
+// to rel's origin, self, and ambiguity rules.
+{
+  const u = "https://d.example/docs/b";
+  const docu = (meta, cls, pager, extra = "") => `<html class="${cls}"><head>${meta}${extra}</head><body><nav class="pagination-nav">${pager}</nav></body></html>`;
+  const meta = '<meta name="generator" content="Docusaurus v3.10.1">';
+  const links = '<a class="pagination-nav__link pagination-nav__link--prev" href="/docs/a">A</a><a class="pagination-nav__link pagination-nav__link--next" href="/docs/c">C</a>';
+  const nav = (html) => { const r = extractNav(html, u).rel; return `${r.prev?.via ?? "-"}:${r.prev?.url ?? "-"} ${r.next?.via ?? "-"}:${r.next?.url ?? "-"}`; };
+  record("nav", "pager", "Docusaurus docs page: pager fills prev/next", nav(docu(meta, "docs-doc-page", links)) === "pager:https://d.example/docs/a pager:https://d.example/docs/c");
+  record("nav", "pager", "blog post (not a docs page): no siblings", nav(docu(meta, "blog-post-page", links)) === "-:- -:-");
+  record("nav", "pager", "no generator meta: no siblings", nav(docu("", "docs-doc-page", links)) === "-:- -:-");
+  record("nav", "pager", "rel wins over the pager", nav(docu(meta, "docs-doc-page", links, '<link rel="next" href="/docs/z">')) === "pager:https://d.example/docs/a rel:https://d.example/docs/z");
+  record("nav", "pager", "cross-origin, self, and ambiguous pager links attach nothing",
+    nav(docu(meta, "docs-doc-page", '<a class="pagination-nav__link--prev" href="https://evil.example/docs/a">A</a><a class="pagination-nav__link--next" href="/docs/b#x">B</a>')) === "-:- -:-" &&
+    nav(docu(meta, "docs-doc-page", links + '<a class="pagination-nav__link--next" href="/docs/d">D</a>')) === "pager:https://d.example/docs/a -:-");
+  const vp = '<meta name="generator" content="VitePress v1.6.4">';
+  record("nav", "pager", "VitePress default theme fills; a custom theme's pager does not",
+    nav(`<html><head>${vp}</head><body><nav class="prev-next"><a class="VPLink link pager-link prev" href="/docs/a">A</a></nav></body></html>`) === "pager:https://d.example/docs/a -:-" &&
+    nav(`<html><head>${vp}</head><body><footer><a class="prev-link" href="/docs/a">A</a></footer></body></html>`) === "-:- -:-");
+  const { doc } = await run({ url: u, html: docu(meta, "docs-doc-page", links, "<title>B</title>").replace("<body>", "<body><main><h1>B</h1><p>Body text of the page, long enough to be content.</p></main>"), retrievedAt: FIXED });
+  record("nav", "pager", "via reaches scope.siblings", doc.scope.siblings.prev.via === "pager" && doc.scope.siblings.next.status === "unfetched" && doc.scope.siblings.next.via === "pager");
 }
 
 // The local reader: frozen window, judged findings, and the source served without its scripts.

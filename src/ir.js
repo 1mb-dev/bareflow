@@ -71,6 +71,7 @@ export function validate(doc) {
     const s = doc.scope.siblings?.[r];
     if (!s || !SIBLING_STATUS.has(s.status)) fail(`scope.siblings.${r}`, "status: attached | unfetched | failed | blocked | absent");
     if ((s.status === "absent") !== (s.url === undefined)) fail(`scope.siblings.${r}.url`, "present unless absent");
+    if (s.url !== undefined && s.via !== "rel" && s.via !== "pager") fail(`scope.siblings.${r}.via`, "rel | pager, with url");
   }
   if (!Array.isArray(doc.breadcrumbs) || !doc.breadcrumbs.every((c) => typeof c?.url === "string" && typeof c.title === "string"))
     fail("breadcrumbs", "array of { title, url }");

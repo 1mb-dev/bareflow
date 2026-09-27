@@ -24,21 +24,44 @@ const samePage = (a, b) => {
   return key(a) === key(b);
 };
 
+// Docs pagers that a generator renders without rel, keyed on the generator the page declares
+// in <meta name=generator>. Data, not branches: one row per generator, admitted only with
+// frozen fixtures it fixes. No declared generator, or a theme with its own pager (vuejs.org),
+// means rel only. Docusaurus blog posts share the pager classes; older/newer posts are not
+// document siblings, so the row requires a docs page.
+const PAGERS = [
+  { generator: /^Docusaurus\b/, prev: "html.docs-doc-page nav.pagination-nav a.pagination-nav__link--prev", next: "html.docs-doc-page nav.pagination-nav a.pagination-nav__link--next" },
+  { generator: /^VitePress\b/, prev: "nav.prev-next a.pager-link.prev", next: "nav.prev-next a.pager-link.next" },
+];
+
 // rel is a token list on <link> and <a> alike ("next prefetch" is next); only the standard
 // prev/next/up keywords count. A sibling must be another page on the same origin: a link to
 // the page itself or to another site (user content can carry rel=next) is ignored. Two
 // different targets for one relation are ambiguous and attach neither: a wrong sibling is
-// worse than none.
+// worse than none. rel wins; a generator's pager fills only a relation rel leaves empty.
 export function extractNav(html, url) {
   const { document } = parseHtml(html);
   const page = canonicalUrl(url);
   const origin = page && new URL(page).origin;
+  const target = (el) => {
+    const t = canonicalUrl(el.getAttribute("href"), url);
+    return t && new URL(t).origin === origin && !samePage(t, page) ? t : null;
+  };
   const found = {};
   for (const el of document.querySelectorAll("link[rel][href], a[rel][href]")) {
-    const target = canonicalUrl(el.getAttribute("href"), url);
-    if (!target || new URL(target).origin !== origin || samePage(target, page)) continue;
+    const t = target(el);
+    if (!t) continue;
     for (const r of (el.getAttribute("rel") || "").toLowerCase().split(/\s+/)) {
-      if (r === "next" || r === "prev" || r === "up") (found[r] ??= []).push({ title: norm(el.getAttribute("title")), url: target });
+      if (r === "next" || r === "prev" || r === "up") (found[r] ??= []).push({ title: norm(el.getAttribute("title")), url: t, via: "rel" });
+    }
+  }
+  const generator = document.querySelector('meta[name="generator" i]')?.getAttribute("content") ?? "";
+  const pager = PAGERS.find((p) => p.generator.test(generator.trim()));
+  for (const r of pager ? ["prev", "next"] : []) {
+    if (found[r]) continue;
+    for (const el of document.querySelectorAll(`${pager[r]}[href]`)) {
+      const t = target(el);
+      if (t) (found[r] ??= []).push({ title: "", url: t, via: "pager" });
     }
   }
   const rel = {};
@@ -60,8 +83,8 @@ export function extractNav(html, url) {
 // Build a Document: the page plus whichever prev/next siblings were attached, in order. The
 // result is a window onto the docs section, not the section, and says so in doc.scope; where
 // the page sits (breadcrumbs, else rel=up) is doc.breadcrumbs, not empty ancestor sections.
-// nav is extractNav's result for this page; siblings maps prev/next to { status, url?, title?,
-// blocks?, losses? } with status attached | unfetched | failed | blocked | absent.
+// nav is extractNav's result for this page; siblings maps prev/next to { status, url?, via?,
+// title?, blocks?, losses? } with status attached | unfetched | failed | blocked | absent.
 export function compose({ url, nav, title, blocks, losses = [], source, generator, siblings }) {
   // Titles are page text on one line: a newline in <title> must not forge render lines.
   title = norm(title);
@@ -83,7 +106,7 @@ export function compose({ url, nav, title, blocks, losses = [], source, generato
   const trail = nav.breadcrumbs.filter((c) => !samePage(c.url, canonicalUrl(url) ?? url));
   const breadcrumbs = trail.length ? trail : nav.rel.up ? [{ title: nav.rel.up.title, url: nav.rel.up.url }] : [];
 
-  const status = (r) => ({ status: siblings[r].status, ...(siblings[r].url ? { url: siblings[r].url } : {}) });
+  const status = (r) => ({ status: siblings[r].status, ...(siblings[r].url ? { url: siblings[r].url, via: siblings[r].via } : {}) });
   const scope = { kind: sections.length > 1 ? "window" : "page", siblings: { prev: status("prev"), next: status("next") } };
 
   return ir.document({ id: ir.stableId(url), title: title || "Document", source, generator, scope, breadcrumbs, sections });

@@ -16,14 +16,16 @@ never silently passed through.
 
 Phase 1. The core pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented, with
 structured loss markers and a truth gate that scores the loss audit and nav detection against
-hand-labelled frozen fixtures. Loss recall is 0.96. Loss precision is 0.57 over 21 pages: 0.77
-on the 19 docs pages the auditor was tuned on, and 0 of 12 findings correct on the two blog
-pages added afterwards, where every false positive is chrome inside the main landmark (related
-posts, author bio, comments). The auditor is fitted to docs generators; its precision gate
-(~0.8) failed and was waived by the owner, not passed. Out of sample it is unmeasured
-(`usage/log.md`). Nav precision is 1.00, recall 0.70. The composer follows standard
-rel=prev/next (on `<link>` and `<a>`) to attach real sibling content: a bounded window, marked
-as one in `doc.scope`, not a crawl. The IR is versioned (`mdflow/ir/v1`); that a pinned
+hand-labelled frozen fixtures. Loss recall is 0.97. Loss precision is 0.59 over 27 pages: 0.78
+on the 25 docs pages, and 0 of 12 findings correct on the two blog pages, where every false
+positive is chrome inside the main landmark (related posts, author bio, comments). The auditor is
+fitted to docs generators; its precision gate (~0.8) failed and was waived by the owner, not
+passed. On six docs pages frozen and labelled before any change was made against them, it
+emitted 2 findings, both correct; that is too few to call precision. Nav precision is 1.00,
+recall 0.88. The composer follows standard rel=prev/next (on `<link>` and `<a>`) and, where a
+page declares Docusaurus or VitePress as its generator and rel is silent, that generator's docs
+pager; `doc.scope` records which (`via: rel | pager`). It attaches real sibling content: a
+bounded window, marked as one in `doc.scope`, not a crawl. The IR is versioned (`mdflow/ir/v1`); that a pinned
 snapshot version serves a consumer is unproven until one pins it. Extraction is composed
 (Defuddle), not built from scratch; the moat is the contract downstream of extraction.
 

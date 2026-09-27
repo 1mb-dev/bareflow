@@ -55,7 +55,7 @@ function roleOf(doc, s) {
 }
 
 function documentHtml(doc) {
-  const sib = (r) => { const x = doc.scope.siblings[r]; return `${r}: <b>${esc(x.status)}</b>${x.url ? ` <span class="muted">${esc(x.url)}</span>` : ""}`; };
+  const sib = (r) => { const x = doc.scope.siblings[r]; return `${r}: <b>${esc(x.status)}</b>${x.via ? ` via ${esc(x.via)}` : ""}${x.url ? ` <span class="muted">${esc(x.url)}</span>` : ""}`; };
   const crumbs = doc.breadcrumbs?.length ? `<div class="muted">${doc.breadcrumbs.map((c) => esc(c.title)).join(" / ")}</div>` : "";
   const sections = [];
   const walk = (s, role) => {
