@@ -34,7 +34,7 @@ function promoteTitle(title, html, blocks) {
   const lead = blocks[0]?.type === "heading" ? blocks[0].text.trim().toLowerCase() : "";
   const page = (t) => (t || "").split(SITE_SEP)[0].trim().toLowerCase();
   if (lead && (page(title) === lead || page(sourceTitle(html)) === lead)) return { title: blocks[0].text.trim(), blocks: blocks.slice(1) };
-  return { title, blocks };
+  return { title: title || sourceTitle(html), blocks };
 }
 
 // Fetch, extract, and partition one sibling (a canonical URL from extractNav). A dead or
@@ -84,7 +84,7 @@ export async function run({ url, html, retrievedAt, fetch = fetchSnapshot }) {
 
   const source = { url, finalUrl: snap.finalUrl, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint };
   const generator = { name: "mdflow", version: VERSION, extractor: EXTRACTOR, extractorVersion: EXTRACTOR_VERSION };
-  const doc = compose({ url: snap.finalUrl, html: snap.html, nav, title, blocks, losses, source, generator, siblings });
+  const doc = compose({ url: snap.finalUrl, nav, title, blocks, losses, source, generator, siblings });
   validate(doc);
 
   return { doc, markdown: renderMarkdown(doc), snapshot: snap, extract: ex };

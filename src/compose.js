@@ -62,10 +62,10 @@ export function extractNav(html, url) {
 // the page sits (breadcrumbs, else rel=up) is doc.breadcrumbs, not empty ancestor sections.
 // nav is extractNav's result for this page; siblings maps prev/next to { status, url?, title?,
 // blocks?, losses? } with status attached | unfetched | failed | blocked | absent.
-export function compose({ url, html, nav, title, blocks, losses = [], source, generator, siblings }) {
+export function compose({ url, nav, title, blocks, losses = [], source, generator, siblings }) {
   // Titles are page text on one line: a newline in <title> must not forge render lines.
   title = norm(title);
-  const page = ir.section(ir.stableId(url), title || norm(extractPageTitle(html)) || url, { url });
+  const page = ir.section(ir.stableId(url), title || url, { url });
   page.blocks = blocks;
   page.losses = losses;
 
@@ -87,12 +87,4 @@ export function compose({ url, html, nav, title, blocks, losses = [], source, ge
   const scope = { kind: sections.length > 1 ? "window" : "page", siblings: { prev: status("prev"), next: status("next") } };
 
   return ir.document({ id: ir.stableId(url), title: title || "Document", source, generator, scope, breadcrumbs, sections });
-}
-
-function extractPageTitle(html) {
-  const { document } = parseHtml(html);
-  const h1 = document.querySelector("h1");
-  if (h1) return norm(h1.textContent);
-  const t = document.querySelector("title");
-  return t ? norm(t.textContent) : "";
 }
