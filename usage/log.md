@@ -76,3 +76,18 @@ line for line against the truth harness.
 - Siblings helped: 2/5 (U1, U4). Both wins are sibling wins; no task was won on loss markers.
 - Every run passed, so the pass criteria did not separate the arms; "favours" is judged on
   sourcing from the document rather than memory. n = 5, one model, implementer-graded.
+
+## Post-run corrections (2026-09-27)
+
+The tables above stay as run at bc22716. Fixes made after the run, on these pages:
+
+- 6f3d04a: harness only (freeze the labelled pager, fail on a non-200 sibling); no number moves.
+- a0a2dd6: optional-end-tag tables parse as header + rows (U3, nodejs-path). No audit change.
+- 8bcc0d0: inline runs in a container are one paragraph (U5 callouts). No audit change.
+- 2b6a5b9: the innermost of nested main landmarks is content and audit scope. U1: 3 FP -> 0 on
+  the page and 6 -> 0 on its siblings; the h1 becomes the title.
+
+U1's pages are now fitted, so in-sample. On the remaining out-of-sample pages the audit emits 1
+FP (U3) and 2 correct demoted (U5). Out-of-sample precision is unmeasured on a fresh set and
+recall is untested (no labelled losses). c56d577 is pre-run (see Method). The next usage gate is
+pre-registered on fresh pages, including pages with labelled losses.
