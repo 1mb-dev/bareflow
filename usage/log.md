@@ -89,5 +89,10 @@ The tables above stay as run at bc22716. Fixes made after the run, on these page
 
 U1's pages are now fitted, so in-sample. On the remaining out-of-sample pages the audit emits 1
 FP (U3) and 2 correct demoted (U5). Out-of-sample precision is unmeasured on a fresh set and
-recall is untested (no labelled losses). c56d577 is pre-run (see Method). The next usage gate is
-pre-registered on fresh pages, including pages with labelled losses.
+recall is untested (no labelled losses). c56d577 is pre-run (see Method).
+
+U1, U3 and U5's pages are frozen as test fixtures. One label differs from `truth.json`, which
+stays as run: the fixture labels U1's sidebar heading "Project Versions" chrome (it was in the
+IR at bc22716, so the run's scoring is unchanged).
+
+The next usage gate is pre-registered on fresh pages, including pages with labelled losses.

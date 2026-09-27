@@ -519,5 +519,55 @@
     },
     "known_fp": [],
     "known_miss": []
+  },
+  "sqlalchemy-orm-related": {
+    "fixture": "sqlalchemy-orm-related.html",
+    "url": "https://docs.sqlalchemy.org/en/20/tutorial/orm_related_objects.html",
+    "sha256": "a44e0486e6ffbfbc6abb2af46110089cc62d7fc2498f2c36516dd8f8077ae62a",
+    "nav": { "prev": "https://docs.sqlalchemy.org/en/20/tutorial/orm_data_manipulation.html", "next": "https://docs.sqlalchemy.org/en/20/tutorial/further_reading.html" },
+    "flattened": false,
+    "labels": {
+      "chrome": [
+        { "kind": "heading", "key": "SQLAlchemy 2.0 Documentation" },
+        { "kind": "heading", "key": "SQLAlchemy 2.0 Documentation" },
+        { "kind": "heading", "key": "SQLAlchemy Unified Tutorial" },
+        { "kind": "heading", "key": "Project Versions" }
+      ]
+    },
+    "known_fp": [],
+    "known_miss": []
+  },
+  "playwright-configuration": {
+    "fixture": "playwright-configuration.html",
+    "url": "https://playwright.dev/docs/test-configuration",
+    "sha256": "5272635388c6062b2faf6c844c438f68105de35397fda45922bfa29606c7bfbc",
+    "nav": { "prev": "https://playwright.dev/docs/test-cli", "next": "https://playwright.dev/docs/test-use-options" },
+    "flattened": false,
+    "labels": {},
+    "known_fp": [
+      {"kind": "heading", "key": "Configuration", "why": "the h1 survives only in the suffixed title (Configuration | Playwright); the title is not promoted because Defuddle drops the h1 from the body"}
+    ],
+    "known_miss": [],
+    "known_nav_miss": ["prev", "next"]
+  },
+  "k8s-probes": {
+    "fixture": "k8s-probes.html",
+    "url": "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/",
+    "sha256": "ff9e5c4db34fa5b2bf78de75213ae57d538c9eb61351eb301f501d7831e67111",
+    "nav": { "prev": "none", "next": "none" },
+    "flattened": false,
+    "labels": {
+      "chrome": [
+        { "kind": "heading", "key": "KubeCon + CloudNativeCon North America 2026" },
+        { "kind": "heading", "key": "Configure Liveness, Readiness and Startup Probes" },
+        { "kind": "heading", "key": "Feedback" }
+      ],
+      "demoted": [
+        { "kind": "heading", "key": "Note:" },
+        { "kind": "heading", "key": "Caution:" }
+      ]
+    },
+    "known_fp": [],
+    "known_miss": []
   }
 }

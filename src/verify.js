@@ -17,6 +17,7 @@ import { isPrivateIp } from "./ssrf.js";
 import { handle } from "./worker.js";
 import { walk, validate, SCHEMA } from "./ir.js";
 import { renderMarkdown } from "./render.js";
+import { parseHtml } from "./html.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -50,6 +51,9 @@ for (const [id, spec] of Object.entries(inventory)) {
   record(id, "fixture", "sha256", createHash("sha256").update(html).digest("hex") === spec.sha256);
   const { doc } = await run({ url: spec.url, html, retrievedAt: FIXED });
   record(id, "schema", SCHEMA, doc.schema === SCHEMA);
+  // Shape invariants the truth scorer cannot see: it shares the parser, and scores no prose.
+  record(id, "parse", "no row or table section inside a cell", !parseHtml(html).document.querySelector(":is(th, td) > :is(tr, thead, tbody, tfoot)"));
+  record(id, "prose", "no punctuation-only paragraph", !blocks(doc).some((b) => b.type === "paragraph" && /^[\p{P}\s]+$/u.test(b.text)));
 
   // A pinned snapshot is one page; nav it does not follow is reported, never an empty section.
   const empty = [...(function* all(ss) { for (const s of ss) { yield s; yield* all(s.children); } })(doc.sections)].filter((s) => !s.blocks.length && !s.children.length);
