@@ -248,6 +248,9 @@ for (const [id, spec] of Object.entries(inventory)) {
   const sep = renderMarkdown({ scope: { kind: "page", siblings: { prev: { status: "absent" }, next: { status: "absent" } } },
     sections: [{ title: "T", blocks: [P("a"), P("b"), { type: "list", ordered: false, items: ["x"] }, P("c")], losses: [], children: [] }] });
   record("render", "blocks", "blank line between blocks", sep === "# T\n\na\n\nb\n\n- x\n\nc\n");
+  const lossy = renderMarkdown({ scope: { kind: "page", siblings: { prev: { status: "absent" }, next: { status: "absent" } } },
+    sections: [{ title: "T", blocks: [P("a")], losses: [{ type: "loss", reason: "r", source: "source-heading-diff", text: "Gone" }], children: [] }] });
+  record("render", "losses", "loss markers stay in the IR, out of the Markdown", lossy === "# T\n\na\n");
 
   // The leading heading becomes the title when a site title names it ("Path | Site"); a heading the
   // title does not name stays in the body.

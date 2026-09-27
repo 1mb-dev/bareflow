@@ -25,7 +25,6 @@ function renderSection(s, depth, out) {
   // A blank line after every block: without it adjacent paragraphs merge, and a paragraph after
   // a list continues the list's last item.
   for (const b of s.blocks) out.push(renderBlock(b), "");
-  for (const l of s.losses) out.push(renderLoss(l), "");
   for (const c of s.children) renderSection(c, depth + 1, out);
 }
 
@@ -40,10 +39,6 @@ function renderBlock(b) {
     case "table": return renderTable(b);
     default: return "";
   }
-}
-
-function renderLoss(l) {
-  return `> **Loss:** ${l.reason}${l.source ? ` (${l.source})` : ""}`;
 }
 
 function renderTable(t) {
