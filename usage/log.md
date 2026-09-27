@@ -98,3 +98,8 @@ stays as run: the fixture labels U1's sidebar heading "Project Versions" chrome 
 IR at bc22716, so the run's scoring is unchanged).
 
 The next usage gate is pre-registered on fresh pages, including pages with labelled losses.
+
+Cost unit (2026-09-27): "~Tokens" in the Results table is chars / 4 of arm A as run, which was
+pretty-printed JSON. Gate v2 measures UTF-8 bytes of each arm input as written, arm A compact,
+and calls nothing tokens. Gate v2 (`v2/prereg.md`) does not include designed lossy pages; the
+auditor's re-entry set is a separate step.

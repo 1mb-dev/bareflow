@@ -1,0 +1,377 @@
+[
+  {
+    "id": "T1",
+    "repo": "fastapi/fastapi",
+    "discussion_url": "https://github.com/fastapi/fastapi/discussions/16297",
+    "question": "What's the recommended boundary for choosing FastAPI's built-in BackgroundTasks vs. an external task queue (Celery/ARQ) for long-running work like video processing?",
+    "landing_url": "https://fastapi.tiangolo.com/tutorial/background-tasks/",
+    "landing_rule": "no doc link in accepted answer -> used docs' own nav/title match: 'Background Tasks' tutorial page title matches the question topic directly",
+    "crosses_page": "n",
+    "crossing_kind": "none",
+    "answer_type": "explain",
+    "must_contain": [
+      {
+        "claim": "Heavy/CPU-bound work that doesn't need the app's shared memory should move to a bigger tool like Celery",
+        "url": "https://fastapi.tiangolo.com/tutorial/background-tasks/#caveat",
+        "quote": "you might benefit from using other bigger tools like Celery"
+      },
+      {
+        "claim": "Accessing the app's own variables, or small tasks (e.g. sending an email), is fine with plain BackgroundTasks",
+        "url": "https://fastapi.tiangolo.com/tutorial/background-tasks/#caveat",
+        "quote": "you can simply just use BackgroundTasks"
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "Recommending BackgroundTasks (with no queue) for CPU-heavy, multi-process/multi-server work",
+        "why_wrong": "contradicts the documented Celery caveat",
+        "url": "https://fastapi.tiangolo.com/tutorial/background-tasks/#caveat"
+      }
+    ]
+  },
+  {
+    "id": "T2",
+    "repo": "pydantic/pydantic",
+    "discussion_url": "https://github.com/pydantic/pydantic/discussions/13650",
+    "question": "How can a reusable validator function attached via Annotated metadata get access to the field's type/annotation, the way a @field_validator-decorated method can via the model class?",
+    "landing_url": "https://docs.pydantic.dev/latest/concepts/validators/",
+    "landing_rule": "accepted answer links docs directly; this was the first/most central of the 4 linked doc URLs and matches the question's own topic (validators)",
+    "crosses_page": "y",
+    "crossing_kind": "same-section-nonadjacent",
+    "answer_type": "code",
+    "must_contain": [
+      {
+        "claim": "ValidationInfo exposes field_name but not the field's type/annotation or owning model",
+        "url": "https://docs.pydantic.dev/latest/concepts/validators/#validation-info",
+        "quote": "the current field name, if using a field validator"
+      },
+      {
+        "claim": "__get_pydantic_core_schema__ receives source_type as its first argument",
+        "url": "https://docs.pydantic.dev/latest/concepts/types/#as-an-annotation",
+        "quote": "def __get_pydantic_core_schema__(self, source_type: Any, handler: GetCoreSchemaHandler)"
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "ValidationInfo has a .model or .annotation attribute giving the field's type directly",
+        "why_wrong": "not part of the public ValidationInfo interface per the docs",
+        "url": "https://docs.pydantic.dev/latest/concepts/validators/#validation-info"
+      },
+      {
+        "claim": "source_type in __get_pydantic_core_schema__ is the same object as cls",
+        "why_wrong": "docs note source_type is not the same as cls and may need typing.get_args for generics",
+        "url": "https://docs.pydantic.dev/latest/concepts/types/"
+      }
+    ]
+  },
+  {
+    "id": "T3",
+    "repo": "vitejs/vite",
+    "discussion_url": "https://github.com/vitejs/vite/discussions/23123",
+    "question": "How do I change the port Vite's dev server listens on instead of the default 5173?",
+    "landing_url": "https://vite.dev/config/server-options.html",
+    "landing_rule": "no doc link in accepted answer -> nav/title match: 'Server Options' config reference page documents server.port",
+    "crosses_page": "n",
+    "crossing_kind": "none",
+    "answer_type": "config",
+    "must_contain": [
+      {
+        "claim": "Set server.port (nested under the server key) in vite.config.js; default is 5173",
+        "url": "https://vite.dev/config/server-options.html#server-port",
+        "quote": "Type: number Default: 5173 Specify server port"
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "Setting a top-level port key instead of server.port",
+        "why_wrong": "the documented option is nested under server",
+        "url": "https://vite.dev/config/server-options.html#server-port"
+      },
+      {
+        "claim": "Claiming a default port other than 5173",
+        "why_wrong": "contradicts the documented default",
+        "url": "https://vite.dev/config/server-options.html#server-port"
+      }
+    ]
+  },
+  {
+    "id": "T4",
+    "repo": "vitest-dev/vitest",
+    "discussion_url": "https://github.com/vitest-dev/vitest/discussions/11056",
+    "question": "Since Vitest browser mode has no Playwright-style storageState/auth.setup.ts, what's the right pattern to log in once and share the session/token across test files?",
+    "landing_url": "https://vitest.dev/guide/browser/",
+    "landing_rule": "no doc link in accepted answer -> nav/title match: 'Browser Mode' guide page, matching 'browser mode' in the question title",
+    "crosses_page": "y",
+    "crossing_kind": "other-section",
+    "answer_type": "code",
+    "must_contain": [
+      {
+        "claim": "Do the real login once in globalSetup (runs once in Node before workers), not per test file",
+        "url": "https://vitest.dev/config/globalsetup",
+        "quote": "global setup is called before the test workers are created"
+      },
+      {
+        "claim": "Pass the token from globalSetup to tests via project.provide(...) / inject(...)",
+        "url": "https://vitest.dev/config/provide",
+        "quote": "Define values that can be accessed inside your tests using inject method"
+      },
+      {
+        "claim": "Put the browser-side code that consumes the token (e.g. localStorage.setItem) in setupFiles, which runs in-process with each test file",
+        "url": "https://vitest.dev/config/setupfiles",
+        "quote": "setup files are executed in the same process as tests, unlike globalSetup"
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "Recommending a Playwright-style storageState file / auth.setup.ts for Vitest browser mode",
+        "why_wrong": "browser mode has no Node-side context object to persist that way; test code runs in the browser itself",
+        "url": "https://vitest.dev/guide/browser/"
+      },
+      {
+        "claim": "Claiming globalSetup runs once per test file",
+        "why_wrong": "docs state it runs once before any worker is created, not per file",
+        "url": "https://vitest.dev/config/globalsetup"
+      }
+    ]
+  },
+  {
+    "id": "T5",
+    "repo": "facebook/docusaurus",
+    "discussion_url": "https://github.com/facebook/docusaurus/discussions/12073",
+    "question": "Why does a custom plugin that wraps @docusaurus/plugin-content-docs and re-exports its lifecycle methods (like configureWebpack) throw errors about missing/undefined option defaults, and how is it fixed?",
+    "landing_url": "https://docusaurus.io/docs/api/plugin-methods/lifecycle-apis",
+    "landing_rule": "no doc link in accepted answer -> nav/title match: question names 'configureWebpack function' explicitly, which is documented on the 'Lifecycle APIs' reference page",
+    "crosses_page": "y",
+    "crossing_kind": "same-section-nonadjacent",
+    "answer_type": "code",
+    "must_contain": [
+      {
+        "claim": "A wrapper plugin must re-export/forward validateOptions from the wrapped plugin, or its option defaults never get normalized",
+        "url": "https://docusaurus.io/docs/api/plugin-methods/static-methods#validateOptions",
+        "quote": "Returns validated and normalized options for the plugin"
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "The fix is to re-implement or tweak configureWebpack itself",
+        "why_wrong": "configureWebpack only shapes the webpack config; the missing piece is forwarding validateOptions, a separate static method",
+        "url": "https://docusaurus.io/docs/api/plugin-methods/lifecycle-apis#configureWebpack"
+      }
+    ]
+  },
+  {
+    "id": "T6",
+    "repo": "astral-sh/ruff",
+    "discussion_url": "https://github.com/astral-sh/ruff/discussions/28504",
+    "question": "Why does the Ruff VS Code extension format code differently (hugging braces) than the ruff CLI binary with the same ruff.toml, and how do you make them match?",
+    "landing_url": "https://docs.astral.sh/ruff/formatter/#preview-style",
+    "landing_rule": "accepted answer links this doc URL directly",
+    "crosses_page": "y",
+    "crossing_kind": "other-section",
+    "answer_type": "config",
+    "must_contain": [
+      {
+        "claim": "format.preview = true (or top-level preview = true) enables the unstable preview formatter",
+        "url": "https://docs.astral.sh/ruff/settings/#format_preview",
+        "quote": "Whether to enable the unstable preview style formatting"
+      },
+      {
+        "claim": "lint.preview only affects lint rules/fixes, not the formatter",
+        "url": "https://docs.astral.sh/ruff/settings/#lint_preview",
+        "quote": "Ruff will use unstable rules and fixes"
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "Claiming lint.preview = true alone will change ruff format's output",
+        "why_wrong": "lint.preview's documented scope is rules and fixes only, not formatting",
+        "url": "https://docs.astral.sh/ruff/settings/#lint_preview"
+      },
+      {
+        "claim": "Asserting hug_parens_with_braces_and_square_brackets is documented on the preview-style page",
+        "why_wrong": "the maintainer explicitly states this specific behavior isn't documented there",
+        "url": "https://docs.astral.sh/ruff/formatter/#preview-style"
+      }
+    ]
+  },
+  {
+    "id": "T7",
+    "repo": "prisma/prisma",
+    "discussion_url": "https://github.com/prisma/orm/discussions/29524",
+    "question": "How do you adopt Prisma Migrate against an existing, non-empty tenant database without Prisma trying to manage the legacy tables it doesn't know about?",
+    "landing_url": "https://www.prisma.io/docs/orm/prisma-migrate/workflows/baselining",
+    "landing_rule": "accepted answer links this doc URL first, of two",
+    "crosses_page": "y",
+    "crossing_kind": "other-section",
+    "answer_type": "code",
+    "must_contain": [
+      {
+        "claim": "Create a no-op baseline migration capturing the existing DB state, then mark it applied",
+        "url": "https://www.prisma.io/docs/orm/prisma-migrate/workflows/baselining",
+        "quote": "recreate the state of the database before you started using Prisma Migrate"
+      },
+      {
+        "claim": "Use `prisma migrate resolve --applied <baseline-name>` to record it, once per existing database, before the first `migrate deploy`",
+        "url": "https://www.prisma.io/docs/cli/migrate/resolve",
+        "quote": "marking a failed migration as already applied (supports baselining)"
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "Manually inserting a row into the _prisma_migrations table",
+        "why_wrong": "the answer and the documented workflow both route this through `prisma migrate resolve`, not manual table edits",
+        "url": "https://www.prisma.io/docs/cli/migrate/resolve"
+      }
+    ]
+  },
+  {
+    "id": "T8",
+    "repo": "tailwindlabs/tailwindcss",
+    "discussion_url": "https://github.com/tailwindlabs/tailwindcss/discussions/20488",
+    "question": "How do you resize/style the marker image set via list-image-[url(...)] on a <ul>, since Tailwind size utilities don't apply to list markers?",
+    "landing_url": "https://tailwindcss.com/docs/list-style-image",
+    "landing_rule": "no doc link in accepted answer -> nav/title match: question is literally about list-image-[<value>], documented on this page",
+    "crosses_page": "y",
+    "crossing_kind": "other-section",
+    "answer_type": "code",
+    "must_contain": [
+      {
+        "claim": "list-image-[url(...)] sets list-style-image, which the browser controls the layout/size of -- it can't be resized with normal sizing utilities",
+        "url": "https://tailwindcss.com/docs/list-style-image",
+        "quote": "list-image-[<value>] ... list-style-image: <value>;"
+      },
+      {
+        "claim": "A sizeable replacement uses before:content-[''] to create a pseudo-element box",
+        "url": "https://tailwindcss.com/docs/content",
+        "quote": "content-[<value>] ... content: <value>;"
+      },
+      {
+        "claim": "size-2 (or similar) sets that box's width and height together",
+        "url": "https://tailwindcss.com/docs/size",
+        "quote": "utilities like size-px, size-4, and size-full to set both the width and height"
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "A class like list-image-size-2 exists",
+        "why_wrong": "this is exactly what the user tried and it is not a documented utility",
+        "url": "https://tailwindcss.com/docs/list-style-image"
+      }
+    ]
+  },
+  {
+    "id": "T9",
+    "repo": "rust-lang/cargo",
+    "discussion_url": "https://github.com/rust-lang/cargo/issues/14363",
+    "question": "Why doesn't `cargo +nightly -Zscript file.rs` work as the unstable-script docs show?",
+    "landing_url": "https://doc.rust-lang.org/nightly/cargo/commands/cargo.html#common-options",
+    "landing_rule": "maintainer's answer links this doc URL directly",
+    "crosses_page": "n",
+    "crossing_kind": "none",
+    "answer_type": "code",
+    "must_contain": [
+      {
+        "claim": "+toolchain must be the first argument to cargo, and requires a rustup-managed installation to be recognized at all",
+        "url": "https://doc.rust-lang.org/nightly/cargo/commands/cargo.html#common-options",
+        "quote": "the first argument to cargo begins with +, it will be interpreted as a rustup toolchain name"
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "Claiming +toolchain can appear anywhere in the argument list (e.g. after -Zscript)",
+        "why_wrong": "docs specify it must be the first argument",
+        "url": "https://doc.rust-lang.org/nightly/cargo/commands/cargo.html#common-options"
+      },
+      {
+        "claim": "Claiming +toolchain works with a standalone (non-rustup) Cargo installation",
+        "why_wrong": "the mechanism is implemented by rustup's shim, not Cargo itself",
+        "url": "https://doc.rust-lang.org/nightly/cargo/commands/cargo.html#common-options"
+      }
+    ]
+  },
+  {
+    "id": "T10",
+    "repo": "sphinx-doc/sphinx",
+    "discussion_url": "https://github.com/orgs/sphinx-doc/discussions/14620",
+    "question": "Is there a better way than listing the same documents in two toctree directives (one shallow, one deep) to avoid the 'referenced in multiple toctrees' warning?",
+    "landing_url": "https://www.sphinx-doc.org/en/master/usage/restructuredtext/directives.html",
+    "landing_rule": "no doc link in accepted answer -> nav/title match: question is about the toctree directive, documented on the reStructuredText Directives reference page",
+    "crosses_page": "y",
+    "crossing_kind": "same-section-nonadjacent",
+    "answer_type": "code",
+    "must_contain": [
+      {
+        "claim": "toctree defines document hierarchy (parent/child), which is why the same warning includes ['index','index'] when documents are listed twice",
+        "url": "https://www.sphinx-doc.org/en/master/usage/restructuredtext/directives.html#directive-toctree",
+        "quote": "it generates \"next chapter\", \"previous chapter\" and \"parent chapter\" links"
+      },
+      {
+        "claim": "Use :doc: for a plain, non-hierarchy link list; it will use the target document's own title automatically",
+        "url": "https://www.sphinx-doc.org/en/master/usage/referencing.html",
+        "quote": "the link caption will be the title of the given document"
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "Claiming a document can be listed in two real toctree directives with no consequence",
+        "why_wrong": "docs describe toctree as defining a single document hierarchy, which is exactly why duplicate listing triggers the warning",
+        "url": "https://www.sphinx-doc.org/en/master/usage/restructuredtext/directives.html#directive-toctree"
+      }
+    ]
+  },
+  {
+    "id": "T11",
+    "repo": "honojs/hono",
+    "discussion_url": "https://github.com/orgs/honojs/discussions/5368",
+    "question": "Why doesn't a cookie set with setSignedCookie() show up in the browser when the handler returns the response from c.env.ASSETS.fetch()?",
+    "landing_url": "https://hono.dev/docs/helpers/cookie",
+    "landing_rule": "no doc link in accepted answer -> nav/title match: question is about a cookie helper, documented on the Cookie Helper page",
+    "crosses_page": "y",
+    "crossing_kind": "other-section",
+    "answer_type": "code",
+    "must_contain": [
+      {
+        "claim": "setSignedCookie(c, ...) writes the Set-Cookie header onto the context's response (c.res), not onto an arbitrary Response object",
+        "url": "https://hono.dev/docs/api/context",
+        "quote": "You can access the Response object that will be returned"
+      },
+      {
+        "claim": "Fix: assign the fetched asset response to c.res before/while setting the cookie, or merge the two (c.body(res.body, res)), instead of returning ASSETS.fetch() directly",
+        "url": "https://hono.dev/docs/helpers/cookie",
+        "quote": "setCookie(c, 'cookie_name', 'cookie_value')"
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "Claiming Hono automatically merges cookie headers into any Response object a handler returns",
+        "why_wrong": "cookie helpers act on c.res specifically; a separately-returned Response (like ASSETS.fetch()'s) doesn't pick those headers up on its own",
+        "url": "https://hono.dev/docs/api/context"
+      }
+    ]
+  },
+  {
+    "id": "T12",
+    "repo": "biomejs/biome",
+    "discussion_url": "https://github.com/biomejs/biome/discussions/10686",
+    "question": "What's the biome-ignore comment syntax to suppress a lint rule that comes from a GritQL plugin, rather than a built-in rule?",
+    "landing_url": "https://biomejs.dev/analyzer/suppressions/",
+    "landing_rule": "no doc link in accepted answer (it linked a GitHub issue) -> nav/title match: 'Suppressions' page under Analyzer documents biome-ignore syntax, including the plugin form",
+    "crosses_page": "n",
+    "crossing_kind": "none",
+    "answer_type": "code",
+    "must_contain": [
+      {
+        "claim": "Use `// biome-ignore lint/plugin/<plugin-name>: <reason>` to suppress a specific plugin-based rule",
+        "url": "https://biomejs.dev/analyzer/suppressions/",
+        "quote": "biome-ignore lint/plugin/<plugin-name>: <explanation>"
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "Using bare `// biome-ignore lint: reason` to target only the plugin rule",
+        "why_wrong": "that form suppresses all lint diagnostics on the line, not just the named plugin rule -- the documented syntax requires the full lint/plugin/<plugin-name> path to scope it",
+        "url": "https://biomejs.dev/analyzer/suppressions/"
+      }
+    ]
+  }
+]

@@ -1,0 +1,61 @@
+[
+  {
+    "id": "T6",
+    "repo": "astral-sh/ruff",
+    "discussion_url": "https://github.com/astral-sh/ruff/discussions/28504",
+    "created_at": "2026-09-10T19:32:02Z",
+    "title": "VSCode extension vs ruff binary differing behaviour - how to synchronize behaviour?",
+    "question_one_sentence": "Why does the Ruff VS Code extension format code differently (hugging braces) than the ruff CLI binary with the same ruff.toml, and how do you make them match?"
+  },
+  {
+    "id": "T7",
+    "repo": "prisma/prisma",
+    "discussion_url": "https://github.com/prisma/orm/discussions/29524",
+    "created_at": "2026-04-29T17:30:18Z",
+    "title": "What's the best practice for deploying migrations to an existing database without syncing schema to prisma?",
+    "question_one_sentence": "How do you adopt Prisma Migrate against an existing, non-empty tenant database without Prisma trying to manage the legacy tables it doesn't know about?",
+    "note": "Repo now lives at prisma/orm (GitHub API resolved prisma/prisma -> prisma/orm transparently)."
+  },
+  {
+    "id": "T8",
+    "repo": "tailwindlabs/tailwindcss",
+    "discussion_url": "https://github.com/tailwindlabs/tailwindcss/discussions/20488",
+    "created_at": "2026-09-12T04:48:57Z",
+    "title": "How to style List Style Image items",
+    "question_one_sentence": "How do you resize/style the marker image set via list-image-[url(...)] on a <ul>, since Tailwind size utilities don't apply to list markers?",
+    "note": "tailwindlabs/tailwindcss has no category literally named 'Q&A'; used 'Help' as the closest equivalent (same pattern as fastapi's 'Questions' and pydantic's 'Question')."
+  },
+  {
+    "id": "T9",
+    "repo": "rust-lang/cargo",
+    "discussion_url": "https://github.com/rust-lang/cargo/issues/14363",
+    "created_at": "2024-08-07T02:39:23Z",
+    "title": "Cargo does not handle `+toolchain` directives.",
+    "question_one_sentence": "Why doesn't `cargo +nightly -Zscript file.rs` work as the unstable-script docs show?",
+    "note": "rust-lang/cargo has Discussions disabled entirely (empty category list) and uses issues instead; fell back to the 'C-question' issue label per the stated rule, walking newest-first by created date and treating a maintainer reply on a closed issue as the 'marked answer' equivalent."
+  },
+  {
+    "id": "T10",
+    "repo": "sphinx-doc/sphinx",
+    "discussion_url": "https://github.com/orgs/sphinx-doc/discussions/14620",
+    "created_at": "2026-08-19T12:51:33Z",
+    "title": "document is referenced in multiple toctrees",
+    "question_one_sentence": "Is there a better way than listing the same documents in two toctree directives (one shallow, one deep) to avoid the 'referenced in multiple toctrees' warning?"
+  },
+  {
+    "id": "T11",
+    "repo": "honojs/hono",
+    "discussion_url": "https://github.com/orgs/honojs/discussions/5368",
+    "created_at": "2026-09-12T13:41:28Z",
+    "title": "Static Files Serving Prevents Cookies",
+    "question_one_sentence": "Why doesn't a cookie set with setSignedCookie() show up in the browser when the handler returns the response from c.env.ASSETS.fetch()?"
+  },
+  {
+    "id": "T12",
+    "repo": "biomejs/biome",
+    "discussion_url": "https://github.com/biomejs/biome/discussions/10686",
+    "created_at": "2026-06-18T07:40:23Z",
+    "title": "Is there a way to suppress plugin-based lint rules?",
+    "question_one_sentence": "What's the biome-ignore comment syntax to suppress a lint rule that comes from a GritQL plugin, rather than a built-in rule?"
+  }
+]

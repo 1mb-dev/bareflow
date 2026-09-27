@@ -1,0 +1,80 @@
+[
+  {
+    "repo": "prisma/prisma",
+    "discussion_url": "https://github.com/prisma/orm/discussions/30175",
+    "created_at": "2026-08-31T09:02:06Z",
+    "title": "Split a TypeScript schema into multiple files",
+    "reason": "Answer: 'I don't think this is officially/properly supported despite the claim in the docs, so added it as a feature request.' Matches the excluded 'not supported / file an issue' pattern exactly."
+  },
+  {
+    "repo": "prisma/prisma",
+    "discussion_url": "https://github.com/prisma/orm/discussions/30074",
+    "created_at": "2026-08-19T09:43:20Z",
+    "title": "Port forwarding on kubernetes still broken - unable to prisma migrate deploy",
+    "reason": "References a pre-existing bug (#17452) as its premise; the resolution's central claim (Prisma recommends CI/CD for migration deploys) could not be verified against a live Prisma doc URL (guessed URLs 404'd) within reasonable effort."
+  },
+  {
+    "repo": "prisma/prisma",
+    "discussion_url": "https://github.com/prisma/orm/discussions/29693",
+    "created_at": "2026-07-05T19:33:44Z",
+    "title": "Question about Database connection string",
+    "reason": "Answer explicitly states 'It's not really a Prisma thing, it's just how the Postgres protocol works' -- the resolving fact is not a Prisma-documented behavior."
+  },
+  {
+    "repo": "prisma/prisma",
+    "discussion_url": "https://github.com/prisma/orm/discussions/29644",
+    "created_at": "2026-06-15T06:41:35Z",
+    "title": "Cannot find module '@prisma/studio-core/data/ppg' when embedding Prisma Studio in Next.js",
+    "reason": "Root cause is a docs-vs-published-package mismatch (the guide targets an unreleased @dev tag); the fix is 'install the dev/preview build', not a documented, stable fact."
+  },
+  {
+    "repo": "prisma/prisma",
+    "discussion_url": "https://github.com/prisma/orm/discussions/29631",
+    "created_at": "2026-06-09T18:23:59Z",
+    "title": "Worried about Prisma Next",
+    "reason": "Design-feedback discussion about an unreleased future major version; answer repeatedly says the behavior 'hasn't published explicit documentation yet' -- feature-request/speculative, not resolvable from current official docs."
+  },
+  {
+    "repo": "tailwindlabs/tailwindcss",
+    "discussion_url": "https://github.com/tailwindlabs/tailwindcss/discussions/20495",
+    "created_at": "2026-09-15T13:51:21Z",
+    "title": "Tailwind Plus",
+    "reason": "Commercial product/licensing availability question, resolved via a blog post, not a technical fact resolvable from Tailwind's documentation."
+  },
+  {
+    "repo": "rust-lang/cargo",
+    "issue_url": "https://github.com/rust-lang/cargo/issues/16115",
+    "created_at": "2025-10-12T06:47:26Z",
+    "title": "Is there a reason why context-sensitive identifiers are not banned for project name?",
+    "reason": "Open, unresolved design/naming-policy discussion (feature-request-shaped), no maintainer answer that resolves it; repo has no Discussions so this was found via the C-question issue label."
+  },
+  {
+    "repo": "rust-lang/cargo",
+    "issue_url": "https://github.com/rust-lang/cargo/issues/14616",
+    "created_at": "2024-09-30T09:00:58Z",
+    "title": "Miss",
+    "reason": "Closed as 'not a Cargo issue nor feature request' -- root cause was a syntax error in the user's own Rust source, unrelated to Cargo; maintainer redirected to a general Rust user forum."
+  },
+  {
+    "repo": "pola-rs/polars",
+    "reason": "hasDiscussionsEnabled: false and no label matching 'question' exists on the repo (checked full label list) -- repo yields no candidate under the stated selection mechanism, so it does not count toward the 7."
+  },
+  {
+    "repo": "withastro/astro",
+    "reason": "hasDiscussionsEnabled: false and no label matching 'question' exists on the repo -- yields no candidate, does not count toward the 7."
+  },
+  {
+    "repo": "biomejs/biome",
+    "discussion_url": "https://github.com/biomejs/biome/discussions/11177",
+    "created_at": "2026-08-02T10:07:33Z",
+    "title": "How to ignore Biome's rules in css and html?",
+    "reason": "Partial verification only: the JS suppression-comment syntax (biome-ignore lint/<group>/<rule>) is confirmed on the Suppressions doc page, but the CSS (/* */) and HTML (<!-- -->) comment-syntax variants the answer demonstrates could not be found documented anywhere checked (Suppressions page, Linter introduction, a CSS rule example page) -- treated as not cleanly qualifying under 'the fact is documented'."
+  },
+  {
+    "repo": "biomejs/biome",
+    "discussion_url": "https://github.com/biomejs/biome/discussions/10902",
+    "created_at": "2026-07-11T07:34:16Z",
+    "title": "Which rule is messing up my prices?",
+    "reason": "Answer: 'Our formatter is not rule-based and doesn't have an option to disable this behaviour.' Matches the excluded 'not supported' pattern."
+  }
+]
