@@ -13,7 +13,7 @@ if (!url) {
 
 try {
   const { doc, markdown } = await run({ url });
-  console.log(asJson ? JSON.stringify(doc, null, 2) : markdown);
+  console.log(asJson ? JSON.stringify(doc) : markdown);
 } catch (e) {
   console.error(`mdflow: ${e?.message || e}`);
   process.exit(1);
