@@ -4,6 +4,7 @@
 // and the handler boundary. Determinism compares a pure function to itself (near-tautological). Exit 1 on any
 // failure.
 import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -462,6 +463,27 @@ for (const [id, spec] of Object.entries(inventory)) {
   const r9 = await handle(new Request("https://m/?url=https://example.com&format=json"), {}, { run: failRun, kv: makeKv() });
   const r9body = await r9.text();
   record("agent-surface", "boundary", "json-error", r9.headers.get("content-type") === "application/json" && JSON.parse(r9body).code === 502);
+}
+
+// The local reader: frozen window, judged findings, and the source served without its scripts.
+{
+  const child = spawn(process.execPath, [join(ROOT, "bin/reader.js"), "0"], { stdio: ["ignore", "pipe", "inherit"] });
+  try {
+    const base = await new Promise((ok, fail) => {
+      child.stdout.on("data", (d) => { const m = String(d).match(/http:\/\/127\.0\.0\.1:\d+\//); if (m) ok(m[0]); });
+      child.on("exit", () => fail(new Error("reader exited")));
+    });
+    const [u1, u5, raw] = await Promise.all([fetch(base + "f/U1"), fetch(base + "f/U5"), fetch(base + "raw/nodejs-path")]);
+    const [u1t, u5t, rawt] = await Promise.all([u1.text(), u5.text(), raw.text()]);
+    record("reader", "window", "U1 shows prev, page, next", ["prev", "page", "next"].every((r) => u1t.includes(`class="role">${r}<`)));
+    record("reader", "findings", "U5 demotions judged against labels", (u5t.match(/<b>demoted<\/b> source-heading-demoted/g) || []).length === 2);
+    record("reader", "source", "no page scripts, base after the doctype",
+      raw.headers.get("content-security-policy")?.includes("script-src 'none'") && rawt.startsWith('<!doctype html><base href="https://nodejs.org/api/path.html">'));
+  } catch (e) {
+    record("reader", "serve", String(e?.message || e), false);
+  } finally {
+    child.kill();
+  }
 }
 
 const failed = results.filter((r) => !r.ok);

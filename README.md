@@ -49,7 +49,13 @@ npm install
 node bin/mdflow.js <url>          # Markdown
 node bin/mdflow.js <url> --json   # the typed IR
 npm run verify                    # truth gate: loss + nav precision/recall per fixture
+npm run reader                    # local reader: source | document | findings, http://127.0.0.1:4380/
 ```
+
+The reader shows each frozen fixture and step-6 page next to its document (the prev/next window
+where siblings are frozen), the audit's findings judged against the hand labels, and every label;
+clicking a label finds it in the source. `/live?url=` runs a live page through the agent surface.
+It writes nothing and binds 127.0.0.1 only.
 
 ## License
 

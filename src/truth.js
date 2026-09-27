@@ -201,6 +201,7 @@ export function scoreLoss(html, doc, spec) {
   const lost = items.filter((it) => it.label === "lost").length;
   return {
     errors,
+    items,
     fps,
     misses,
     counts: { universe: items.length, lost, tp, fp: fps.length, miss: misses.length, demoted },
