@@ -86,6 +86,8 @@ The tables above stay as run at bc22716. Fixes made after the run, on these page
 - 8bcc0d0: inline runs in a container are one paragraph (U5 callouts). No audit change.
 - 2b6a5b9: the innermost of nested main landmarks is content and audit scope. U1: 3 FP -> 0 on
   the page and 6 -> 0 on its siblings; the h1 becomes the title.
+- 593cf2c: Docusaurus/VitePress pager table, built on six fresh pages (a3a8ccb); U3's pages were
+  not used to fit it. U3 would now attach both siblings; that is not counted as a win.
 
 U1's pages are now fitted, so in-sample. On the remaining out-of-sample pages the audit emits 1
 FP (U3) and 2 correct demoted (U5). Out-of-sample precision is unmeasured on a fresh set and
