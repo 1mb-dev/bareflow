@@ -2,6 +2,7 @@
 // explicitly. Extraction-level drops are handled by loss-audit.js against the source HTML.
 import { parseHTML } from "linkedom";
 import * as ir from "./ir.js";
+import { innerMain } from "./html.js";
 
 const LOSSLESS_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD"]);
 // Math / interactive widgets often carry these classes.
@@ -203,7 +204,8 @@ export function contentToBlocks(contentHtml) {
   // Wrap in a container: Defuddle's content is a fragment, and linkedom parses a
   // fragment with its top element as documentElement, leaving document.body empty.
   const { document } = parseHTML(`<div id="__mdflow">${contentHtml || ""}</div>`);
+  const root = document.querySelector("#__mdflow");
   const out = [];
-  childBlocks(document.querySelector("#__mdflow"), out);
+  childBlocks(innerMain(root) ?? root, out);
   return out;
 }

@@ -257,6 +257,12 @@ for (const [id, spec] of Object.entries(inventory)) {
   const fig = contentToBlocks('<figure><img src="a.png" alt="A"><figcaption>Figure caption</figcaption></figure>');
   record("to-ir", "figure", "figcaption kept with image", fig.length === 2 && fig[1].text === "Figure caption");
 
+  // Nested main landmarks (SQLAlchemy): the innermost is the content and the audit scope.
+  const { doc: nested } = await run({ url: "https://example.com/n", retrievedAt: FIXED,
+    html: "<html><head><title>Guide — Site Docs</title></head><body><main><p>Release: 2.0</p><div><ul><li><a href='/a'>A</a></li><li><a href='/b'>B</a></li></ul><h4>Project Versions</h4></div><div role='main'><h1>Guide</h1><p>The guide body text, long enough to be the content of this page.</p><pre><code>x = 1</code></pre></div></main></body></html>" });
+  record("pipeline", "landmark", "nested main: innermost only, title promoted, chrome outside it not audited",
+    nested.title === "Guide" && JSON.stringify(nested.sections[0].blocks.map((b) => b.type)) === '["paragraph","code"]' && !nested.sections[0].losses.length);
+
   // Optional end tags: htmlparser2 nests the tbody inside the open th (Playwright, nodejs).
   const { doc: opt } = await run({ url: "https://example.com/t", retrievedAt: FIXED,
     html: "<html><body><main><h2>Options</h2><table><thead><tr><th>Option<th>Description<tbody><tr><td><code>--a</code><td>First<tr><td>--b<td>Second<tfoot><tr><td>F<td>G</table><p>After the table.</p></main></body></html>" });

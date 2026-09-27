@@ -3,7 +3,7 @@
 // blocks are counted and a dropped copy is still flagged. The scope is the page's own
 // landmark (see auditScope); chrome inside it is excluded by SKIP. A conservative heuristic,
 // not a content detector.
-import { parseHtml } from "./html.js";
+import { innerMain, parseHtml } from "./html.js";
 import * as ir from "./ir.js";
 
 // Chrome inside the scope: the standard navigation roles, aside, plus one site pattern the
@@ -32,9 +32,11 @@ const codeKey = (s) => norm(s).replace(/\s/g, "");
 const tableKey = (cells) => norm(cells.join(" "));
 const cellNorm = (c) => aggressive(norm(c).replace(/#.*$/, ""));
 
-// The page's single main, else single [role=main], else single article, else the whole
-// document. Not document.body: linkedom can parse content outside body (react.dev).
+// The innermost of nested main landmarks, else the single main, single [role=main], single
+// article, else the whole document. Not document.body: linkedom can parse content outside body (react.dev).
 function auditScope(document) {
+  const inner = innerMain(document);
+  if (inner) return { root: inner, skip: SKIP };
   for (const sel of ["main", "[role='main']", "article"]) {
     const found = document.querySelectorAll(sel);
     if (found.length === 1) return { root: found[0], skip: SKIP };

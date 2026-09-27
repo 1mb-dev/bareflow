@@ -26,3 +26,13 @@ export function parseHtml(html) {
   repairTables(window.document);
   return window;
 }
+
+// The page's own main landmark when it declares them nested (SQLAlchemy: a <main> holding the
+// sidebar and a div[role=main]): the innermost is the content, the rest chrome by the page's
+// own markup. Null unless every landmark sits on one chain, so sibling mains decide nothing.
+export function innerMain(root) {
+  const marks = [...root.querySelectorAll("main, [role='main']")];
+  if (marks.length < 2) return null;
+  for (let i = 1; i < marks.length; i++) if (!marks[i - 1].contains(marks[i])) return null;
+  return marks.at(-1);
+}
