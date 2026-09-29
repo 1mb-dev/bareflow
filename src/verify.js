@@ -365,6 +365,28 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("document-unit", "projection", "run rejects an unknown siblings mode", rejects);
 }
 
+// Sibling losses are the audit trail and are never projected. Code the extractor demoted to a
+// paragraph leaves the projection with the paragraph, but its verbatim source stays in the
+// sibling's losses (gate v2 T2: pydantic validators, next sibling).
+{
+  const v2Pages = JSON.parse(await readFile(join(ROOT, "usage/v2/pages.json"), "utf8"));
+  const byUrl = new Map();
+  for (const p of Object.values(v2Pages)) for (const u of [p.url, p.finalUrl]) byUrl.set(u, p);
+  const frozen = async (u) => {
+    const p = byUrl.get(u);
+    if (!p) throw new Error(`not frozen: ${u}`);
+    return { ...snap(p.finalUrl, await readFile(join(ROOT, "usage/v2/pages", p.fixture), "utf8")), url: u };
+  };
+  const url = "https://docs.pydantic.dev/latest/concepts/validators/";
+  const proj = await run({ url, fetch: frozen, retrievedAt: FIXED });
+  const full = await run({ url, fetch: frozen, retrievedAt: FIXED, siblings: "full" });
+  const sibLosses = (doc) => doc.sections.filter((s) => s.url !== doc.source.finalUrl).map((s) => s.losses);
+  const demoted = sibLosses(proj.doc).flat().filter((l) => l.source === "source-code-demoted");
+  record("document-unit", "projection", "T2 sibling losses unprojected, demoted Python verbatim",
+    proj.doc.scope.siblings.next.status === "attached" && JSON.stringify(sibLosses(proj.doc)) === JSON.stringify(sibLosses(full.doc)) &&
+    demoted.some((l) => /^from pydantic import .+\n/m.test(l.text)));
+}
+
 // Document-unit integrity: the compose/to-ir bugs that would ship broken sibling content.
 // 9: direct text nodes in containers must survive. 10: a breadcrumb crumb linking to the
 // page must not drop prev/next. 11: a nav href differing only by host casing canonicalizes to
