@@ -27,8 +27,7 @@ page declares Docusaurus or VitePress as its generator and rel is silent, that g
 pager; `doc.scope` records which (`via: rel | pager`). It attaches real sibling content: a
 bounded window, marked as one in `doc.scope`, not a crawl. Siblings are projected by default:
 their headings and code blocks, whole and verbatim, with a count of each block type left out
-(`scope.siblings.*.projection`) and the UTF-8 bytes of what was kept (`text_bytes`, null for a
-sibling never read). `--siblings full` keeps every block. The IR is versioned (`mdflow/ir/v1`); that a pinned
+(`scope.siblings.*.projection`). `--siblings full` keeps every block. The IR is versioned (`mdflow/ir/v1`); that a pinned
 snapshot version serves a consumer is unproven until one pins it. Extraction is composed
 (Defuddle), not built from scratch; the moat is the contract downstream of extraction.
 

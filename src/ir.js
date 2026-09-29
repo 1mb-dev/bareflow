@@ -56,16 +56,6 @@ export const SIBLING_STATUS = new Set(["attached", "unfetched", "failed", "block
 export const PROJECTIONS = new Set(["headings+code", "full"]);
 export const PROJECTION_KEEP = new Set(["heading", "code"]);
 
-// UTF-8 bytes of these blocks' strings as stored: prose (with its inline Markdown), code, list
-// items, table cells, image alt. No keys or syntax; section losses are not counted. Changing
-// what counts is a schema change.
-const utf8 = new TextEncoder();
-export function textBytes(blocks) {
-  let n = 0;
-  for (const b of blocks) for (const s of [b.text, b.code, b.alt, ...(b.items ?? []), ...(b.headers ?? []), ...(b.rows ?? []).flat()]) if (typeof s === "string") n += utf8.encode(s).length;
-  return n;
-}
-
 export function document({ id, title, source, generator, scope, breadcrumbs, sections }) {
   return { schema: SCHEMA, id, title, source, generator, scope, breadcrumbs, sections };
 }
@@ -89,13 +79,12 @@ export function validate(doc) {
     if (s.status === "attached") {
       const sec = (Array.isArray(doc.sections) ? doc.sections : []).find((x) => x?.url === s.url);
       if (!sec || !Array.isArray(sec.blocks)) fail(`scope.siblings.${r}.url`, "attached sibling has a section with that url");
-      if (s.text_bytes !== textBytes(sec.blocks)) fail(`scope.siblings.${r}.text_bytes`, "UTF-8 bytes of the sibling section's blocks");
       const { mode, omitted: o } = s.projection ?? {};
       const types = o && typeof o === "object" && !Array.isArray(o) ? Object.keys(o) : null;
       if (!PROJECTIONS.has(mode) || !types || (mode === "full" && types.length) ||
           !types.every((t) => BLOCK_TYPES.has(t) && !PROJECTION_KEEP.has(t) && Number.isInteger(o[t]) && o[t] > 0))
         fail(`scope.siblings.${r}.projection`, "{ mode: headings+code | full, omitted: { dropped type: count > 0 }, {} under full }");
-    } else if (s.text_bytes !== null || s.projection !== undefined) fail(`scope.siblings.${r}`, "text_bytes null and no projection unless attached");
+    } else if (s.projection !== undefined) fail(`scope.siblings.${r}`, "no projection unless attached");
   }
   if (!Array.isArray(doc.breadcrumbs) || !doc.breadcrumbs.every((c) => typeof c?.url === "string" && typeof c.title === "string"))
     fail("breadcrumbs", "array of { title, url }");

@@ -16,7 +16,7 @@ import { decompress, MAX_BYTES } from "./fetch.js";
 import { cacheKey } from "./cache.js";
 import { isPrivateIp } from "./ssrf.js";
 import { handle } from "./worker.js";
-import { walk, validate, textBytes, SCHEMA } from "./ir.js";
+import { walk, validate, SCHEMA } from "./ir.js";
 import { renderMarkdown } from "./render.js";
 import { extractNav } from "./compose.js";
 import { parseHtml } from "./html.js";
@@ -308,15 +308,15 @@ for (const [id, spec] of Object.entries(inventory)) {
     !!next && next.blocks.length > 0 && JSON.stringify(next.blocks) === JSON.stringify(single) && full.doc.scope.siblings.next.projection.mode === "full");
 
   // The default projection: the single-page run's headings and code, whole and in order, and a
-  // count of every other block type; text_bytes counts exactly what was kept.
+  // count of every other block type.
   const proj = findSection(composed.doc, cfUrl).blocks;
   const kept = single.filter((b) => b.type === "heading" || b.type === "code");
   const left = {};
   for (const b of single) if (b.type !== "heading" && b.type !== "code") left[b.type] = (left[b.type] ?? 0) + 1;
   const sn = composed.doc.scope.siblings.next;
-  record("document-unit", "projection", "headings + code verbatim, omitted counts, text_bytes",
+  record("document-unit", "projection", "headings + code verbatim, omitted counts",
     proj.length > 0 && JSON.stringify(proj) === JSON.stringify(kept) && JSON.stringify(sn.projection) === JSON.stringify({ mode: "headings+code", omitted: left }) &&
-    sn.text_bytes === textBytes(kept) && sn.text_bytes < full.doc.scope.siblings.next.text_bytes && composed.doc.scope.siblings.prev.text_bytes === null);
+    composed.doc.scope.siblings.prev.projection === undefined);
 
   const again = await run({ url: introUrl, fetch, retrievedAt: FIXED });
   record("document-unit", "determinism", "", JSON.stringify(composed.doc) === JSON.stringify(again.doc));
@@ -346,18 +346,13 @@ for (const [id, spec] of Object.entries(inventory)) {
     [nextUrl]: "<html><body><main><h1>B</h1><h2>Café 日本</h2><p>Prose left out.</p><pre>x = \"é\"</pre></main></body></html>",
   };
   const { doc } = await run({ url, fetch: pagesFetch(pages), retrievedAt: FIXED });
-  const kept = findSection(doc, nextUrl).blocks;
-  const utf16 = kept.reduce((n, b) => n + (b.text ?? b.code).length, 0);
-  record("ir", "text_bytes", "UTF-8 bytes of kept blocks, not string length",
-    doc.scope.siblings.next.text_bytes === Buffer.byteLength(kept.map((b) => b.text ?? b.code).join("")) && doc.scope.siblings.next.text_bytes > utf16 &&
-    JSON.stringify(doc.scope.siblings.next.projection.omitted) === JSON.stringify({ paragraph: 1 }));
+  record("ir", "projection", "omitted counts the dropped prose", JSON.stringify(doc.scope.siblings.next.projection.omitted) === JSON.stringify({ paragraph: 1 }));
   const bad = (edit) => { const d = structuredClone(doc); edit(d.scope.siblings); try { validate(d); return false; } catch { return true; } };
-  record("ir", "validate", "attached sibling needs text_bytes + projection; others carry null and none",
-    bad((x) => delete x.next.text_bytes) && bad((x) => { x.next.projection = { mode: "summary", omitted: {} }; }) &&
-    bad((x) => { x.next.projection.omitted = { paragraph: 0 }; }) && bad((x) => { x.prev.text_bytes = 0; }));
-  // The projection and its byte count are checked against the section, not only for shape.
-  record("ir", "validate", "text_bytes recounted; omitted names dropped types only, empty under full",
-    !bad(() => {}) && bad((x) => { x.next.text_bytes += 1; }) && bad((x) => { x.next.projection.omitted = []; }) &&
+  record("ir", "validate", "attached sibling needs a projection; others carry none",
+    !bad(() => {}) && bad((x) => delete x.next.projection) && bad((x) => { x.next.projection = { mode: "summary", omitted: {} }; }) &&
+    bad((x) => { x.next.projection.omitted = { paragraph: 0 }; }) && bad((x) => { x.prev.projection = { mode: "full", omitted: {} }; }));
+  record("ir", "validate", "omitted names dropped types only, empty under full; attached url has a section",
+    bad((x) => { x.next.projection.omitted = []; }) &&
     bad((x) => { x.next.projection.omitted = { paragraph: 1, heading: 1 }; }) && bad((x) => { x.next.projection.omitted = { prose: 1 }; }) &&
     bad((x) => { x.next.projection.mode = "full"; }) && bad((x) => { x.next.url = "https://example.com/docs/c/"; }));
   // An unknown mode fails at the call, not as a mislabelled projection when a sibling attaches.

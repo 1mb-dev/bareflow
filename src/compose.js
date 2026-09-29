@@ -119,11 +119,10 @@ export function compose({ url, nav, title, blocks, losses = [], source, generato
   const trail = nav.breadcrumbs.filter((c) => !samePage(c.url, canonicalUrl(url) ?? url));
   const breadcrumbs = trail.length ? trail : nav.rel.up ? [{ title: nav.rel.up.title, url: nav.rel.up.url }] : [];
 
-  // text_bytes is null for a sibling never read: an unseen page is not a free one.
   const status = (r) => ({
     status: siblings[r].status,
     ...(siblings[r].url ? { url: siblings[r].url, via: siblings[r].via } : {}),
-    ...(projected[r] ? { projection: projected[r].projection, text_bytes: ir.textBytes(projected[r].blocks) } : { text_bytes: null }),
+    ...(projected[r] ? { projection: projected[r].projection } : {}),
   });
   const scope = { kind: sections.length > 1 ? "window" : "page", siblings: { prev: status("prev"), next: status("next") } };
 
