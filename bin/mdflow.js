@@ -6,8 +6,8 @@ import { PROJECTIONS } from "../src/ir.js";
 const USAGE = "usage: mdflow <url> [--json] [--siblings headings+code|full]";
 const args = process.argv.slice(2);
 let url, asJson = false, siblings = "headings+code", bad = false;
-// One URL, each flag at most as written: an unknown flag, a second URL, or a bad mode is a usage
-// error, never silently ignored or read as the URL.
+// One URL; an unknown flag, a second URL, or a bad mode is a usage error, never silently ignored
+// or read as the URL. A repeated --siblings takes the last value.
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === "--json") asJson = true;

@@ -347,14 +347,15 @@ for (const [id, spec] of Object.entries(inventory)) {
   };
   const { doc } = await run({ url, fetch: pagesFetch(pages), retrievedAt: FIXED });
   record("ir", "projection", "omitted counts the dropped prose", JSON.stringify(doc.scope.siblings.next.projection.omitted) === JSON.stringify({ paragraph: 1 }));
-  const bad = (edit) => { const d = structuredClone(doc); edit(d.scope.siblings); try { validate(d); return false; } catch { return true; } };
+  const bad = (edit, blocks) => { const d = structuredClone(doc); edit(d.scope.siblings); blocks?.(findSection(d, nextUrl).blocks); try { validate(d); return false; } catch { return true; } };
   record("ir", "validate", "attached sibling needs a projection; others carry none",
     !bad(() => {}) && bad((x) => delete x.next.projection) && bad((x) => { x.next.projection = { mode: "summary", omitted: {} }; }) &&
     bad((x) => { x.next.projection.omitted = { paragraph: 0 }; }) && bad((x) => { x.prev.projection = { mode: "full", omitted: {} }; }));
   record("ir", "validate", "omitted names dropped types only, empty under full; attached url has a section",
     bad((x) => { x.next.projection.omitted = []; }) &&
     bad((x) => { x.next.projection.omitted = { paragraph: 1, heading: 1 }; }) && bad((x) => { x.next.projection.omitted = { prose: 1 }; }) &&
-    bad((x) => { x.next.projection.mode = "full"; }) && bad((x) => { x.next.url = "https://example.com/docs/c/"; }));
+    bad((x) => { x.next.projection.mode = "full"; }) && bad((x) => { x.next.url = "https://example.com/docs/c/"; }) &&
+    bad(() => {}, (b) => b.push({ type: "paragraph", text: "kept prose" })));
   // An unknown mode fails at the call, not as a mislabelled projection when a sibling attaches.
   const rejects = await run({ url, fetch: pagesFetch(pages), retrievedAt: FIXED, siblings: "headings" }).then(() => false, (e) => /^siblings: /.test(e.message));
   record("document-unit", "projection", "run rejects an unknown siblings mode", rejects);

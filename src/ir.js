@@ -82,8 +82,9 @@ export function validate(doc) {
       const { mode, omitted: o } = s.projection ?? {};
       const types = o && typeof o === "object" && !Array.isArray(o) ? Object.keys(o) : null;
       if (!PROJECTIONS.has(mode) || !types || (mode === "full" && types.length) ||
+          (mode !== "full" && !sec.blocks.every((b) => PROJECTION_KEEP.has(b?.type))) ||
           !types.every((t) => BLOCK_TYPES.has(t) && !PROJECTION_KEEP.has(t) && Number.isInteger(o[t]) && o[t] > 0))
-        fail(`scope.siblings.${r}.projection`, "{ mode: headings+code | full, omitted: { dropped type: count > 0 }, {} under full }");
+        fail(`scope.siblings.${r}.projection`, "{ mode: headings+code | full, omitted: { dropped type: count > 0 }, {} under full }; projected blocks only kept types");
     } else if (s.projection !== undefined) fail(`scope.siblings.${r}`, "no projection unless attached");
   }
   if (!Array.isArray(doc.breadcrumbs) || !doc.breadcrumbs.every((c) => typeof c?.url === "string" && typeof c.title === "string"))
