@@ -1,0 +1,323 @@
+v4.3
+⌘KCtrl KDocsPlayBlogShowcasePartnersPlus
+
+Typography
+list-style-image
+
+Getting started
+Installation
+Editor setup
+Compatibility
+Upgrade guide
+
+Core concepts
+Styling with utility classes
+Hover, focus, and other states
+Responsive design
+Dark mode
+Theme variables
+Colors
+Adding custom styles
+Detecting classes in source files
+Functions and directives
+
+Base styles
+Preflight
+
+Layout
+aspect-ratio
+columns
+break-after
+break-before
+break-inside
+box-decoration-break
+box-sizing
+display
+float
+clear
+isolation
+object-fit
+object-position
+overflow
+overscroll-behavior
+position
+top / right / bottom / left
+visibility
+z-index
+
+Flexbox & Grid
+flex-basis
+flex-direction
+flex-wrap
+flex
+flex-grow
+flex-shrink
+order
+grid-template-columns
+grid-column
+grid-template-rows
+grid-row
+grid-auto-flow
+grid-auto-columns
+grid-auto-rows
+gap
+justify-content
+justify-items
+justify-self
+align-content
+align-items
+align-self
+place-content
+place-items
+place-self
+
+Spacing
+padding
+margin
+
+Sizing
+width
+min-width
+max-width
+height
+min-height
+max-height
+inline-size
+min-inline-size
+max-inline-size
+block-size
+min-block-size
+max-block-size
+
+Typography
+font-family
+font-size
+font-smoothing
+font-style
+font-weight
+font-stretch
+font-variant-numeric
+font-feature-settings
+letter-spacing
+line-clamp
+line-height
+list-style-image
+list-style-position
+list-style-type
+text-align
+color
+text-decoration-line
+text-decoration-color
+text-decoration-style
+text-decoration-thickness
+text-underline-offset
+text-transform
+text-overflow
+text-wrap
+text-indent
+tab-size
+vertical-align
+white-space
+word-break
+overflow-wrap
+hyphens
+content
+
+Backgrounds
+background-attachment
+background-clip
+background-color
+background-image
+background-origin
+background-position
+background-repeat
+background-size
+
+Borders
+border-radius
+border-width
+border-color
+border-style
+outline-width
+outline-color
+outline-style
+outline-offset
+
+Effects
+box-shadow
+text-shadow
+opacity
+mix-blend-mode
+background-blend-mode
+mask-clip
+mask-composite
+mask-image
+mask-mode
+mask-origin
+mask-position
+mask-repeat
+mask-size
+mask-type
+
+Filters
+filterblur
+brightness
+contrast
+drop-shadow
+grayscale
+hue-rotate
+invert
+saturate
+sepia
+
+backdrop-filterblur
+brightness
+contrast
+grayscale
+hue-rotate
+invert
+opacity
+saturate
+sepia
+
+Tables
+border-collapse
+border-spacing
+table-layout
+caption-side
+
+Transitions & Animation
+transition-property
+transition-behavior
+transition-duration
+transition-timing-function
+transition-delay
+animation
+
+Transforms
+backface-visibility
+perspective
+perspective-origin
+rotate
+scale
+skew
+transform
+transform-origin
+transform-style
+translate
+zoom
+
+Interactivity
+accent-color
+appearance
+caret-color
+color-scheme
+cursor
+field-sizing
+pointer-events
+resize
+scroll-behavior
+scrollbar-color
+scrollbar-width
+scrollbar-gutter
+scroll-margin
+scroll-padding
+scroll-snap-align
+scroll-snap-stop
+scroll-snap-type
+touch-action
+user-select
+will-change
+
+SVG
+fill
+stroke
+stroke-width
+
+Accessibility
+forced-color-adjust
+
+Typography
+list-style-image
+Utilities for controlling the marker images for list items.
+ | Class | Styles
+ | list-image-[<value>] | list-style-image: <value>;
+
+ | list-image-(<custom-property>) | list-style-image: var(<custom-property>);
+
+ | list-image-none | list-style-image: none;
+
+ Examples
+ Basic example
+ Use the list-image-[<value>] syntax to control the marker image for list items:
+ 5 cups chopped Porcini mushrooms
+1/2 cup of olive oil
+3lb of celery
+
+<ul class="list-image-[url(/img/checkmark.png)]">  <li>5 cups chopped Porcini mushrooms</li>  <!-- ... --></ul>
+
+ Using a CSS variable
+ Use the list-image-(<custom-property>) syntax to control the marker image for list items using a CSS variable:
+
+<ul class="list-image-(--my-list-image)">  <!-- ... --></ul>
+
+ This is just a shorthand for list-image-[var(<custom-property>)] that adds the var() function for you automatically.
+ Removing a marker image
+ Use the list-image-none utility to remove an existing marker image from list items:
+
+<ul class="list-image-none">  <!-- ... --></ul>
+
+ Responsive design
+ Prefix a list-style-image utility with a breakpoint variant like md: to only apply the utility at medium screen sizes and above:
+
+<ul class="list-image-none md:list-image-[url(/img/checkmark.png)] ...">  <!-- ... --></ul>
+
+Learn more about using variants in the variants documentation.
+
+line-heightlist-style-position
+
+On this page
+Quick reference
+ExamplesBasic example
+Using a CSS variable
+Removing a marker image
+Responsive design
+
+From the creators of Tailwind CSS
+Make your ideas look awesome, without relying on a designer.
+“This is the survival kit I wish I had when I started building apps.”
+Derrick Reimer, SavvyCal
+
+Tailwind CSS
+Documentation
+Playground
+Blog
+Showcase
+
+Resources
+Refactoring UI
+Headless UI
+Heroicons
+Hero Patterns
+
+Community
+GitHub
+X
+
+Tailwind CSS
+Documentation
+Playground
+Blog
+Showcase
+
+Resources
+Refactoring UI
+Headless UI
+Heroicons
+Hero Patterns
+
+Community
+GitHub
+X
+
+Copyright © 2026 Tailwind Labs Inc.·Trademark Policy

@@ -1,0 +1,198 @@
+Skip to content         Biome
+   Docs  Enterprise  Playground
+
+     Search  CtrlK      Cancel
+
+    Discord   GitHub   Mastodon   Open Collective   YouTube   BlueSky   RSS
+   Blog
+   Select theme   DarkLightAuto         Select language   EnglishEspañolFrançais日本語简体中文PolskiPortuguêsУкраїнськаРусский        Version   v1.xv2.xnext
+
+     Menu         Blog
+  Playground
+  Enterprise
+    Guides
+     Getting Started
+  Manual installation
+  Configure Biome
+  Use Biome in big projects
+  Upgrade to Biome v2
+  Integrate Biome with your VCS
+  Migrate from ESLint & Prettier
+  Investigate slowness
+
+    Formatter
+     Introduction
+  Differences with Prettier
+  Formatter Option Philosophy
+
+    Analyzer
+     Suppressions
+    Linter
+     Introduction
+  Domains
+  Plugins
+  JavaScript Rules
+  JavaScript Rules sources
+  CSS Rules
+  CSS Rules sources
+  JSON Rules
+  JSON Rules sources
+  GraphQL Rules
+  GraphQL Rules sources
+  HTML Rules
+  HTML Rules sources
+
+    Assist
+     Introduction
+  JavaScript Actions
+  JavaScript Actions sources
+  CSS Actions
+  CSS Actions sources
+  JSON Actions
+  JSON Actions sources
+  GraphQL Actions
+  GraphQL Actions sources
+  HTML Actions
+  HTML Actions sources
+
+    Biome Language Server
+     Introduction
+  First-party extensions
+  Third-party extensions
+
+    Reference
+     CLI
+  Diagnostics
+  Environment variables
+  Configuration
+  VS Code extension
+  Zed extension
+  GritQL
+  Daemon requests new
+
+    Recipes
+     Continuous Integration
+  Git Hooks
+  Renovate
+  Social Badges
+  GritQL Plugin Recipes
+
+    Internals
+     Philosophy
+  Language support
+  Architecture
+  People and Credits
+  Versioning
+  Changelog
+  Changelog v1
+
+      Discord   GitHub   Mastodon   Open Collective   YouTube   BlueSky   RSS
+   Blog
+   Select theme   DarkLightAuto        Select language   EnglishEspañolFrançais日本語简体中文PolskiPortuguêsУкраїнськаРусский       Version   v1.xv2.xnext
+
+           On this page
+     Overview
+  Suppression syntax     Inline suppressions
+  Top-level suppressions
+  Range suppressions
+  Plugin suppressions
+
+     On this page
+    Overview
+  Suppression syntax     Inline suppressions
+  Top-level suppressions
+  Range suppressions
+  Plugin suppressions
+
+     Sponsored by
+
+     Suppressions
+
+    The Biome analyzer is the foundation of the linter and assist; in fact, both tools share a lot of similarities.
+ Among them, they share the same suppression engine, which means that you can suppress a lint rule the same way you would suppress an assist action.
+ With suppression, it’s possible to turn off a lint rule (or action) for a specific line of code, a range, or the entire file.
+ Suppression is achievable with suppression comments.
+ Suppression syntax
+Section titled “Suppression syntax”
+ Suppression comments have the following format:
+
+1// biome-ignore lint: <explanation>2// biome-ignore assist: <explanation>3// biome-ignore syntax: <explanation>4// biome-ignore lint/suspicious: <explanation>5// biome-ignore lint/suspicious/noDebugger: <explanation>6// biome-ignore lint/suspicious/noDebugger(foo): <explanation>7// biome-ignore lint/plugin: <explanation>8// biome-ignore lint/plugin/<plugin-name>: <explanation>9// biome-ignore-all lint: <explanation>10// biome-ignore-start lint: <explanation>11// biome-ignore-end lint: <explanation>
+
+ Let’s break it down:
+  biome-ignore, biome-ignore-all, biome-ignore-start and biome-ignore-end are the start of a suppression comment.
+ After the space follows the category of the suppression comment. It can be lint, assist, or syntax.
+ The category is followed by an optional group, or group and name, separated by slashes. For example, /suspicious or /suspicious/noDebugger. The more you specify, the more specific (i.e. targeted) your suppression is.
+ Plugin diagnostics use lint/plugin. You can target all plugins with lint/plugin, or a single plugin with lint/plugin/<plugin-name>.
+ Some rules even allow you to specify values during suppression. These can be specified between parentheses, for example: (foo). Refer to the rule documentation to see whether a rule supports suppression with values.
+ <explanation> explanation why the rule is disabled.
+
+ If you’re unsure of the exact category of a rule/action, you can refer to their documentation page and use their diagnostic category.
+ Note
+From here onwards, JavaScript is used to explain suppression comments, and the lint category is used.
+
+ Inline suppressions
+Section titled “Inline suppressions”
+ They disable a lint rule for the next line of code.
+ In the following example, the suppression comment biome-ignore lint/suspicious/noDebugger: reason will disable the debugger; statement at line 2, but the debugger at line 3 will still raise a diagnostic:
+ file.js
+
+1// biome-ignore lint/suspicious/noDebugger: reason2debugger;3debugger;
+
+ Top-level suppressions
+Section titled “Top-level suppressions”
+ They disable a lint rule for an entire file. They must be placed at the top of the file, and they must start with biome-ignore-all.
+ These suppression comments are very useful when you want to suppress some lint rule for a particular file, and you don’t want to rely on a single configuration override to achieve that.
+ In the following example, the suppression comment biome-ignore-all lint/suspicious/noDebugger: reason will disable the lint rule for all lines in generated.js:
+ generated.js
+
+1// biome-ignore-all lint/suspicious/noDebugger: reason2debugger;3debugger;
+
+ When a top-level suppression comment isn’t at the top of the file, it is considered unused and Biome will emit a diagnostic with category suppression/unused.
+ Range suppressions
+Section titled “Range suppressions”
+ They disable a lint rule from a particular range in the file, starting from the line with the start comment, until the line with the end comment.
+ To mark the beginning of a range suppression, the suppression comment must start with // biome-ignore-start. To mark the end of it, the suppression comment must start with // biome-ignore-end.
+ The following example will disable the rule lint/suspicious/noDoubleEquals for line 2 and 3, but line 5 will raise a diagnostic:
+
+1// biome-ignore-start lint/suspicious/noDoubleEquals: reason2a == b;3c == d;4// biome-ignore-end lint/suspicious/noDoubleEquals: reason5f == g;
+
+ Note
+Range suppressions must have a matching biome-ignore-end suppression.
+
+ Range suppressions can also overlap. Consider the following example:
+
+1debugger;2// biome-ignore-start lint/suspicious/noDebugger: reason3debugger;4// biome-ignore-start lint/suspicious/noDoubleEquals: reason5a == b;6c == d;7// biome-ignore-end lint/suspicious/noDoubleEquals: reason8debugger;9f == g;10// biome-ignore-end lint/suspicious/noDebugger: reason
+
+ In the above code:
+  The debugger statement at line 1 will raise a diagnostic because there’s no suppression comment that disables it.
+ The comment // biome-ignore-start lint/suspicious/noDebugger: reason at line 2 starts disabling noDebugger from line 3 onwards.
+ The comment // biome-ignore-start lint/suspicious/noDoubleEquals: reason at line 4 starts disabling noDoubleEquals from line 5 onwards.
+ The comment // biome-ignore-end lint/suspicious/noDoubleEquals: reason at line 7 terminates the suppression of noDoubleEquals that was started by the suppression comment at line 4.
+ The debugger statement at line 8 doesn’t raise diagnostics due to the suppression comment at line 2.
+ The f == g statement raises a diagnostic because the rule noDoubleEquals isn’t suppressed anymore.
+ The comment // biome-ignore-end lint/suspicious/noDebugger: reason at line 10 terminates the suppression of noDebugger that was started by the suppression comment at line 2.
+
+ Plugin suppressions
+Section titled “Plugin suppressions”
+ They disable diagnostics emitted by linter plugins.
+ Use lint/plugin to suppress diagnostics from all plugins, or lint/plugin/<plugin-name> to suppress diagnostics from one plugin. The <plugin-name> is the plugin’s file name without the .grit extension.
+ In the following example, the suppression comment biome-ignore lint/plugin/preferObjectSpread: reason will disable diagnostics emitted by preferObjectSpread.grit for the next line:
+ file.js
+
+1// biome-ignore lint/plugin/preferObjectSpread: reason2Object.assign({}, foo);
+
+ To suppress diagnostics from all plugins, omit the plugin name:
+ file.js
+
+1// biome-ignore lint/plugin: reason2Object.assign({}, foo);
+
+ Plugin suppressions can also be authored as top-level and range suppressions.
+
+     Edit page
+     Previous
+ Formatter Option Philosophy      Next
+ Introduction
+
+   Sponsored by
+
+  Copyright (c) 2023-present Biome Developers and Contributors.
