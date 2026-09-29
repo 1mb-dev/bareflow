@@ -37,7 +37,8 @@ export function blockquote(text) {
 export function image(src, alt) {
   return { type: "image", src, ...(alt ? { alt } : {}) };
 }
-// text: the dropped block's source text, when the finding is about one block.
+// text: the dropped block's source text, when the finding is about one block. reason and text
+// carry untrusted page text.
 export function loss(reason, source, text) {
   return { type: "loss", reason, ...(source ? { source } : {}), ...(text != null ? { text } : {}) };
 }
@@ -53,10 +54,11 @@ export const SCOPE_KINDS = new Set(["page", "window"]);
 export const SIBLING_STATUS = new Set(["attached", "unfetched", "failed", "blocked", "absent"]);
 // An attached sibling is projected: whole verbatim blocks of the kept types, never a summary.
 export const PROJECTIONS = new Set(["headings+code", "full"]);
+export const PROJECTION_KEEP = new Set(["heading", "code"]);
 
-// UTF-8 bytes of the text an agent reads in these blocks: prose, code, list items, table cells,
-// image alt. No keys or syntax, so the count is the same under every render. Changing what
-// counts is a schema change.
+// UTF-8 bytes of these blocks' strings as stored: prose (with its inline Markdown), code, list
+// items, table cells, image alt. No keys or syntax; section losses are not counted. Changing
+// what counts is a schema change.
 const utf8 = new TextEncoder();
 export function textBytes(blocks) {
   let n = 0;
@@ -85,10 +87,14 @@ export function validate(doc) {
     if ((s.status === "absent") !== (s.url === undefined)) fail(`scope.siblings.${r}.url`, "present unless absent");
     if (s.url !== undefined && s.via !== "rel" && s.via !== "pager") fail(`scope.siblings.${r}.via`, "rel | pager, with url");
     if (s.status === "attached") {
-      if (!Number.isInteger(s.text_bytes) || s.text_bytes < 0) fail(`scope.siblings.${r}.text_bytes`, "non-negative integer when attached");
-      const o = s.projection?.omitted;
-      if (!PROJECTIONS.has(s.projection?.mode) || !o || typeof o !== "object" || !Object.values(o).every((n) => Number.isInteger(n) && n > 0))
-        fail(`scope.siblings.${r}.projection`, "{ mode: headings+code | full, omitted: { type: count } }");
+      const sec = (Array.isArray(doc.sections) ? doc.sections : []).find((x) => x?.url === s.url);
+      if (!sec || !Array.isArray(sec.blocks)) fail(`scope.siblings.${r}.url`, "attached sibling has a section with that url");
+      if (s.text_bytes !== textBytes(sec.blocks)) fail(`scope.siblings.${r}.text_bytes`, "UTF-8 bytes of the sibling section's blocks");
+      const { mode, omitted: o } = s.projection ?? {};
+      const types = o && typeof o === "object" && !Array.isArray(o) ? Object.keys(o) : null;
+      if (!PROJECTIONS.has(mode) || !types || (mode === "full" && types.length) ||
+          !types.every((t) => BLOCK_TYPES.has(t) && !PROJECTION_KEEP.has(t) && Number.isInteger(o[t]) && o[t] > 0))
+        fail(`scope.siblings.${r}.projection`, "{ mode: headings+code | full, omitted: { dropped type: count > 0 }, {} under full }");
     } else if (s.text_bytes !== null || s.projection !== undefined) fail(`scope.siblings.${r}`, "text_bytes null and no projection unless attached");
   }
   if (!Array.isArray(doc.breadcrumbs) || !doc.breadcrumbs.every((c) => typeof c?.url === "string" && typeof c.title === "string"))

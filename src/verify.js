@@ -355,6 +355,11 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("ir", "validate", "attached sibling needs text_bytes + projection; others carry null and none",
     bad((x) => delete x.next.text_bytes) && bad((x) => { x.next.projection = { mode: "summary", omitted: {} }; }) &&
     bad((x) => { x.next.projection.omitted = { paragraph: 0 }; }) && bad((x) => { x.prev.text_bytes = 0; }));
+  // The projection and its byte count are checked against the section, not only for shape.
+  record("ir", "validate", "text_bytes recounted; omitted names dropped types only, empty under full",
+    !bad(() => {}) && bad((x) => { x.next.text_bytes += 1; }) && bad((x) => { x.next.projection.omitted = []; }) &&
+    bad((x) => { x.next.projection.omitted = { paragraph: 1, heading: 1 }; }) && bad((x) => { x.next.projection.omitted = { prose: 1 }; }) &&
+    bad((x) => { x.next.projection.mode = "full"; }) && bad((x) => { x.next.url = "https://example.com/docs/c/"; }));
 }
 
 // Document-unit integrity: the compose/to-ir bugs that would ship broken sibling content.

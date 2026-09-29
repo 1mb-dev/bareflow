@@ -82,12 +82,11 @@ export function extractNav(html, url) {
 
 // A sibling is projected, not summarized: its headings and code blocks, whole and verbatim, in
 // order, with a count of each block type left out. "full" keeps every block.
-const KEEP = new Set(["heading", "code"]);
 function project(blocks, mode) {
   if (mode === "full") return { blocks, projection: { mode, omitted: {} } };
   const omitted = {};
   const kept = [];
-  for (const b of blocks) if (KEEP.has(b.type)) kept.push(b); else omitted[b.type] = (omitted[b.type] ?? 0) + 1;
+  for (const b of blocks) if (ir.PROJECTION_KEEP.has(b.type)) kept.push(b); else omitted[b.type] = (omitted[b.type] ?? 0) + 1;
   return { blocks: kept, projection: { mode, omitted } };
 }
 
