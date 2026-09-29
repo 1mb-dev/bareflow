@@ -533,6 +533,13 @@ for (const [id, spec] of Object.entries(inventory)) {
   await handle(new Request("https://m/?url=https://example.com/c&siblings=bogus"), {}, { run: spyRun, kv: makeKv() });
   record("agent-surface", "siblings", "default projection, siblings=full passes through, anything else is the default",
     JSON.stringify(modes) === JSON.stringify(["headings+code", "full", "headings+code"]));
+  // The projection is in the cache key as handle() builds it: one URL, one shared kv, default
+  // then full is two misses, and a repeat of each is a hit.
+  const kv = makeKv();
+  const cacheOf = async (q) => (await handle(new Request(`https://m/?url=https://example.com/d${q}`), {}, { run: okRun, kv })).headers.get("x-mdflow-cache");
+  const seen = [await cacheOf(""), await cacheOf("&siblings=full"), await cacheOf(""), await cacheOf("&siblings=full")];
+  record("agent-surface", "cache-key", "same URL, shared kv: default and full cached apart",
+    JSON.stringify(seen) === JSON.stringify(["miss", "miss", "hit", "hit"]));
 
   const r6 = await handle(new Request("https://m/"), {}, { run: okRun, kv: makeKv() });
   record("agent-surface", "boundary", "400", r6.status === 400);
