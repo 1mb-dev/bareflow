@@ -1,15 +1,24 @@
 #!/usr/bin/env node
-// mdflow CLI: mdflow <url> [--json] [--siblings full]
+// mdflow CLI: mdflow <url> [--json] [--siblings headings+code|full]
 import { run } from "../src/pipeline.js";
+import { PROJECTIONS } from "../src/ir.js";
 
+const USAGE = "usage: mdflow <url> [--json] [--siblings headings+code|full]";
 const args = process.argv.slice(2);
-const at = args.indexOf("--siblings");
-const siblings = at < 0 ? "headings+code" : args[at + 1];
-const url = args.find((a, i) => !a.startsWith("--") && (at < 0 || i !== at + 1));
-const asJson = args.includes("--json");
+let url, asJson = false, siblings = "headings+code", bad = false;
+// One URL, each flag at most as written: an unknown flag, a second URL, or a bad mode is a usage
+// error, never silently ignored or read as the URL.
+for (let i = 0; i < args.length; i++) {
+  const a = args[i];
+  if (a === "--json") asJson = true;
+  else if (a === "--siblings") siblings = args[++i];
+  else if (a.startsWith("--siblings=")) siblings = a.slice("--siblings=".length);
+  else if (!a.startsWith("-") && url === undefined) url = a;
+  else bad = true;
+}
 
-if (!url || (at >= 0 && siblings !== "full")) {
-  console.error("usage: mdflow <url> [--json] [--siblings full]");
+if (bad || !url || !PROJECTIONS.has(siblings)) {
+  console.error(USAGE);
   process.exit(2);
 }
 

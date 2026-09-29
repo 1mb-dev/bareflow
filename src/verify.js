@@ -581,6 +581,17 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("nav", "pager", "via reaches scope.siblings", doc.scope.siblings.prev.via === "pager" && doc.scope.siblings.next.status === "unfetched" && doc.scope.siblings.next.via === "pager");
 }
 
+// CLI arguments: a usage error exits 2 before any fetch; a parsed call reaches run(), which
+// refuses the private address (exit 1). No network.
+{
+  const cli = (args) => new Promise((ok) => spawn(process.execPath, [join(ROOT, "bin/mdflow.js"), ...args], { stdio: "ignore" }).on("exit", ok));
+  const L = "http://127.0.0.1/";
+  const codes = await Promise.all([[L], [L, "--siblings=full"], [L, "--siblings", "headings+code"], ["--siblings", "full", L],
+    [L, "--siblings=bogus"], [L, L], ["--siblings", L], [L, "--jsn"], []].map(cli));
+  record("agent-surface", "cli", "flags parse or exit 2; a second URL, unknown flag, or bad mode is an error",
+    JSON.stringify(codes) === JSON.stringify([1, 1, 1, 1, 2, 2, 2, 2, 2]));
+}
+
 // The local reader: frozen window, judged findings, and the source served without its scripts.
 {
   const child = spawn(process.execPath, [join(ROOT, "bin/reader.js"), "0"], { stdio: ["ignore", "pipe", "inherit"] });
