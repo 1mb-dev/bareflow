@@ -10,7 +10,7 @@ import { auditSourceLoss, restoreCodeLayout, sourceTitle } from "./loss-audit.js
 import { isIP } from "node:net";
 import { isPrivateIp } from "./ssrf.js";
 import { compose, extractNav } from "./compose.js";
-import { validate } from "./ir.js";
+import { validate, PROJECTIONS } from "./ir.js";
 import { renderMarkdown } from "./render.js";
 
 const require = createRequire(import.meta.url);
@@ -58,6 +58,7 @@ async function buildSibling(surl, fetch) {
 
 // siblings: "headings+code" projects attached siblings (the default), "full" keeps every block.
 export async function run({ url, html, retrievedAt, fetch = fetchSnapshot, siblings: siblingMode = "headings+code" }) {
+  if (!PROJECTIONS.has(siblingMode)) throw new Error(`siblings: headings+code | full, got ${siblingMode}`);
   let snap;
   if (html != null) {
     snap = {

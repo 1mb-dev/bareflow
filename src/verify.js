@@ -360,6 +360,9 @@ for (const [id, spec] of Object.entries(inventory)) {
     !bad(() => {}) && bad((x) => { x.next.text_bytes += 1; }) && bad((x) => { x.next.projection.omitted = []; }) &&
     bad((x) => { x.next.projection.omitted = { paragraph: 1, heading: 1 }; }) && bad((x) => { x.next.projection.omitted = { prose: 1 }; }) &&
     bad((x) => { x.next.projection.mode = "full"; }) && bad((x) => { x.next.url = "https://example.com/docs/c/"; }));
+  // An unknown mode fails at the call, not as a mislabelled projection when a sibling attaches.
+  const rejects = await run({ url, fetch: pagesFetch(pages), retrievedAt: FIXED, siblings: "headings" }).then(() => false, (e) => /^siblings: /.test(e.message));
+  record("document-unit", "projection", "run rejects an unknown siblings mode", rejects);
 }
 
 // Document-unit integrity: the compose/to-ir bugs that would ship broken sibling content.
