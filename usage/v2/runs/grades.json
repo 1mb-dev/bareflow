@@ -1,0 +1,215 @@
+{
+  "T1": {
+    "X": {
+      "M1": {"score": 1, "reason": "Quotes the caveat: heavy computation not needing same process -> bigger tool like Celery."},
+      "M2": {"score": 1, "reason": "States same-app variables or small tasks like email notification are fine with BackgroundTasks."},
+      "W1": {"score": 0, "reason": "Recommends a queue for video/heavy work, not BackgroundTasks."}
+    },
+    "Y": {
+      "M1": {"score": 1, "reason": "States heavy computation not needing same process/shared memory should go to Celery."},
+      "M2": {"score": 1, "reason": "Table puts light work like sending an email in the BackgroundTasks column."},
+      "W1": {"score": 0, "reason": "Recommends a queue for CPU-heavy video work."}
+    },
+    "Z": {
+      "M1": {"score": 1, "reason": "Quotes the Celery caveat for heavy computation not needing the same process."},
+      "M2": {"score": 1, "reason": "Quotes that same-app variables or small tasks (email) can simply use BackgroundTasks."},
+      "W1": {"score": 0, "reason": "Recommends Celery/ARQ for video processing."}
+    }
+  },
+  "T2": {
+    "X": {
+      "M1": {"score": 1, "reason": "Lists ValidationInfo as data/context/mode/field_name and says there is no .annotation or .model."},
+      "M2": {"score": 1, "reason": "Shows __get_pydantic_core_schema__(self, source_type, handler) receiving the annotated type as source_type."},
+      "W1": {"score": 0, "reason": "Explicitly denies ValidationInfo has .annotation/.model."},
+      "W2": {"score": 0, "reason": "Never equates source_type with cls; says the marker cannot reach cls."}
+    },
+    "Y": {
+      "M1": {"score": 1, "reason": "Says ValidationInfo gives field_name (not the type) and neither mechanism hands you the model class."},
+      "M2": {"score": 1, "reason": "Option B shows __get_pydantic_core_schema__ receiving source_type."},
+      "W1": {"score": 0, "reason": "Does not claim ValidationInfo has .model/.annotation."},
+      "W2": {"score": 0, "reason": "Does not equate source_type with cls."}
+    },
+    "Z": {
+      "M1": {"score": 1, "reason": "States ValidationInfo has field_name but does not expose the model class or model_fields."},
+      "M2": {"score": 1, "reason": "Shows __get_pydantic_core_schema__ passing source_type, the type being annotated."},
+      "W1": {"score": 0, "reason": "Explicitly says ValidationInfo lacks model/class access."},
+      "W2": {"score": 0, "reason": "Describes source_type as the annotated type, not cls."}
+    }
+  },
+  "T3": {
+    "X": {
+      "M1": {"score": 1, "reason": "Sets server.port nested under server in vite.config.js; default 5173 only implied via the fallback example, but the substance is present."},
+      "W1": {"score": 0, "reason": "Uses server.port, not a top-level port key."},
+      "W2": {"score": 0, "reason": "No other default claimed; fallback uses 5173."}
+    },
+    "Y": {
+      "M1": {"score": 1, "reason": "server.port in vite.config.js, number, default 5173."},
+      "W1": {"score": 0, "reason": "Nested under server."},
+      "W2": {"score": 0, "reason": "States default 5173."}
+    },
+    "Z": {
+      "M1": {"score": 1, "reason": "server.port in vite.config.js, type number, default 5173."},
+      "W1": {"score": 0, "reason": "Nested under server."},
+      "W2": {"score": 0, "reason": "States default 5173."}
+    }
+  },
+  "T4": {
+    "X": {
+      "M1": {"score": 1, "reason": "Performs the login once in globalSetup, Node-side, before any browser instance starts."},
+      "M2": {"score": 0, "reason": "Passes state via a .auth/state.json file and env var, not provide/inject (provide only appears in a quoted unrelated example)."},
+      "M3": {"score": 1, "reason": "Option (b) seeds the token with localStorage.setItem in setupFiles, run per test file."},
+      "W1": {"score": 1, "reason": "Writes a Playwright storageState file (context.storageState to .auth/state.json) and replays it; also suggests Playwright Test storageState."},
+      "W2": {"score": 0, "reason": "Says globalSetup runs once before any browser instance, not per file."}
+    },
+    "Y": {
+      "M1": {"score": 1, "reason": "Real login done once in globalSetup (plain Node, once before any test file)."},
+      "M2": {"score": 1, "reason": "Token alternative passes the token via provide('authToken') in globalSetup and inject('authToken') in tests."},
+      "M3": {"score": 1, "reason": "setupFiles does localStorage.setItem(inject('authToken')), re-running per test file in the browser."},
+      "W1": {"score": 1, "reason": "Primary pattern writes a storageState file in globalSetup and feeds it via instance context: { storageState }."},
+      "W2": {"score": 0, "reason": "States globalSetup runs once per whole run."}
+    },
+    "Z": {
+      "M1": {"score": 1, "reason": "Login via API once in globalSetup, Node-side, once per run."},
+      "M2": {"score": 0, "reason": "Uses a .auth/user.json file plus a custom command; no provide/inject."},
+      "M3": {"score": 1, "reason": "setupFiles runs in the browser per test file and applies the auth state before that file's tests (via a command)."},
+      "W1": {"score": 1, "reason": "Writes a Playwright-storageState-shaped .auth/user.json (cookies + origins.localStorage) and replays it."},
+      "W2": {"score": 0, "reason": "States globalSetup runs once per run."}
+    }
+  },
+  "T5": {
+    "X": {
+      "M1": {"score": 1, "reason": "Fix forwards the wrapped plugin's validateOptions as the wrapper's export (and runs it) so defaults are applied."},
+      "W1": {"score": 0, "reason": "Explicitly says configureWebpack is only where the error surfaces; fix is validation."}
+    },
+    "Y": {
+      "M1": {"score": 1, "reason": "Fix re-exports validateOptions (and validateThemeConfig) from the wrapped plugin."},
+      "W1": {"score": 0, "reason": "Delegates configureWebpack but names forwarding validateOptions as the key fix."}
+    },
+    "Z": {
+      "M1": {"score": 1, "reason": "Fix re-exports validateOptions from @docusaurus/plugin-content-docs on the wrapper module."},
+      "W1": {"score": 0, "reason": "Does not attribute the fix to configureWebpack."}
+    }
+  },
+  "T6": {
+    "X": {
+      "M1": {"score": 1, "reason": "Identifies [format] preview (or top-level preview) as the toggle for preview-gated styles like hugging."},
+      "M2": {"score": 0, "reason": "Never mentions lint.preview or that it only affects lint rules/fixes."},
+      "W1": {"score": 0, "reason": "No claim that lint.preview changes format output."},
+      "W2": {"score": 0, "reason": "Says the doc does not cover the hug-brackets feature name."}
+    },
+    "Y": {
+      "M1": {"score": 1, "reason": "Says to set [format] preview = true to get hugging braces."},
+      "M2": {"score": 0, "reason": "Does not state lint.preview is scoped to lint rules/fixes only."},
+      "W1": {"score": 0, "reason": "No such claim."},
+      "W2": {"score": 0, "reason": "Names hug_parens_with_braces_and_square_brackets from memory but does not claim it is documented on the preview-style page."}
+    },
+    "Z": {
+      "M1": {"score": 1, "reason": "Cites format.preview as the documented formatter preview setting."},
+      "M2": {"score": 0, "reason": "Does not discuss lint.preview scope."},
+      "W1": {"score": 0, "reason": "No such claim."},
+      "W2": {"score": 0, "reason": "Mentions the Black feature name from memory, not as documented on the preview-style page."}
+    }
+  },
+  "T7": {
+    "X": {
+      "M1": {"score": 1, "reason": "Generates 0_init via migrate diff --from-empty and marks it applied without running it."},
+      "M2": {"score": 1, "reason": "Uses prisma migrate resolve --applied 0_init before using migrate deploy on the tenant DB; per-DB repetition not spelled out but question is about one DB."},
+      "W1": {"score": 0, "reason": "Row is written by migrate resolve, not manual insertion."}
+    },
+    "Y": {
+      "M1": {"score": 1, "reason": "Baseline migration from schema, marked applied instead of run."},
+      "M2": {"score": 1, "reason": "migrate resolve --applied 0_init, per existing tenant database, before migrate deploy."},
+      "W1": {"score": 0, "reason": "No manual table edits."}
+    },
+    "Z": {
+      "M1": {"score": 1, "reason": "Baseline 0_init generated with migrate diff --from-empty, marked applied."},
+      "M2": {"score": 1, "reason": "migrate resolve --applied 0_init once per tenant database; deploy then skips it."},
+      "W1": {"score": 0, "reason": "Row inserted via migrate resolve, not manually."}
+    }
+  },
+  "T8": {
+    "X": {
+      "M1": {"score": 1, "reason": "Explains list-style-image renders via ::marker, which ignores width/height; size fixed by the image."},
+      "M2": {"score": 1, "reason": "before: pseudo-element example with before:content-['']."},
+      "M3": {"score": 1, "reason": "Sizes the box with before:h-4 before:w-4 and lists size-* as applicable; sets width and height of the box."},
+      "W1": {"score": 0, "reason": "No list-image-size utility claimed."}
+    },
+    "Y": {
+      "M1": {"score": 1, "reason": "States list-image sets list-style-image and marker ignores sizing properties."},
+      "M2": {"score": 1, "reason": "Uses before:content-[''] for the pseudo-element box."},
+      "M3": {"score": 1, "reason": "before:size-4 described as combined width+height utility."},
+      "W1": {"score": 0, "reason": "Says there is no companion size utility."}
+    },
+    "Z": {
+      "M1": {"score": 1, "reason": "list-image sets list-style-image; ::marker allow-list excludes width/height; size fixed at intrinsic dimensions."},
+      "M2": {"score": 1, "reason": "before:content-[''] creates an empty pseudo-element to size."},
+      "M3": {"score": 1, "reason": "Sizes with before:h-4 before:w-4 or before:size-4."},
+      "W1": {"score": 0, "reason": "No such utility claimed."}
+    }
+  },
+  "T9": {
+    "X": {
+      "M1": {"score": 1, "reason": "Quotes: recognized only if installed with rustup and the first argument begins with +."},
+      "W1": {"score": 0, "reason": "No claim +toolchain can appear anywhere."},
+      "W2": {"score": 0, "reason": "Says a non-rustup cargo will not interpret +nightly."}
+    },
+    "Y": {
+      "M1": {"score": 1, "reason": "Quotes the rustup + first-argument condition."},
+      "W1": {"score": 0, "reason": "Argument-order note does not say +toolchain may appear anywhere."},
+      "W2": {"score": 0, "reason": "Says + handling never triggers without rustup."}
+    },
+    "Z": {
+      "M1": {"score": 1, "reason": "States +toolchain is implemented by rustup's shim and must be argv[1]."},
+      "W1": {"score": 0, "reason": "Explicitly says reordering after -Zscript fails."},
+      "W2": {"score": 0, "reason": "Says non-rustup cargo errors on +nightly."}
+    }
+  },
+  "T10": {
+    "X": {
+      "M1": {"score": 1, "reason": "Explains one global tree, single toctree parent driving prev/next/breadcrumbs, so double listing warns."},
+      "M2": {"score": 1, "reason": "Recommends a plain list of bare :doc: links (which take the target title) that register no toc parent; auto-title not stated explicitly."},
+      "W1": {"score": 0, "reason": "Frames suppression as hiding a real structural signal, not consequence-free."}
+    },
+    "Y": {
+      "M1": {"score": 1, "reason": "Single hierarchy with one parent for prev/next/parent links and breadcrumbs; duplicates cause the warning."},
+      "M2": {"score": 1, "reason": "Recommends bare :doc: links for a curated non-hierarchy list; auto-title not stated explicitly."},
+      "W1": {"score": 0, "reason": "Says there is no clean way to have two toctree parents without the warning."}
+    },
+    "Z": {
+      "M1": {"score": 1, "reason": "Cites hidden toctree 'only defines the document hierarchy' and notes prev/next/breadcrumb parent ambiguity."},
+      "M2": {"score": 1, "reason": "Recommends :doc: cross-reference links for the shallow list, which do not register parent/child; shows explicit-title form, auto-title not stated."},
+      "W1": {"score": 0, "reason": "Notes suppression leaves prev/next ambiguity, so not consequence-free."}
+    }
+  },
+  "T11": {
+    "X": {
+      "M1": {"score": 1, "reason": "States setSignedCookie stages the header on the Context/c.res, not on an arbitrary Response."},
+      "M2": {"score": 1, "reason": "Alternative assigns c.res = new Response(assetRes.body, assetRes) before setSignedCookie and returns c.res."},
+      "W1": {"score": 0, "reason": "Says Hono does not merge staged headers into the returned Response."}
+    },
+    "Y": {
+      "M1": {"score": 1, "reason": "setSignedCookie mutates headers on c.res."},
+      "M2": {"score": 1, "reason": "Merges c.res Set-Cookie values onto a new Response built from the asset response instead of returning ASSETS.fetch() directly."},
+      "W1": {"score": 0, "reason": "Explicitly says Hono never merges them."}
+    },
+    "Z": {
+      "M1": {"score": 1, "reason": "setSignedCookie writes Set-Cookie onto c.res."},
+      "M2": {"score": 1, "reason": "Second fix copies the Set-Cookie from c.res onto a wrapped asset Response (merge)."},
+      "W1": {"score": 0, "reason": "Says Hono does not merge c.res headers into a separately returned Response."}
+    }
+  },
+  "T12": {
+    "X": {
+      "M1": {"score": 1, "reason": "Gives // biome-ignore lint/plugin/<plugin-name>: <explanation>."},
+      "W1": {"score": 0, "reason": "Only mentions lint/plugin (all plugins), not bare lint:."}
+    },
+    "Y": {
+      "M1": {"score": 1, "reason": "Gives // biome-ignore lint/plugin/<plugin-name>: <explanation>."},
+      "W1": {"score": 0, "reason": "No bare lint: form for plugin targeting."}
+    },
+    "Z": {
+      "M1": {"score": 1, "reason": "Gives // biome-ignore lint/plugin/<name>: <reason>; syntax correct though it calls the segment the declared rule name rather than the .grit file name."},
+      "W1": {"score": 0, "reason": "Mentions bare lint: only as suppressing every lint rule, not as plugin-specific."}
+    }
+  }
+}

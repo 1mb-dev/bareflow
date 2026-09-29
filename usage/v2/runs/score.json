@@ -1,0 +1,430 @@
+{
+  "retained": 2,
+  "wins": 0,
+  "losses": 1,
+  "ties": 1,
+  "harm": false,
+  "qualityGo": false,
+  "cost": {
+    "fails": 5,
+    "band": 6,
+    "pass": 1,
+    "holds": false
+  },
+  "verdict": "quality no-go: the window is not the core on real tasks, reconvene",
+  "passes": {
+    "a": 10,
+    "b": 10,
+    "c": 10
+  },
+  "rows": [
+    {
+      "id": "T1",
+      "a": {
+        "score": 2,
+        "pass": true,
+        "doc": 11,
+        "memory": 10,
+        "tokens": 55102
+      },
+      "c": {
+        "score": 2,
+        "pass": true,
+        "doc": 0,
+        "memory": 16,
+        "tokens": 47742
+      },
+      "b": {
+        "score": 2,
+        "pass": true,
+        "doc": 10,
+        "memory": 7,
+        "tokens": 48532
+      },
+      "retained": false,
+      "d": 0,
+      "reach": 0,
+      "quotes": {
+        "a": 2,
+        "b": 2,
+        "of": 2
+      },
+      "R": 2.027,
+      "cost": "fail"
+    },
+    {
+      "id": "T2",
+      "a": {
+        "score": 2,
+        "pass": true,
+        "doc": 15,
+        "memory": 11,
+        "tokens": 72890
+      },
+      "c": {
+        "score": 2,
+        "pass": true,
+        "doc": 0,
+        "memory": 16,
+        "tokens": 53749
+      },
+      "b": {
+        "score": 2,
+        "pass": true,
+        "doc": 0,
+        "memory": 4,
+        "tokens": 59738
+      },
+      "retained": false,
+      "d": 0,
+      "reach": 0,
+      "quotes": {
+        "a": 1,
+        "b": 1,
+        "of": 2
+      },
+      "R": 1.863,
+      "cost": "band"
+    },
+    {
+      "id": "T3",
+      "c": {
+        "score": 1,
+        "pass": true,
+        "doc": 0,
+        "memory": 6,
+        "tokens": 39054
+      },
+      "b": {
+        "score": 1,
+        "pass": true,
+        "doc": 6,
+        "memory": 2,
+        "tokens": 46779
+      },
+      "a": {
+        "score": 1,
+        "pass": true,
+        "doc": 6,
+        "memory": 3,
+        "tokens": 55116
+      },
+      "retained": false,
+      "d": 0,
+      "reach": 0,
+      "quotes": {
+        "a": 0,
+        "b": 1,
+        "of": 1
+      },
+      "R": 1.967,
+      "cost": "fail"
+    },
+    {
+      "id": "T4",
+      "a": {
+        "score": 1,
+        "pass": false,
+        "doc": 1,
+        "memory": 3,
+        "tokens": 57157
+      },
+      "b": {
+        "score": 2,
+        "pass": false,
+        "doc": 4,
+        "memory": 10,
+        "tokens": 55785
+      },
+      "c": {
+        "score": 1,
+        "pass": false,
+        "doc": 0,
+        "memory": 14,
+        "tokens": 54589
+      },
+      "retained": true,
+      "d": -1,
+      "reach": 0,
+      "quotes": {
+        "a": 0,
+        "b": 0,
+        "of": 3
+      },
+      "R": 1.347,
+      "cost": "band"
+    },
+    {
+      "id": "T5",
+      "c": {
+        "score": 1,
+        "pass": true,
+        "doc": 1,
+        "memory": 7,
+        "tokens": 52943
+      },
+      "a": {
+        "score": 1,
+        "pass": true,
+        "doc": 5,
+        "memory": 1,
+        "tokens": 56370
+      },
+      "b": {
+        "score": 1,
+        "pass": true,
+        "doc": 2,
+        "memory": 14,
+        "tokens": 54341
+      },
+      "retained": false,
+      "d": 0,
+      "reach": 0,
+      "quotes": {
+        "a": 0,
+        "b": 0,
+        "of": 1
+      },
+      "R": 1.604,
+      "cost": "band"
+    },
+    {
+      "id": "T6",
+      "b": {
+        "score": 1,
+        "pass": false,
+        "doc": 8,
+        "memory": 10,
+        "tokens": 54511
+      },
+      "c": {
+        "score": 1,
+        "pass": false,
+        "doc": 0,
+        "memory": 13,
+        "tokens": 45353
+      },
+      "a": {
+        "score": 1,
+        "pass": false,
+        "doc": 6,
+        "memory": 12,
+        "tokens": 59413
+      },
+      "retained": true,
+      "d": 0,
+      "reach": 0,
+      "quotes": {
+        "a": 0,
+        "b": 0,
+        "of": 2
+      },
+      "R": 1.705,
+      "cost": "band"
+    },
+    {
+      "id": "T7",
+      "c": {
+        "score": 2,
+        "pass": true,
+        "doc": 0,
+        "memory": 26,
+        "tokens": 48427
+      },
+      "b": {
+        "score": 2,
+        "pass": true,
+        "doc": 9,
+        "memory": 3,
+        "tokens": 45560
+      },
+      "a": {
+        "score": 2,
+        "pass": true,
+        "doc": 8,
+        "memory": 8,
+        "tokens": 48867
+      },
+      "retained": false,
+      "d": 0,
+      "reach": 0,
+      "quotes": {
+        "a": 1,
+        "b": 1,
+        "of": 2
+      },
+      "R": 1.757,
+      "cost": "band"
+    },
+    {
+      "id": "T8",
+      "a": {
+        "score": 3,
+        "pass": true,
+        "doc": 3,
+        "memory": 6,
+        "tokens": 45670
+      },
+      "b": {
+        "score": 3,
+        "pass": true,
+        "doc": 4,
+        "memory": 3,
+        "tokens": 45919
+      },
+      "c": {
+        "score": 3,
+        "pass": true,
+        "doc": 0,
+        "memory": 6,
+        "tokens": 44862
+      },
+      "retained": false,
+      "d": 0,
+      "reach": 0,
+      "quotes": {
+        "a": 0,
+        "b": 0,
+        "of": 3
+      },
+      "R": 0.86,
+      "cost": "pass"
+    },
+    {
+      "id": "T9",
+      "a": {
+        "score": 1,
+        "pass": true,
+        "doc": 5,
+        "memory": 4,
+        "tokens": 54857
+      },
+      "b": {
+        "score": 1,
+        "pass": true,
+        "doc": 3,
+        "memory": 2,
+        "tokens": 57795
+      },
+      "c": {
+        "score": 1,
+        "pass": true,
+        "doc": 0,
+        "memory": 6,
+        "tokens": 53627
+      },
+      "retained": false,
+      "d": 0,
+      "reach": 0,
+      "quotes": {
+        "a": 1,
+        "b": 1,
+        "of": 1
+      },
+      "R": 2.039,
+      "cost": "fail"
+    },
+    {
+      "id": "T10",
+      "c": {
+        "score": 2,
+        "pass": true,
+        "doc": 0,
+        "memory": 7,
+        "tokens": 48502
+      },
+      "b": {
+        "score": 2,
+        "pass": true,
+        "doc": 4,
+        "memory": 3,
+        "tokens": 66140
+      },
+      "a": {
+        "score": 2,
+        "pass": true,
+        "doc": 4,
+        "memory": 5,
+        "tokens": 67576
+      },
+      "retained": false,
+      "d": 0,
+      "reach": 0,
+      "quotes": {
+        "a": 1,
+        "b": 1,
+        "of": 2
+      },
+      "R": 1.724,
+      "cost": "band"
+    },
+    {
+      "id": "T11",
+      "a": {
+        "score": 2,
+        "pass": true,
+        "doc": 5,
+        "memory": 7,
+        "tokens": 54983
+      },
+      "c": {
+        "score": 2,
+        "pass": true,
+        "doc": 0,
+        "memory": 12,
+        "tokens": 46670
+      },
+      "b": {
+        "score": 2,
+        "pass": true,
+        "doc": 3,
+        "memory": 4,
+        "tokens": 47681
+      },
+      "retained": false,
+      "d": 0,
+      "reach": 0,
+      "quotes": {
+        "a": 1,
+        "b": 1,
+        "of": 2
+      },
+      "R": 2.138,
+      "cost": "fail"
+    },
+    {
+      "id": "T12",
+      "b": {
+        "score": 1,
+        "pass": true,
+        "doc": 13,
+        "memory": 1,
+        "tokens": 43233
+      },
+      "a": {
+        "score": 1,
+        "pass": true,
+        "doc": 8,
+        "memory": 1,
+        "tokens": 48792
+      },
+      "c": {
+        "score": 1,
+        "pass": true,
+        "doc": 0,
+        "memory": 7,
+        "tokens": 47613
+      },
+      "retained": false,
+      "d": 0,
+      "reach": 0,
+      "quotes": {
+        "a": 1,
+        "b": 1,
+        "of": 1
+      },
+      "R": 2.378,
+      "cost": "fail"
+    }
+  ]
+}
