@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:http";
+import { createServer, get as httpGet } from "node:http";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -750,6 +750,10 @@ for (const [id, spec] of Object.entries(inventory)) {
     const [u1t, u5t, rawt] = await Promise.all([u1.text(), u5.text(), raw.text()]);
     record("reader", "document", "U1 shows the page and its nav, no window", u1t.includes("scope: <b>page</b>") && u1t.includes("prev: via rel") && !u1t.includes('class="role"'));
     record("reader", "findings", "U5 demotions judged against labels", (u5t.match(/<b>demoted<\/b> source-heading-demoted/g) || []).length === 2);
+    const hostOf = (host) => new Promise((ok) => httpGet(base + "f/U1", { headers: { host } }, (r) => { r.resume(); ok(r.statusCode); }).on("error", () => ok(0)));
+    const port = new URL(base).port;
+    const [evil, loop, local] = await Promise.all([hostOf("evil.test"), hostOf(`127.0.0.1:${port}`), hostOf(`localhost:${port}`)]);
+    record("reader", "host", "a non-loopback Host gets 403; 127.0.0.1 and localhost are served", evil === 403 && loop === 200 && local === 200);
     record("reader", "source", "no page scripts, base after the doctype",
       raw.headers.get("content-security-policy")?.includes("script-src 'none'") && rawt.startsWith('<!doctype html><base href="https://nodejs.org/api/path.html">'));
   } catch (e) {

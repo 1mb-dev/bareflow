@@ -132,6 +132,10 @@ function page(title, src, docHtml, side, plain = false) {
 }
 
 const server = createServer(async (req, res) => {
+  // Loopback names only: a page in the owner's browser that rebinds its own name to 127.0.0.1
+  // could otherwise read the reader's responses.
+  const port = server.address().port;
+  if (![`127.0.0.1:${port}`, `localhost:${port}`].includes(req.headers.host)) { res.writeHead(403, { "content-type": "text/plain" }); return res.end("forbidden host"); }
   const u = new URL(req.url, "http://localhost");
   const send = (code, body, type = "text/html; charset=utf-8", extra = {}) => { res.writeHead(code, { "content-type": type, ...extra }); res.end(body); };
   try {
