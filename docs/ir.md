@@ -31,10 +31,13 @@ inline Markdown: mdflow's own `**`, `*`, links, images, and code spans around pa
 escaped where it joins them, so it opens no construct of its own:
 
 - `` ` `` `*` `[` `]` `~` always; `_` unless both neighbours are letters or digits; `\` before
-  punctuation and at the end of a run; `<` before a letter, `/`, `!`, `?`, or at the end of a run;
-  `&` before an entity-like run (`&amp;`, `&#10;`); `|` in table cells.
-- At the start of a field: `#` `>` `+` `-`, and the `.` or `)` after a leading number; a heading's
-  closing `#` run.
+  punctuation; `<` before a letter, `/`, `!`, `?`; `&` before an entity-like run (`&amp;`,
+  `&#10;`); `|` in table cells. At the end of a text run, where mdflow's syntax may follow, `\`
+  `<` `&` `!` are escaped too.
+- At the start of a paragraph, list item, or quote: `#` `>` `+` `-`, and the `.` or `)` after a
+  leading number. A heading's closing `#` run.
+- A link or emphasis holding elements (an image, code) keeps them as inline Markdown; with no
+  content it is left out.
 - Link and image targets: http(s), mailto, or relative (read as a browser reads them, entities
   decoded); any other scheme keeps the text only. Whitespace is percent-encoded and `( ) \` escaped.
 - The only line break in a prose field is `"\n"`, from `<br>`; other HTML whitespace collapses.
@@ -80,7 +83,8 @@ by the server or the page, and one holding a `'` is left out.
 
 Then the page: the section title as `#`, each block, a prose field's `"\n"` written as `<br>`,
 adjacent lists of one kind with alternating markers so they stay two. The title and an image's
-alt are escaped as page text; an image whose `src` is not http(s) renders as its alt.
+alt are escaped as page text. A block image without an http(s) `src` becomes its alt as a
+paragraph, or, with no alt, an `extract-unrepresentable` loss.
 
 Then, when there are losses, one heading, `## mdflow: 1 loss (fingerprint F)` or
 `## mdflow: N losses (fingerprint F)` with F the header's fingerprint, and one note per loss:
