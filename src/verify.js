@@ -95,6 +95,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("truth-harness", "fails on", "demoted finding on a lost block", fails(demotedFinding, lost, /^new false positive \(lost\)/));
   record("truth-harness", "fails on", "demoted label whose text is gone", fails(withLosses(true), { labels: { demoted: [H("Gone")] } }, /labelled demoted but text not in IR/));
   record("truth-harness", "fails on", "lost label on a block in the IR", fails(doc, lost, /labelled lost but in IR/));
+  record("truth-harness", "fails on", "demoted label on a block present as its type", fails(doc, { labels: { demoted: [H("Gone")] } }, /labelled demoted but present as heading/));
   // Structure: a moved block, a changed level, and a block under a heading the source lacks each
   // fail; a known_structure entry that no longer fires is stale.
   const reshaped = (f) => ({ ...doc, sections: [{ ...page, blocks: f(page.blocks) }] });
