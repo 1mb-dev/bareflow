@@ -3,6 +3,7 @@
 import { parseHTML } from "linkedom";
 import * as ir from "./ir.js";
 import { innerMain } from "./html.js";
+import { codeSpan } from "./md.js";
 
 const LOSSLESS_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD"]);
 // Math / interactive widgets often carry these classes.
@@ -28,14 +29,6 @@ function inlineMarkdown(node, out = []) {
     }
   }
   return out.join("");
-}
-
-// Inline code delimited by a backtick run longer than any inside it, padded when it starts or
-// ends with one (CommonMark code spans): `` ``` `` stays code, not a fence.
-function codeSpan(t) {
-  const d = "`".repeat(Math.max(0, ...(t.match(/`+/g) ?? []).map((r) => r.length)) + 1);
-  const pad = /^`|`$/.test(t) ? " " : "";
-  return `${d}${pad}${t}${pad}${d}`;
 }
 
 function textContent(node) {

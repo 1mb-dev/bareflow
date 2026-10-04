@@ -19,6 +19,8 @@ const NOTE = {
   "extract-unrepresentable": "embed or interactive content not representable; source:",
 };
 const REASON_IS_MDFLOW = new Set(["extract-flattened", "audit-scope-empty", "audit-truncated"]);
+import { fenced } from "./md.js";
+
 export const NOTE_SOURCES = [...Object.keys(NOTE), ...REASON_IS_MDFLOW];
 
 export function renderMarkdown(doc) {
@@ -65,13 +67,6 @@ function lossNotes(doc) {
     }
   }
   return out;
-}
-
-// A fence one backtick longer than any run inside the text, so page text cannot close it.
-function fenced(text, lang = "") {
-  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((r) => r.length));
-  const f = "`".repeat(Math.max(3, longest + 1));
-  return `${f}${lang}\n${text}\n${f}`;
 }
 
 // Prose as Markdown: a run of three or more backticks or tildes is escaped wherever a parser
