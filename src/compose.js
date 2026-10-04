@@ -74,7 +74,9 @@ export function extractNav(html, url) {
     for (const a of bc.querySelectorAll("a[href]")) {
       const t = norm(a.textContent);
       const target = canonicalUrl(a.getAttribute("href"), url);
-      if (t && target) breadcrumbs.push({ title: t, url: target });
+      // Held to the page's origin like rel and pager targets: a crumb on another site is not a
+      // place in this one.
+      if (t && target && new URL(target).origin === origin) breadcrumbs.push({ title: t, url: target });
     }
   }
   return { rel, breadcrumbs };
@@ -90,10 +92,8 @@ export function compose({ url, nav, title, blocks, losses = [], source, generato
   page.blocks = blocks;
   page.losses = losses;
 
-  // A crumb that links to the page itself is the page, not a place above it; a crumb on another
-  // site is not a place in this one (rel and pager targets are held to the origin already).
-  const origin = new URL(url).origin;
-  const trail = nav.breadcrumbs.filter((c) => !samePage(c.url, canonicalUrl(url) ?? url) && new URL(c.url).origin === origin);
+  // A crumb that links to the page itself is the page, not a place above it.
+  const trail = nav.breadcrumbs.filter((c) => !samePage(c.url, canonicalUrl(url) ?? url));
   const breadcrumbs = trail.length ? trail : nav.rel.up ? [{ title: nav.rel.up.title, url: nav.rel.up.url }] : [];
 
   const scope = { kind: "page" };
