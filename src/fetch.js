@@ -15,19 +15,24 @@ export const MAX_BYTES = 5 * 1024 * 1024;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 const sha = (b) => createHash("sha256").update(b).digest("hex").slice(0, 16);
 
-// Decompress a capped body, streaming so the decompressed output is also capped at MAX_BYTES
-// without allocating a bomb: the first MAX_BYTES of HTML are returned and the rest discarded.
-// Corrupt data keeps the raw body (pre-existing behavior).
+// Decompress a capped body, streaming so the decompressed output is also capped at MAX_BYTES:
+// the decompressor is destroyed at the cap, so a bomb costs at most MAX_BYTES of output and the
+// CPU to make it, not the whole expansion. Corrupt data keeps the raw body.
 export function decompress(body, enc) {
   const factory = enc.includes("gzip") ? createGunzip : enc.includes("deflate") ? createInflate : enc.includes("br") ? createBrotliDecompress : null;
   if (!factory) return Promise.resolve(body);
   return new Promise((resolve) => {
     const dec = factory();
     const chunks = [];
-    let size = 0;
-    dec.on("data", (c) => { size += c.length; if (size <= MAX_BYTES) chunks.push(c); });
-    dec.on("end", () => resolve(Buffer.concat(chunks).subarray(0, MAX_BYTES)));
-    dec.on("error", () => resolve(body));
+    let size = 0, done = false;
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    dec.on("data", (c) => {
+      chunks.push(c);
+      size += c.length;
+      if (size >= MAX_BYTES) { finish(Buffer.concat(chunks).subarray(0, MAX_BYTES)); dec.destroy(); }
+    });
+    dec.on("end", () => finish(Buffer.concat(chunks).subarray(0, MAX_BYTES)));
+    dec.on("error", () => finish(body));
     dec.end(body);
   });
 }
@@ -87,13 +92,22 @@ function rawFetch(url, deadline, budget, resolver, depth = 0) {
       if (res.statusCode >= 400) { res.resume(); return reject(new Error(`HTTP ${res.statusCode} from ${url}; check the URL (mdflow does not retry)`)); }
 
       const chunks = [];
-      let size = 0;
-      res.on("data", (c) => { size += c.length; if (size <= MAX_BYTES) chunks.push(c); });
-      res.on("end", async () => {
-        clearTimeout(timer); // the body arrived in time; decompressing it is not the site's delay
+      let size = 0, read = false;
+      // The body is read up to MAX_BYTES and the connection then closed: past the cap a server
+      // only spends the caller's bandwidth. Decompression is capped the same way.
+      const finish = async () => {
+        if (read) return;
+        read = true;
+        clearTimeout(timer); // the body is in; decompressing it is not the site's delay
         const body = await decompress(Buffer.concat(chunks).subarray(0, MAX_BYTES), (res.headers["content-encoding"] || "").toLowerCase());
         resolve({ status: res.statusCode, contentType: res.headers["content-type"] || "", finalUrl: res.responseUrl || url, body });
+      };
+      res.on("data", (c) => {
+        chunks.push(c);
+        size += c.length;
+        if (size >= MAX_BYTES) { res.off("error", reject).on("error", () => {}); finish(); res.destroy(); }
       });
+      res.on("end", finish);
     });
     timer = setTimeout(() => r.destroy(new Error(`no answer from ${url} within ${budget} ms (redirects included); retry, or open it in a browser`)), left);
     r.on("error", reject);
