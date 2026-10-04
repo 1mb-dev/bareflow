@@ -251,8 +251,9 @@ export function restoreCodeLayout(html, blocks) {
 }
 
 // Flattened: the source has structure and the IR kept almost none of it (one paragraph for
-// a whole page). The thresholds were fitted on one page (tailwind) and checked out of sample
-// (github-blog-rust fires, devto-event-loop does not); a new hit is a labelling task.
+// a whole page). The thresholds were fitted on tailwind and github-blog-rust, both flattened by
+// a to-ir bug since fixed (aeabde7, e4bedb3): no frozen page fires now, only verify's synthetic
+// cases cover it, and a new hit is a labelling task.
 const FLAT_MIN_SOURCE = 5, FLAT_MAX_RATIO = 0.1;
 function flattened(src, blocks) {
   const n = src.headings.length + src.codes.length;

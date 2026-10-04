@@ -156,9 +156,12 @@ export function scoreLoss(html, doc, spec) {
     if (it.label === "present" && !found) errors.push(`unlabelled drop: ${it.kind} "${it.text.slice(0, 80)}"`);
     if (it.label === "lost" && found) errors.push(`labelled lost but in IR: ${it.kind} "${it.text.slice(0, 80)}"`);
   }
-  // A demoted block still in the IR as its own type, after the present blocks took their
+  // A demoted block still in the IR as its own type, after present and chrome blocks took their
   // copies, was not demoted: the label is stale (it recorded a bug since fixed, or a guess).
-  for (const it of items) if (it.label === "demoted" && inIr(it)) errors.push(`labelled demoted but present as ${it.kind}: "${it.text.slice(0, 80)}" (stale: remove it)`);
+  // Consumes without the layout check: a stale label is the finding, not its drift.
+  const take = (it) => { const i = ir[it.kind].indexOf(loose(it.text)); if (i >= 0) ir[it.kind].splice(i, 1); return i >= 0; };
+  for (const it of items) if (it.label === "chrome") take(it);
+  for (const it of items) if (it.label === "demoted" && take(it)) errors.push(`labelled demoted but present as ${it.kind}: "${it.text.slice(0, 80)}" (stale: remove it)`);
 
   const [knownDrift, driftErrs] = resolve(spec.known_code_drift || [], drifts, "known_code_drift");
   errors.push(...driftErrs.map((e) => `${e} (stale: remove it)`));
