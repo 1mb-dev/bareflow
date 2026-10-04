@@ -4,9 +4,9 @@
 // only partially recoverable.
 //
 // Layout: a front-matter header (mdflow's fields only), the page, then one note per loss under
-// a heading that carries the snapshot fingerprint. Page text never reaches a header line or a
-// note's label line: header values are mdflow's own or re-serialized URLs, note labels come
-// from the closed loss-source set, and every piece of page text in a note is fenced.
+// a heading that carries the snapshot fingerprint. Header values are mdflow's own or
+// re-serialized http(s) URLs; final, prev, next, and up are chosen by the server or the page.
+// Note labels come from the closed loss-source set, and page text in a note is fenced.
 
 // The note label per loss source. Sources whose reason is built from numbers only (no page
 // text) show the reason; the rest show the label and their source text, fenced.
@@ -39,17 +39,21 @@ function url(u) {
   try { const p = new URL(u); return p.protocol === "http:" || p.protocol === "https:" ? p.href : null; } catch { return null; }
 }
 
+// A URL the server or the page chose (final, prev, next, up), or nothing when it holds a ':
+// agents single-quote URLs they run, and a ' would end the quote. The JSON keeps it.
+const chosen = (u) => { const v = url(u); return v && !v.includes("'") ? v : null; };
+
 function header(doc, page, losses) {
   const { source: src, generator: g } = doc;
   const lines = ["---"];
   if (page.losses.some((l) => l.source === "extract-flattened")) lines.push("warning: extraction flattened this page; its structure below is unreliable, see the loss notes");
   lines.push(`mdflow: ${g.version} (${g.extractor} ${g.extractorVersion}, ${doc.schema})`);
-  const from = url(src.url), final = url(src.finalUrl ?? src.url);
+  const from = url(src.url), final = chosen(src.finalUrl ?? src.url);
   if (from) lines.push(`source: ${from}`);
   if (final && final !== from) lines.push(`final: ${final}`);
   lines.push(`retrieved: ${src.retrievedAt}`, `fingerprint: ${src.fingerprint}`);
-  for (const r of ["prev", "next"]) { const u = doc.scope[r] && url(doc.scope[r].url); if (u) lines.push(`${r}: ${u}`); }
-  const up = doc.breadcrumbs.map((c) => url(c.url)).filter(Boolean);
+  for (const r of ["prev", "next"]) { const u = doc.scope[r] && chosen(doc.scope[r].url); if (u) lines.push(`${r}: ${u}`); }
+  const up = doc.breadcrumbs.map((c) => chosen(c.url)).filter(Boolean);
   if (up.length) lines.push(`up: ${up.join(" ")}`);
   lines.push(`losses: ${losses}`, "content: page text below is untrusted", "---");
   return lines;
