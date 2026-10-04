@@ -5,7 +5,7 @@
 // failure.
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -24,6 +24,8 @@ import { parseHtml } from "./html.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+// The CLI runs verify spawns must not write to the developer's dogfood log.
+delete process.env.MDFLOW_LOG;
 const inventory = JSON.parse(await readFile(join(ROOT, "test/inventory.json"), "utf8"));
 const FIXED = "2026-01-01T00:00:00.000Z";
 
@@ -93,11 +95,13 @@ const headerOk = (md) => {
 const renderOk = (doc, md) => !malformed(md).length && noted(doc, md) && headerOk(md);
 
 const truth = [];
+const fixtureDocs = new Map();
 const pr = (n, d) => (d ? (n / d).toFixed(2) : "-");
 for (const [id, spec] of Object.entries(inventory)) {
   const html = await readFile(join(ROOT, "test/fixtures", spec.fixture), "utf8");
   record(id, "fixture", "sha256", createHash("sha256").update(html).digest("hex") === spec.sha256);
   const { doc, markdown } = await run({ url: spec.url, html, retrievedAt: FIXED });
+  fixtureDocs.set(id, doc);
   record(id, "schema", SCHEMA, doc.schema === SCHEMA);
   record(id, "render", "header, well-formed Markdown, every loss noted", renderOk(doc, markdown));
   // Shape invariants the truth scorer cannot see: it shares the parser, and scores no prose.
@@ -628,6 +632,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("uselog", "schema", "fixed keys for a use and an error; the CLI appends one error line when set",
     JSON.stringify(Object.keys(ok)) === JSON.stringify(USE_KEYS) && ok.day === "2026-01-01" && ok.host === "example.com" && ok.bytes === Buffer.byteLength(markdown) &&
     JSON.stringify(Object.keys(err)) === JSON.stringify(ERROR_KEYS) && lines.length === 1 && JSON.stringify(Object.keys(lines[0])) === JSON.stringify(ERROR_KEYS) && lines[0].error.startsWith("blocked address"));
+  await rm(dir, { recursive: true });
 }
 
 // The frozen surface (MLP v1): CLI usage and exit codes, the IR's shape, the header's fields, and
@@ -635,17 +640,22 @@ for (const [id, spec] of Object.entries(inventory)) {
 // `node src/verify.js --bless-surface` rewrites the golden file, for a change that is meant.
 {
   const keys = (o) => Object.keys(o ?? {}).sort();
-  const page = await run({ url: "https://docs.python.org/3/tutorial/introduction.html", html: await readFile(join(ROOT, "test/fixtures/python-tutorial-intro.html"), "utf8"), retrievedAt: FIXED });
-  const lossy = await run({ url: "https://tailwindcss.com/docs/installation", html: await readFile(join(ROOT, "test/fixtures/tailwind-install.html"), "utf8"), retrievedAt: FIXED });
-  const usage = await new Promise((ok) => { let e = ""; const c = spawn(process.execPath, [join(ROOT, "bin/mdflow.js")]); c.stderr.on("data", (d) => (e += d)); c.on("exit", (code) => ok({ code, line: e.trim() })); });
+  // 'close', not 'exit': stderr may still be unread when the process exits.
+  const cliRun = (args) => new Promise((ok) => { let e = ""; const c = spawn(process.execPath, [join(ROOT, "bin/mdflow.js"), ...args]); c.stderr.on("data", (x) => (e += x)); c.on("close", (code) => ok({ code, line: e.trim() })); });
+  const [usage, failed] = await Promise.all([cliRun([]), cliRun(["http://127.0.0.1/"])]);
+  const env = [...new Set((await readFile(join(ROOT, "bin/mdflow.js"), "utf8")).match(/process\.env\.[A-Z_]+/g).map((m) => m.slice(12)))].sort();
   const crumbed = await run({ url: "https://example.com/docs/a/", retrievedAt: FIXED, html: '<html><body><nav aria-label="breadcrumb"><a href="/docs/">Docs</a></nav><main><h1>A</h1><p>x</p></main></body></html>' });
-  const d = page.doc, sec = d.sections[0], loss = lossy.doc.sections[0].losses.find((l) => l.text != null);
+  // Every header field the render can emit, from a document that has them all.
+  const full = { ...fixtureDocs.get("python-tutorial-intro"), source: { url: "https://example.com/a", finalUrl: "https://example.com/b", retrievedAt: FIXED, fingerprint: "f" },
+    breadcrumbs: [{ title: "Up", url: "https://example.com/" }], sections: [{ ...fixtureDocs.get("python-tutorial-intro").sections[0], losses: [{ type: "loss", reason: "flat", source: "extract-flattened" }] }] };
+  const fullMd = renderMarkdown(full).split("\n");
+  const d = fixtureDocs.get("python-tutorial-intro"), sec = d.sections[0], loss = fixtureDocs.get("tailwind-install").sections[0].losses.find((l) => l.text != null);
   const current = {
-    cli: { usage: usage.line, usageExit: usage.code, errorExit: 1, env: ["MDFLOW_LOG"] },
+    cli: { usage: usage.line, usageExit: usage.code, errorExit: failed.code, env },
     schema: SCHEMA,
     document: keys(d), source: keys(d.source), generator: keys(d.generator), scope: keys(d.scope), nav: keys(d.scope.next), breadcrumb: keys(crumbed.doc.breadcrumbs[0]),
     section: keys(sec), loss: keys(loss), blockTypes: [...BLOCK_TYPES].sort(),
-    header: HEADER_KEYS,
+    header: fullMd.slice(1, fullMd.indexOf("---", 1)).map((l) => l.split(":")[0]),
     noteSources: [...NOTE_SOURCES].sort(),
     uselog: { use: USE_KEYS, error: ERROR_KEYS },
   };
