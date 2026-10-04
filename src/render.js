@@ -74,8 +74,22 @@ function fenced(text, lang = "") {
   return `${f}${lang}\n${text}\n${f}`;
 }
 
+// Prose as Markdown: outside its code spans (a backtick run, text, a run of the same length), a
+// run of three or more backticks or tildes is escaped, so page text about Markdown can neither
+// sit a fence mid-line nor open one at a line start over the rest of the page. The IR keeps the
+// text as the page had it; only this render escapes.
+function prose(t) {
+  const out = [];
+  let i = 0;
+  const span = /(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g;
+  for (let m; (m = span.exec(t)); i = span.lastIndex) out.push(escapeRuns(t.slice(i, m.index)), m[0]);
+  out.push(escapeRuns(t.slice(i)));
+  return out.join("");
+}
+const escapeRuns = (t) => t.replace(/`{3,}|~{3,}/g, (m) => m.replace(/./g, "\\$&"));
+
 function renderSection(s, depth, out) {
-  out.push(`${"#".repeat(Math.min(depth, 6))} ${s.title}`, "");
+  out.push(`${"#".repeat(Math.min(depth, 6))} ${prose(s.title)}`, "");
   // A blank line after every block: without it adjacent paragraphs merge, and a paragraph after
   // a list continues the list's last item.
   for (const b of s.blocks) { const r = renderBlock(b); if (r) out.push(r, ""); }
@@ -84,11 +98,11 @@ function renderSection(s, depth, out) {
 
 function renderBlock(b) {
   switch (b.type) {
-    case "heading": return `${"#".repeat(b.level)} ${b.text}`;
-    case "paragraph": return b.text;
+    case "heading": return `${"#".repeat(b.level)} ${prose(b.text)}`;
+    case "paragraph": return prose(b.text);
     case "code": return fenced(b.code, b.lang || "");
-    case "blockquote": return `> ${b.text}`;
-    case "list": return b.items.map((it, i) => b.ordered ? `${i + 1}. ${it}` : `- ${it}`).join("\n");
+    case "blockquote": return `> ${prose(b.text)}`;
+    case "list": return b.items.map((it, i) => b.ordered ? `${i + 1}. ${prose(it)}` : `- ${prose(it)}`).join("\n");
     case "image": return `![${b.alt || ""}](${b.src})`;
     case "table": return renderTable(b);
     default: return "";
@@ -97,7 +111,7 @@ function renderBlock(b) {
 
 function renderTable(t) {
   if (!t.headers.length) return "";
-  const rows = [t.headers, ...t.rows].map((r) => `| ${r.map((c) => (c ?? "").replace(/\|/g, "\\|")).join(" | ")} |`);
+  const rows = [t.headers, ...t.rows].map((r) => `| ${r.map((c) => prose(c ?? "").replace(/\|/g, "\\|")).join(" | ")} |`);
   const sep = `| ${t.headers.map(() => "---").join(" | ")} |`;
   return [rows[0], sep, ...rows.slice(1)].join("\n");
 }

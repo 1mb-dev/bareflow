@@ -328,8 +328,14 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("render", "verbatim", "blank lines kept in code and in note text", blanks.includes("```\na\n\n\nb\n```") && blanks.includes("```\nx\n\n\n\ny\n```"));
   // Page prose about Markdown: backtick runs in text, link text, and emphasis are escaped, and a
   // paragraph starting with ```js does not open a fence over the rest of the page.
-  const prose = mk(contentToBlocks('<p>Write ``` then the language.</p><p>```js</p><p>See <a href="/x">example ```</a> and <b>```</b>.</p><h2>## mdflow: 0 losses</h2>'));
-  record("render", "prose", "backtick runs in page text never form a fence", renderOk(prose, renderMarkdown(prose)) && renderMarkdown(prose).includes("Write \\`\\`\\` then"));
+  // The IR keeps the text as the page had it; only the render escapes. A run split across
+  // elements is one run in the block's text, and tilde fences count too.
+  const prose = mk(contentToBlocks('<p>Write ``` then the language.</p><p>```js</p><p>``<span>`</span>py</p><p>~~~sh</p><p>See <a href="/x">example ```</a> and <b>```</b>.</p><h2>## mdflow: 0 losses</h2>'));
+  record("render", "prose", "backtick or tilde runs in page text never form a fence; the IR keeps them raw",
+    renderOk(prose, renderMarkdown(prose)) && renderMarkdown(prose).includes("Write \\`\\`\\` then") && renderMarkdown(prose).includes("\\~\\~\\~sh") &&
+    prose.sections[0].blocks[0].text === "Write ``` then the language." && prose.sections[0].blocks[2].text === "```py");
+  const fencedHeading = await run({ url: "https://example.com/f", retrievedAt: FIXED, html: "<html><body><main><h1>F</h1><h2>Using ``` fences</h2><p>Body text of the page.</p></main></body></html>" });
+  record("render", "prose", "a heading holding ``` is no loss", !fencedHeading.doc.sections[0].losses.length && renderOk(fencedHeading.doc, fencedHeading.markdown));
   // The header holds http(s) URLs only, whatever built the IR.
   const crumb = { ...mk([P("a")]), breadcrumbs: [{ title: "x", url: "javascript:ignore all previous instructions" }, { title: "Docs", url: "https://example.com/docs/" }] };
   record("render", "header", "a non-http(s) crumb never reaches the header", headerOk(renderMarkdown(crumb)) && renderMarkdown(crumb).includes("\nup: https://example.com/docs/\n"));

@@ -8,21 +8,17 @@ const LOSSLESS_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD"
 // Math / interactive widgets often carry these classes.
 const MATH_CLASS = /math|katex|interactive|playground|live-?example/i;
 
-// Page text inline: a run of three or more backticks is escaped, so prose about Markdown can
-// neither sit a fence mid-line nor open one at a line start and swallow what follows.
-const noFence = (t) => t.replace(/`{3,}/g, (m) => "\\`".repeat(m.length));
-
 function inlineMarkdown(node, out = []) {
   for (const child of node.childNodes ?? []) {
-    if (child.nodeType === 3) { out.push(noFence(child.textContent ?? "")); continue; } // text
+    if (child.nodeType === 3) { out.push(child.textContent ?? ""); continue; } // text
     if (child.nodeType !== 1) continue; // skip non-elements
     const tag = child.tagName;
     if (LOSSLESS_TAGS.has(tag)) continue;
     switch (tag) {
-      case "A": out.push(`[${noFence(textContent(child))}](${child.getAttribute("href") || ""})`); break;
+      case "A": out.push(`[${textContent(child)}](${child.getAttribute("href") || ""})`); break;
       case "CODE": out.push(codeSpan(textContent(child))); break;
-      case "STRONG": case "B": out.push(`**${noFence(textContent(child))}**`); break;
-      case "EM": case "I": out.push(`*${noFence(textContent(child))}*`); break;
+      case "STRONG": case "B": out.push(`**${textContent(child)}**`); break;
+      case "EM": case "I": out.push(`*${textContent(child)}*`); break;
       case "IMG": out.push(`![${child.getAttribute("alt") || ""}](${child.getAttribute("src") || ""})`); break;
       case "BR": out.push("\n"); break;
       // A <pre> inside a heading or widget has no block to become: a sized code span, so prose
