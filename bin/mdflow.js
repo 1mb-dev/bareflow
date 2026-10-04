@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// mdflow CLI: mdflow <url> [--json]
+// mdflow CLI: mdflow <url> [--json]. Set MDFLOW_LOG=<file> to append one JSON line per use.
 import { run } from "../src/pipeline.js";
+import { logUse, useEntry } from "../src/uselog.js";
 
 const USAGE = "usage: mdflow <url> [--json]";
 const args = process.argv.slice(2);
@@ -18,10 +19,14 @@ if (bad || !url) {
   process.exit(2);
 }
 
+const log = process.env.MDFLOW_LOG;
 try {
   const { doc, markdown } = await run({ url });
-  console.log(asJson ? JSON.stringify(doc) : markdown);
+  const output = asJson ? JSON.stringify(doc) : markdown;
+  logUse(log, useEntry({ url, format: asJson ? "json" : "markdown", output, doc }));
+  console.log(output);
 } catch (e) {
+  logUse(log, useEntry({ url, error: e }));
   console.error(`mdflow: ${e?.message || e}`);
   process.exit(1);
 }

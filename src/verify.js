@@ -18,6 +18,7 @@ import { decompress, fetchSnapshot, MAX_BYTES } from "./fetch.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA } from "./ir.js";
 import { renderMarkdown } from "./render.js";
+import { useEntry, USE_KEYS, ERROR_KEYS } from "./uselog.js";
 import { extractNav } from "./compose.js";
 import { parseHtml } from "./html.js";
 import { scoreLoss, scoreNav } from "./truth.js";
@@ -581,6 +582,20 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("fetch", "budget", "a dripping body and a slow redirect chain stop at the budget; the chain completes within a longer one",
     /within 300 ms \(redirects included\)/.test(drip.r) && drip.ms < 1500 && /within 300 ms/.test(chainShort.r) && chainShort.ms < 1500 && chainLong.r.includes("Done"));
   record("fetch", "ssrf", "the default resolver refuses a name that resolves to loopback", guarded.startsWith("blocked address for localhost"));
+}
+
+// Use log: one JSON line per CLI use when MDFLOW_LOG is set, of fixed keys.
+{
+  const { doc, markdown } = await run({ url: "https://example.com/u", html: "<html><body><main><h1>U</h1><p>x</p></main></body></html>", retrievedAt: FIXED });
+  const ok = useEntry({ url: "https://example.com/u", format: "markdown", output: markdown, doc, at: new Date(FIXED) });
+  const err = useEntry({ url: "http://127.0.0.1/", error: new Error("blocked"), at: new Date(FIXED) });
+  const dir = await mkdtemp(join(tmpdir(), "mdflow-verify-"));
+  const logged = join(dir, "use.jsonl");
+  await new Promise((ok) => spawn(process.execPath, [join(ROOT, "bin/mdflow.js"), "http://127.0.0.1/"], { stdio: "ignore", env: { ...process.env, MDFLOW_LOG: logged } }).on("exit", ok));
+  const lines = (await readFile(logged, "utf8")).trim().split("\n").map((l) => JSON.parse(l));
+  record("uselog", "schema", "fixed keys for a use and an error; the CLI appends one error line when set",
+    JSON.stringify(Object.keys(ok)) === JSON.stringify(USE_KEYS) && ok.day === "2026-01-01" && ok.host === "example.com" && ok.bytes === Buffer.byteLength(markdown) &&
+    JSON.stringify(Object.keys(err)) === JSON.stringify(ERROR_KEYS) && lines.length === 1 && JSON.stringify(Object.keys(lines[0])) === JSON.stringify(ERROR_KEYS) && lines[0].error.startsWith("blocked address"));
 }
 
 // CLI arguments: a usage error exits 2 before any fetch; a parsed call reaches run(), which
