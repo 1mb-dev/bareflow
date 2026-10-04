@@ -90,8 +90,10 @@ export function compose({ url, nav, title, blocks, losses = [], source, generato
   page.blocks = blocks;
   page.losses = losses;
 
-  // A crumb that links to the page itself is the page, not a place above it.
-  const trail = nav.breadcrumbs.filter((c) => !samePage(c.url, canonicalUrl(url) ?? url));
+  // A crumb that links to the page itself is the page, not a place above it; a crumb on another
+  // site is not a place in this one (rel and pager targets are held to the origin already).
+  const origin = new URL(url).origin;
+  const trail = nav.breadcrumbs.filter((c) => !samePage(c.url, canonicalUrl(url) ?? url) && new URL(c.url).origin === origin);
   const breadcrumbs = trail.length ? trail : nav.rel.up ? [{ title: nav.rel.up.title, url: nav.rel.up.url }] : [];
 
   const scope = { kind: "page" };

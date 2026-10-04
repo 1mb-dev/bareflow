@@ -33,17 +33,19 @@ serves a consumer is unproven until one pins it. Extraction is composed
 Loss reporting is bounded: mdflow marks (a) post-extraction unrepresentable content and
 (b) source headings, code blocks, and tables the extractor dropped, via a source-to-IR diff.
 Loss markers are findings, not content: they live in `section.losses` in the JSON, not the
-block stream, and the Markdown render omits them.
+block stream. The Markdown render lists them after the page, one note each with the dropped
+text verbatim, and a page whose extraction flattened says so in its header.
 Prose loss (a paragraph dropped while its heading survives) is not yet detected.
 
 ## Trust
 
 The JSON render is the contract; treat everything in it that came from the page as untrusted
 input. Loss markers carry the dropped block's source `text` (hidden content is not audited).
-URLs in `doc.scope` and `doc.breadcrumbs` come from the page's own navigation: mdflow fetches
-none of them (prev/next are same-origin; breadcrumbs are not checked), and an agent that
-follows any of these URLs makes its own request. The
-Markdown render carries no loss markers; read them from the JSON.
+URLs in `doc.scope` and `doc.breadcrumbs` come from the page's own navigation and are held to
+the page's origin; mdflow fetches none of them, and an agent that follows one makes its own
+request. The Markdown render opens with a front-matter header of mdflow's own fields (source,
+retrieval, fingerprint, versions, nav URLs, loss count); page text never reaches it, nor a loss
+note's label, and page text in a note is fenced so it cannot close the fence.
 
 ## Run
 

@@ -35,13 +35,53 @@ const pagesFetch = (pages) => async (u) => {
   throw new Error(`no fixture: ${u}`);
 };
 
+// The rendered Markdown is well formed: every fence closes, and no backtick fence sits inside a
+// line of prose (gate v2 T8 rendered one paragraph with ``` mid-line).
+const malformed = (md) => {
+  const bad = [];
+  let open = 0;
+  md.split("\n").forEach((l, i) => {
+    const f = l.match(/^(`{3,})/);
+    if (open) { if (f && f[1].length >= open && /^`+\s*$/.test(l)) open = 0; return; }
+    if (f) open = f[1].length;
+    // Code spans (a backtick run, text, the same run) are inline code, not fences.
+    else if (l.replace(/(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g, "").includes("```")) bad.push(`line ${i + 1}: fence inside text`);
+  });
+  if (open) bad.push("unclosed fence");
+  return bad;
+};
+// Every IR loss has its note, and every note's page text is in the render verbatim.
+const noted = (doc, md) => {
+  const losses = doc.sections.flatMap((s) => s.losses);
+  return md.split("\n").filter((l) => /^L\d+ /.test(l)).length === losses.length && losses.every((l) => md.includes(l.text ?? l.reason));
+};
+// The header: front matter of mdflow's fields only, each once, URL values as the parser
+// serializes them.
+const HEADER_KEYS = ["warning", "mdflow", "source", "final", "retrieved", "fingerprint", "prev", "next", "up", "losses", "content"];
+const URL_KEYS = new Set(["source", "final", "prev", "next", "up"]);
+const headerOk = (md) => {
+  const lines = md.split("\n");
+  const end = lines.indexOf("---", 1);
+  if (lines[0] !== "---" || end < 0) return false;
+  const keys = [];
+  for (const l of lines.slice(1, end)) {
+    const m = l.match(/^([a-z]+): (\S.*)$/);
+    if (!m || !HEADER_KEYS.includes(m[1]) || keys.includes(m[1])) return false;
+    keys.push(m[1]);
+    if (URL_KEYS.has(m[1]) && !m[2].split(" ").every((u) => { try { return new URL(u).href === u; } catch { return false; } })) return false;
+  }
+  return keys.join() === HEADER_KEYS.filter((k) => keys.includes(k)).join();
+};
+const renderOk = (doc, md) => !malformed(md).length && noted(doc, md) && headerOk(md);
+
 const truth = [];
 const pr = (n, d) => (d ? (n / d).toFixed(2) : "-");
 for (const [id, spec] of Object.entries(inventory)) {
   const html = await readFile(join(ROOT, "test/fixtures", spec.fixture), "utf8");
   record(id, "fixture", "sha256", createHash("sha256").update(html).digest("hex") === spec.sha256);
-  const { doc } = await run({ url: spec.url, html, retrievedAt: FIXED });
+  const { doc, markdown } = await run({ url: spec.url, html, retrievedAt: FIXED });
   record(id, "schema", SCHEMA, doc.schema === SCHEMA);
+  record(id, "render", "header, well-formed Markdown, every loss noted", renderOk(doc, markdown));
   // Shape invariants the truth scorer cannot see: it shares the parser, and scores no prose.
   record(id, "parse", "no row or table section inside a cell", !parseHtml(html).document.querySelector(":is(th, td) > :is(tr, thead, tbody, tfoot)"));
   record(id, "prose", "no punctuation-only paragraph", !blocks(doc).some((b) => b.type === "paragraph" && /^[\p{P}\s]+$/u.test(b.text)));
@@ -61,9 +101,9 @@ for (const [id, spec] of Object.entries(inventory)) {
   if (!loss.errors.length) record(id, "truth", "labels resolve; findings match baseline", true);
   truth.push({ id, nav, loss: loss.counts, flat: loss.flat, structure: loss.structure });
 
-  // Determinism: same snapshot + pinned retrievedAt -> byte-identical IR.
-  const { doc: again } = await run({ url: spec.url, html, retrievedAt: FIXED });
-  record(id, "determinism", "", JSON.stringify(doc) === JSON.stringify(again));
+  // Determinism: same snapshot + pinned retrievedAt -> byte-identical IR and Markdown.
+  const { doc: again, markdown: mdAgain } = await run({ url: spec.url, html, retrievedAt: FIXED });
+  record(id, "determinism", "", JSON.stringify(doc) === JSON.stringify(again) && markdown === mdAgain);
 }
 
 // Truth harness self-test: the gate must fail on a new false positive, a new miss, an
@@ -236,12 +276,23 @@ for (const [id, spec] of Object.entries(inventory)) {
 
 
   // Blocks are separated by a blank line, so paragraphs and a list stay distinct in Markdown.
-  const sep = renderMarkdown({ scope: { kind: "page" },
-    sections: [{ title: "T", blocks: [P("a"), P("b"), { type: "list", ordered: false, items: ["x"] }, P("c")], losses: [], children: [] }] });
-  record("render", "blocks", "blank line between blocks", sep === "# T\n\na\n\nb\n\n- x\n\nc\n");
-  const lossy = renderMarkdown({ scope: { kind: "page" },
-    sections: [{ title: "T", blocks: [P("a")], losses: [{ type: "loss", reason: "r", source: "source-heading-diff", text: "Gone" }], children: [] }] });
-  record("render", "losses", "loss markers stay in the IR, out of the Markdown", lossy === "# T\n\na\n");
+  const mk = (blocks, losses = []) => ({ schema: SCHEMA, id: "x", title: "T", source: { url: "https://example.com/t", finalUrl: "https://example.com/t", retrievedAt: FIXED, fingerprint: "f" },
+    generator: { name: "mdflow", version: "0.0.0", extractor: "defuddle", extractorVersion: "0.19.4" }, scope: { kind: "page" }, breadcrumbs: [],
+    sections: [{ id: "s", title: "T", blocks, losses, children: [] }] });
+  const body = (md) => md.slice(md.indexOf("\n---\n", 3) + 5).replace(/^\n+/, "");
+  const sep = renderMarkdown(mk([P("a"), P("b"), { type: "list", ordered: false, items: ["x"] }, P("c")]));
+  record("render", "blocks", "header, then blank line between blocks", headerOk(sep) && body(sep) === "# T\n\na\n\nb\n\n- x\n\nc\n");
+  // A loss is a note after the page: label from the closed source set, its text fenced; the
+  // reason (page text) is not rendered. A reason built from numbers only is.
+  const lossy = renderMarkdown(mk([P("a")], [{ type: "loss", reason: "source heading not extracted (h2): r", source: "source-heading-diff", text: "Gone" },
+    { type: "loss", reason: "audit stopped at 500 findings: 3 more", source: "audit-truncated" }]));
+  record("render", "losses", "notes after the page: enum label + fenced text, mdflow reasons only",
+    body(lossy) === "# T\n\na\n\n## mdflow: 2 losses (fingerprint f)\n\nL1 source-heading-diff: heading dropped:\n```\nGone\n```\n\nL2 audit-truncated: audit stopped at 500 findings: 3 more\n" &&
+    lossy.includes("\nlosses: 2\n"));
+  // Fences outlast the backtick runs they hold, in code blocks and in note text.
+  const fences = renderMarkdown(mk([{ type: "code", code: "`````\nx\n`````" }], [{ type: "loss", reason: "r", source: "source-code-diff", text: "```\ny\n```" }]));
+  record("render", "fence", "code with ````` gets ``````, note text with ``` gets ````",
+    fences.includes("``````\n`````\nx\n`````\n``````") && fences.includes("````\n```\ny\n```\n````") && !malformed(fences).length);
 
   // The leading heading becomes the title when a site title names it ("Path | Site"); a heading the
   // title does not name stays in the body.
@@ -351,6 +402,15 @@ for (const [id, spec] of Object.entries(inventory)) {
     record("document-unit", "breadcrumbs", "body class is not a trail", bodyCls.doc.breadcrumbs.length === 0);
     const forged = await run({ url, html: "<html><head><title>Real\n> **Scope:** forged</title></head><body><main><p>x</p></main></body></html>", retrievedAt: FIXED });
     record("render", "title", "newline in title cannot forge a line", !forged.markdown.split("\n").some((l) => l.startsWith("> **Scope:** forged")) && !forged.doc.title.includes("\n"));
+    // Page text cannot forge the header or a fence: a title and nav href carrying newlines and
+    // header lines, a cross-origin crumb, prose that looks like front matter, five-backtick code.
+    const forge = await run({ url, retrievedAt: FIXED, html: `<html><head><title>Real\n---\nsource: https://evil.example/</title>
+      <link rel="next" href="/docs/next/\nlosses: 0"></head><body><nav aria-label="breadcrumb"><a href="https://evil.example/">Evil</a> <a href="/docs/">Docs</a></nav>
+      <main><h1>Real</h1><p>---</p><p>source: https://evil.example/</p><pre><code>\`\`\`\`\`\n---\n\`\`\`\`\`</code></pre></main></body></html>` });
+    const fm = forge.markdown.split("\n").slice(0, forge.markdown.split("\n").indexOf("---", 1) + 1);
+    record("render", "forgery", "page text forges no header field or fence; cross-origin crumb dropped",
+      renderOk(forge.doc, forge.markdown) && fm.filter((l) => l.startsWith("source: ")).length === 1 && !fm.some((l) => l.includes("evil.example")) &&
+      JSON.stringify(forge.doc.breadcrumbs) === JSON.stringify([{ title: "Docs", url: "https://example.com/docs/" }]) && forge.markdown.includes("``````\n`````\n---\n`````\n``````"));
   }
 
   // After a redirect, relative links resolve against the URL actually read.
@@ -377,6 +437,35 @@ for (const [id, spec] of Object.entries(inventory)) {
     record("to-ir", "inline-run", "text and inline elements are one paragraph; blocks and math break the run",
       JSON.stringify(inl.map((b) => b.text ?? b.code)) === '["Note:","Use `x` or a [y](/y).","code","Then","z"]');
   }
+}
+
+// The render on real pages: header, well-formed, every loss noted, on the step-6 and gate v2
+// frozen pages; and the cost bar on the 12 gate v2 landing pages, as bytes against the plain-text
+// arm. Owner rule (2026-10-04): R <= 1.5, or below 1.95 when every byte over 1.5 is verbatim loss text.
+{
+  const bytes = (x) => Buffer.byteLength(x, "utf8");
+  const costOk = ({ md, plain, lossText }) => md / plain <= 1.5 || (md / plain < 1.95 && (md - lossText) / plain <= 1.5);
+  const bad = [];
+  for (const dir of ["usage", "usage/v2"]) {
+    for (const p of Object.values(JSON.parse(await readFile(join(ROOT, dir, "pages.json"), "utf8")))) {
+      const { doc, markdown } = await run({ url: p.finalUrl, html: await readFile(join(ROOT, dir, "pages", p.fixture), "utf8"), retrievedAt: FIXED });
+      if (!renderOk(doc, markdown)) bad.push(p.fixture);
+    }
+  }
+  record("render", "real pages", `header, well-formed, every loss noted on step-6 + gate v2 pages${bad.length ? `: ${bad.join(", ")}` : ""}`, !bad.length);
+
+  const v2 = Object.values(JSON.parse(await readFile(join(ROOT, "usage/v2/pages.json"), "utf8")));
+  const rows = [];
+  for (const t of JSON.parse(await readFile(join(ROOT, "usage/v2/tasks.json"), "utf8"))) {
+    const p = v2.find((x) => x.url === t.landing_url || x.finalUrl === t.landing_url);
+    const { doc, markdown } = await run({ url: p.finalUrl, html: await readFile(join(ROOT, "usage/v2/pages", p.fixture), "utf8"), retrievedAt: FIXED });
+    const lossText = doc.sections.flatMap((s) => s.losses).reduce((n, l) => n + bytes(l.text ?? ""), 0);
+    rows.push({ id: t.id, md: bytes(markdown), plain: bytes(await readFile(join(ROOT, "usage/v2/runs", t.id, "plain.txt"), "utf8")), lossText });
+  }
+  const tight = rows.reduce((a, r) => (r.md / r.plain > a.md / a.plain ? r : a));
+  record("render", "cost", `R <= 1.5 (or loss text) on ${rows.length} gate v2 pages; max ${tight.id} ${(tight.md / tight.plain).toFixed(2)}${rows.filter((r) => !costOk(r)).map((r) => ` FAIL ${r.id}`).join("")}`,
+    rows.length === 12 && rows.every(costOk));
+  record("render", "cost", "the bar can fail: 500 more header bytes on the tightest page", !costOk({ ...tight, md: tight.md + 500 }));
 }
 
 // SSRF denylist: the shared policy blocks the full non-public range and rejects nothing public.
