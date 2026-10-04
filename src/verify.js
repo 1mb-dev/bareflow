@@ -250,6 +250,10 @@ for (const [id, spec] of Object.entries(inventory)) {
     named.title === "Path" && named.sections[0].blocks[0].type !== "heading" && !named.sections[0].losses.length &&
     other.sections[0].blocks[0].text === "Install" && brand.title !== "Acme" && brand.sections[0].blocks[0].text === "Acme");
 
+  // Defuddle can wrap its content in <body> (tailwindcss.com): a container, not one paragraph.
+  const wrapped = contentToBlocks("<body><h2>A</h2><p>x</p><pre><code>y</code></pre></body>");
+  record("to-ir", "body", "a body wrapper is a container", JSON.stringify(wrapped.map((b) => b.type)) === '["heading","paragraph","code"]');
+
   // Bug 13: a figcaption next to an image is kept.
   const fig = contentToBlocks('<figure><img src="a.png" alt="A"><figcaption>Figure caption</figcaption></figure>');
   record("to-ir", "figure", "figcaption kept with image", fig.length === 2 && fig[1].text === "Figure caption");

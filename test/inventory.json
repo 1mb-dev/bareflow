@@ -311,7 +311,6 @@
     "url": "https://tailwindcss.com/docs/installation",
     "sha256": "f3e1d6ab781c4edf4d2e375f199f577e4885481cc443ccdb7a40fd30ad117275",
     "nav": { "prev": "none", "next": "none" },
-    "flattened": true,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "Getting started" },
@@ -346,20 +345,7 @@
         { "kind": "heading", "key": "Play CDN" }
       ],
       "demoted": [
-        { "kind": "heading", "key": "Get started with Tailwind CSS" },
-        { "kind": "heading", "key": "Installing Tailwind CSS as a Vite plugin" },
-        { "kind": "heading", "key": "Create your project" },
-        { "kind": "heading", "key": "Install Tailwind CSS" },
-        { "kind": "heading", "key": "Configure the Vite plugin" },
-        { "kind": "heading", "key": "Import Tailwind CSS" },
-        { "kind": "heading", "key": "Start your build process" },
-        { "kind": "heading", "key": "Start using Tailwind in your HTML" },
-        { "kind": "code", "key": "npm create vite@latest my-project" },
-        { "kind": "code", "key": "npm install tailwindcss" },
-        { "kind": "code", "key": "import { defineConfig } from 'vite'" },
-        { "kind": "code", "key": "@import \"tailwindcss\"" },
-        { "kind": "code", "key": "npm run dev" },
-        { "kind": "code", "key": "<!doctype html>" }
+        { "kind": "heading", "key": "Installing Tailwind CSS as a Vite plugin" }
       ]
     },
     "known_fp": [
@@ -370,7 +356,10 @@
       { "kind": "heading", "key": "Framework Guides", "why": "tab link to a sibling install page; no landmark, so the page-wide scope includes it" },
       { "kind": "heading", "key": "Play CDN", "why": "tab link to a sibling install page; no landmark, so the page-wide scope includes it" }
     ],
-    "known_miss": []
+    "known_miss": [],
+    "known_structure": [
+      { "kind": "level", "key": "Get started with Tailwind CSS", "why": "Defuddle renders the page h1 as h2 when the extracted title (\"Installing with Vite\") does not name it, so title promotion does not fire" }
+    ]
   },
   "golang-faq": {
     "fixture": "golang-faq.html",

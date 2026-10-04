@@ -163,9 +163,11 @@ function blockFor(el, out) {
     if (t) out.push(ir.paragraph(t));
     return;
   }
-  // Div / section / article / header / footer: transparent containers, recurse.
+  // Div / section / article / header / footer: transparent containers, recurse. Defuddle can
+  // return its content wrapped in <body> (tailwindcss.com); as an unknown element it would
+  // flatten the whole page into one paragraph.
   if (tag === "HR") return;
-  if (tag === "DIV" || tag === "SECTION" || tag === "ARTICLE" || tag === "MAIN" || tag === "HEADER" || tag === "FOOTER" || tag === "ASIDE" || tag === "NAV" || tag === "SPAN") {
+  if (tag === "DIV" || tag === "SECTION" || tag === "ARTICLE" || tag === "MAIN" || tag === "HEADER" || tag === "FOOTER" || tag === "ASIDE" || tag === "NAV" || tag === "SPAN" || tag === "BODY") {
     childBlocks(el, out);
     return;
   }
