@@ -1,0 +1,110 @@
+{
+ "cli": {
+  "usage": "usage: mdflow <url> [--json]",
+  "usageExit": 2,
+  "errorExit": 1,
+  "env": [
+   "MDFLOW_LOG"
+  ]
+ },
+ "schema": "mdflow/ir/v2",
+ "document": [
+  "breadcrumbs",
+  "generator",
+  "id",
+  "schema",
+  "scope",
+  "sections",
+  "source",
+  "title"
+ ],
+ "source": [
+  "finalUrl",
+  "fingerprint",
+  "retrievedAt",
+  "url"
+ ],
+ "generator": [
+  "extractor",
+  "extractorVersion",
+  "name",
+  "version"
+ ],
+ "scope": [
+  "kind",
+  "next",
+  "prev"
+ ],
+ "nav": [
+  "url",
+  "via"
+ ],
+ "breadcrumb": [
+  "title",
+  "url"
+ ],
+ "section": [
+  "blocks",
+  "children",
+  "id",
+  "losses",
+  "title",
+  "url"
+ ],
+ "loss": [
+  "reason",
+  "source",
+  "text",
+  "type"
+ ],
+ "blockTypes": [
+  "blockquote",
+  "code",
+  "heading",
+  "image",
+  "list",
+  "paragraph",
+  "table"
+ ],
+ "header": [
+  "warning",
+  "mdflow",
+  "source",
+  "final",
+  "retrieved",
+  "fingerprint",
+  "prev",
+  "next",
+  "up",
+  "losses",
+  "content"
+ ],
+ "noteSources": [
+  "audit-scope-empty",
+  "audit-truncated",
+  "extract-flattened",
+  "extract-unrepresentable",
+  "source-code-demoted",
+  "source-code-diff",
+  "source-heading-demoted",
+  "source-heading-diff",
+  "source-table-diff"
+ ],
+ "uselog": {
+  "use": [
+   "day",
+   "url",
+   "host",
+   "format",
+   "bytes",
+   "losses",
+   "flattened"
+  ],
+  "error": [
+   "day",
+   "url",
+   "host",
+   "error"
+  ]
+ }
+}

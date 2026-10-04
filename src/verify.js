@@ -16,8 +16,8 @@ import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
 import { decompress, fetchSnapshot, MAX_BYTES } from "./fetch.js";
 import { isPrivateIp } from "./ssrf.js";
-import { walk, validate, SCHEMA } from "./ir.js";
-import { renderMarkdown } from "./render.js";
+import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
+import { renderMarkdown, NOTE_SOURCES } from "./render.js";
 import { useEntry, USE_KEYS, ERROR_KEYS } from "./uselog.js";
 import { extractNav } from "./compose.js";
 import { parseHtml } from "./html.js";
@@ -596,6 +596,32 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("uselog", "schema", "fixed keys for a use and an error; the CLI appends one error line when set",
     JSON.stringify(Object.keys(ok)) === JSON.stringify(USE_KEYS) && ok.day === "2026-01-01" && ok.host === "example.com" && ok.bytes === Buffer.byteLength(markdown) &&
     JSON.stringify(Object.keys(err)) === JSON.stringify(ERROR_KEYS) && lines.length === 1 && JSON.stringify(Object.keys(lines[0])) === JSON.stringify(ERROR_KEYS) && lines[0].error.startsWith("blocked address"));
+}
+
+// The frozen surface (MLP v1): CLI usage and exit codes, the IR's shape, the header's fields, and
+// the loss notes' sources, against test/golden/surface.json. A change fails until blessed:
+// `node src/verify.js --bless-surface` rewrites the golden file, for a change that is meant.
+{
+  const keys = (o) => Object.keys(o ?? {}).sort();
+  const page = await run({ url: "https://docs.python.org/3/tutorial/introduction.html", html: await readFile(join(ROOT, "test/fixtures/python-tutorial-intro.html"), "utf8"), retrievedAt: FIXED });
+  const lossy = await run({ url: "https://tailwindcss.com/docs/installation", html: await readFile(join(ROOT, "test/fixtures/tailwind-install.html"), "utf8"), retrievedAt: FIXED });
+  const usage = await new Promise((ok) => { let e = ""; const c = spawn(process.execPath, [join(ROOT, "bin/mdflow.js")]); c.stderr.on("data", (d) => (e += d)); c.on("exit", (code) => ok({ code, line: e.trim() })); });
+  const crumbed = await run({ url: "https://example.com/docs/a/", retrievedAt: FIXED, html: '<html><body><nav aria-label="breadcrumb"><a href="/docs/">Docs</a></nav><main><h1>A</h1><p>x</p></main></body></html>' });
+  const d = page.doc, sec = d.sections[0], loss = lossy.doc.sections[0].losses.find((l) => l.text != null);
+  const current = {
+    cli: { usage: usage.line, usageExit: usage.code, errorExit: 1, env: ["MDFLOW_LOG"] },
+    schema: SCHEMA,
+    document: keys(d), source: keys(d.source), generator: keys(d.generator), scope: keys(d.scope), nav: keys(d.scope.next), breadcrumb: keys(crumbed.doc.breadcrumbs[0]),
+    section: keys(sec), loss: keys(loss), blockTypes: [...BLOCK_TYPES].sort(),
+    header: HEADER_KEYS,
+    noteSources: [...NOTE_SOURCES].sort(),
+    uselog: { use: USE_KEYS, error: ERROR_KEYS },
+  };
+  const goldenPath = join(ROOT, "test/golden/surface.json");
+  const text = JSON.stringify(current, null, 1) + "\n";
+  if (process.argv.includes("--bless-surface")) await writeFile(goldenPath, text);
+  const golden = await readFile(goldenPath, "utf8").catch(() => "");
+  record("surface", "golden", golden === text ? "CLI, IR shape, header, note sources unchanged" : `changed against test/golden/surface.json; if meant, run node src/verify.js --bless-surface\n${text}`, golden === text);
 }
 
 // CLI arguments: a usage error exits 2 before any fetch; a parsed call reaches run(), which

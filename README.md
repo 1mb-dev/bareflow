@@ -47,15 +47,19 @@ request. The Markdown render opens with a front-matter header of mdflow's own fi
 retrieval, fingerprint, versions, nav URLs, loss count); page text never reaches it, nor a loss
 note's label, and page text in a note is fenced so it cannot close the fence.
 
-## Run
+## Install and run
 
 ```
-npm install
-node bin/mdflow.js <url>          # Markdown
-node bin/mdflow.js <url> --json   # the typed IR
+npm install && npm link           # puts `mdflow` on PATH (tested on Node 26)
+mdflow <url>                      # Markdown: header, page, loss notes
+mdflow <url> --json               # the typed IR (docs/ir.md)
+MDFLOW_LOG=~/mdflow-use.jsonl mdflow <url>   # also append one JSON line per use
 npm run verify                    # truth gate: loss + nav precision/recall per fixture
 npm run reader                    # local reader: source | document | findings, http://127.0.0.1:4380/
 ```
+
+Exit 0 with the document on stdout; 2 on a usage error; 1 when the fetch or extraction fails,
+with the reason on stderr. A fetch has 30 s in total, redirects included.
 
 The reader shows each frozen fixture and step-6 page next to its document, the audit's findings
 judged against the hand labels, and every label; clicking a label finds it in the source.

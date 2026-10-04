@@ -19,6 +19,7 @@ const NOTE = {
   "extract-unrepresentable": "embed or interactive content not representable; source:",
 };
 const REASON_IS_MDFLOW = new Set(["extract-flattened", "audit-scope-empty", "audit-truncated"]);
+export const NOTE_SOURCES = [...Object.keys(NOTE), ...REASON_IS_MDFLOW];
 
 export function renderMarkdown(doc) {
   const n = doc.sections.reduce((k, s) => k + s.losses.length, 0);
