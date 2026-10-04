@@ -154,6 +154,18 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("truth-harness", "fails on", "demoted label whose text is gone", fails(withLosses(true), { labels: { demoted: [H("Gone")] } }, /labelled demoted but text not in IR/));
   record("truth-harness", "fails on", "lost label on a block in the IR", fails(doc, lost, /labelled lost but in IR/));
   record("truth-harness", "fails on", "demoted label on a block present as its type", fails(doc, { labels: { demoted: [H("Gone")] } }, /labelled demoted but present as heading/));
+  // Two copies of one heading, chrome and demoted: the chrome copy in the IR is not the demoted
+  // one. A stale demoted code label is reported as stale, not as layout drift.
+  {
+    const dup = "<html><body><main><h1>T</h1><h2>Dup</h2><p>x</p><h2>Dup</h2><p>y</p><pre>a\n  b</pre></main></body></html>";
+    const para = (text) => ({ type: "paragraph", text });
+    const ir = { ...doc, sections: [{ ...page, blocks: [{ type: "heading", level: 2, text: "Dup" }, para("x"), para("Dup"), para("y"), { type: "code", code: "a\nb" }], losses: [] }] };
+    const errs = (labels) => scoreLoss(dup, ir, { labels }).errors;
+    record("truth-harness", "passes on", "a chrome copy is not a stale demoted one; stale code reports no drift",
+      !errs({ chrome: [H("Dup")], demoted: [H("Dup")] }).some((e) => /present as heading/.test(e)) &&
+      errs({ chrome: [H("Dup")], demoted: [H("Dup"), { kind: "code", key: "a" }] }).some((e) => /present as code/.test(e)) &&
+      !errs({ chrome: [H("Dup")], demoted: [H("Dup"), { kind: "code", key: "a" }] }).some((e) => /layout changed/.test(e)));
+  }
   // Structure: a moved block, a changed level, and a block under a heading the source lacks each
   // fail; a known_structure entry that no longer fires is stale.
   const reshaped = (f) => ({ ...doc, sections: [{ ...page, blocks: f(page.blocks) }] });
