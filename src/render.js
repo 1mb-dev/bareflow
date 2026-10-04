@@ -74,11 +74,14 @@ function fenced(text, lang = "") {
   return `${f}${lang}\n${text}\n${f}`;
 }
 
-// Prose as Markdown: outside its code spans (a backtick run, text, a run of the same length), a
-// run of three or more backticks or tildes is escaped, so page text about Markdown can neither
-// sit a fence mid-line nor open one at a line start over the rest of the page. The IR keeps the
-// text as the page had it; only this render escapes.
+// Prose as Markdown: a run of three or more backticks or tildes is escaped wherever a parser
+// could read it as a fence, so page text about Markdown can neither sit a fence mid-line nor open
+// one over the rest of the page. At a line start it is escaped always: block structure is parsed
+// before inline code spans, so a span spanning lines cannot protect it. Mid-line it is escaped
+// outside code spans (a backtick run, text, a run of the same length). The IR keeps the text as
+// the page had it; only this render escapes.
 function prose(t) {
+  t = t.replace(/^( {0,3})(`{3,}|~{3,})/gm, (_, sp, run) => sp + run.replace(/./g, "\\$&"));
   const out = [];
   let i = 0;
   const span = /(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g;

@@ -338,6 +338,10 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("render", "prose", "backtick or tilde runs in page text never form a fence; the IR keeps them raw",
     renderOk(prose, renderMarkdown(prose)) && renderMarkdown(prose).includes("Write \\`\\`\\` then") && renderMarkdown(prose).includes("\\~\\~\\~sh") &&
     prose.sections[0].blocks[0].text === "Write ``` then the language." && prose.sections[0].blocks[2].text === "```py");
+  // Block structure is parsed before code spans: a span across lines does not protect a line
+  // that starts with ```.
+  const spanned = mk([P("`` a\n```\nb ``")]);
+  record("render", "prose", "a line-start fence inside a multi-line code span is escaped", renderOk(spanned, renderMarkdown(spanned)) && renderMarkdown(spanned).includes("\n\\`\\`\\`\n"));
   const fencedHeading = await run({ url: "https://example.com/f", retrievedAt: FIXED, html: "<html><body><main><h1>F</h1><h2>Using ``` fences</h2><p>Body text of the page.</p></main></body></html>" });
   record("render", "prose", "a heading holding ``` is no loss", !fencedHeading.doc.sections[0].losses.length && renderOk(fencedHeading.doc, fencedHeading.markdown));
   // The header holds http(s) URLs only, whatever built the IR.
