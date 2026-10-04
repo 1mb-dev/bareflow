@@ -1,4 +1,4 @@
-// Use log for the dogfood (MLP v1 P5): one JSON line per CLI use, appended to $MDFLOW_LOG when
+// Use log: one JSON line per CLI use, appended to $MDFLOW_LOG when
 // it is set, nothing otherwise. A log write that fails is reported and never fails the fetch.
 import { appendFileSync } from "node:fs";
 

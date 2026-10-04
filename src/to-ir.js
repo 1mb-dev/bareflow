@@ -23,8 +23,8 @@ const target = (u) => {
 // HTML whitespace collapses in text; <br> is the only line break the IR keeps.
 const collapse = (t) => t.replace(/[\t\n\f\r ]+/g, " ");
 
-// A node's inline content as inline Markdown. Joined and cleaned once: spaces at a <br> go, the
-// rest stays as built. (A join per nested element made n elements cost n^2 joins.)
+// A node's inline content as inline Markdown, joined once at the top (a join per nested element
+// is quadratic); spaces at a <br> go.
 function inlineMarkdown(node) {
   const out = [];
   inlineParts(node, out);
@@ -195,15 +195,14 @@ function blockFor(el, out) {
     return;
   }
   // Div / section / article / header / footer: transparent containers, recurse. Defuddle can
-  // return its content wrapped in <body> (tailwindcss.com); as an unknown element it would
-  // flatten the whole page into one paragraph.
+  // return its content wrapped in <body>: a container too, never one paragraph.
   if (tag === "HR") return;
   if (tag === "DIV" || tag === "SECTION" || tag === "ARTICLE" || tag === "MAIN" || tag === "HEADER" || tag === "FOOTER" || tag === "ASIDE" || tag === "NAV" || tag === "SPAN" || tag === "BODY") {
     childBlocks(el, out);
     return;
   }
-  // Unknown element (dl, dd, details): a container when it holds blocks, so a nested <pre>
-  // stays a code block instead of inline fences in prose; else one paragraph.
+  // Unknown element (dl, dd, details): a container when it holds blocks, else one paragraph; a
+  // nested <pre> must stay a code block.
   if (el.querySelector(BLOCK_INSIDE)) { childBlocks(el, out); return; }
   const t = inlineMarkdown(el).trim();
   if (t) out.push(ir.paragraph(escapeStart(t)));

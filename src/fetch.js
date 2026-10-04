@@ -96,8 +96,8 @@ function rawFetch(url, deadline, budget, resolver, depth = 0) {
 
       const chunks = [];
       let size = 0, read = false;
-      // The body is read up to MAX_BYTES and the connection then closed: past the cap a server
-      // only spends the caller's bandwidth. Decompression is capped the same way.
+      // The body is read up to MAX_BYTES and the connection then closed; decompression is
+      // capped the same way.
       const finish = async () => {
         if (read) return;
         read = true;
