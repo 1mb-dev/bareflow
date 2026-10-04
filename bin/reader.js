@@ -4,6 +4,7 @@
 // Usage: mdflow-reader [port]
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { run } from "../src/pipeline.js";
@@ -85,9 +86,9 @@ async function frozenView(e) {
 }
 
 // Live pages go through run(), the CLI's path, SSRF guard included.
-async function liveView(url) {
+async function liveView(url, runFn) {
   let doc;
-  try { ({ doc } = await run({ url })); } catch (e) { return page("live", "", `<p class="bad">mdflow: ${esc(e?.message || e)}</p>`, ""); }
+  try { ({ doc } = await runFn({ url })); } catch (e) { return page("live", "", `<p class="bad">mdflow: ${esc(e?.message || e)}</p>`, ""); }
   return page(doc.title, `<p class="pad"><a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a></p><p class="pad muted">Live pages are not framed. No labels: findings are unjudged.</p>`, documentHtml(doc), `<h2>Findings</h2>${findingsHtml(doc, null)}`);
 }
 
@@ -131,6 +132,9 @@ function page(title, src, docHtml, side, plain = false) {
   </script></body></html>`;
 }
 
+// The reader's server; runFn is run() unless verify passes one over frozen pages (an import,
+// never an argument or env, so it opens no fetch path).
+export function createReader({ run: runFn = run } = {}) {
 const server = createServer(async (req, res) => {
   // Loopback names only: a page in the owner's browser that rebinds its own name to 127.0.0.1
   // could otherwise read the reader's responses.
@@ -140,7 +144,7 @@ const server = createServer(async (req, res) => {
   const send = (code, body, type = "text/html; charset=utf-8", extra = {}) => { res.writeHead(code, { "content-type": type, ...extra }); res.end(body); };
   try {
     if (u.pathname === "/") return send(200, index());
-    if (u.pathname === "/live") return send(200, await liveView(u.searchParams.get("url") || ""));
+    if (u.pathname === "/live") return send(200, await liveView(u.searchParams.get("url") || "", runFn));
     const [, kind, id] = u.pathname.split("/").map(decodeURIComponent);
     const e = entries.get(id);
     if (!e) return send(404, "not found", "text/plain");
@@ -153,7 +157,13 @@ const server = createServer(async (req, res) => {
     if (kind === "f") return send(200, await frozenView(e));
     send(404, "not found", "text/plain");
   } catch (err) {
-    send(500, esc(err?.stack || err), "text/plain");
+    send(500, `error: ${err?.message || err}`, "text/plain");
   }
 });
-server.listen(PORT, "127.0.0.1", () => console.log(`mdflow reader: http://127.0.0.1:${server.address().port}/`));
+return server;
+}
+
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const server = createReader();
+  server.listen(PORT, "127.0.0.1", () => console.log(`mdflow reader: http://127.0.0.1:${server.address().port}/`));
+}

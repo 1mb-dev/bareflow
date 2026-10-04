@@ -711,7 +711,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   // 'close', not 'exit': stderr may still be unread when the process exits.
   const cliRun = (args) => new Promise((ok) => { let e = ""; const c = spawn(process.execPath, [join(ROOT, "bin/mdflow.js"), ...args]); c.stderr.on("data", (x) => (e += x)); c.on("close", (code) => ok({ code, line: e.trim() })); });
   const [usage, failed] = await Promise.all([cliRun([]), cliRun(["http://127.0.0.1/"])]);
-  const env = [...new Set((await readFile(join(ROOT, "bin/mdflow.js"), "utf8")).match(/process\.env\.[A-Z_]+/g).map((m) => m.slice(12)))].sort();
+  const env = [...new Set((await readFile(join(ROOT, "src/cli.js"), "utf8")).match(/\benv\.[A-Z_]+/g).map((m) => m.slice(4)))].sort();
   const crumbed = await run({ url: "https://example.com/docs/a/", retrievedAt: FIXED, html: '<html><body><nav aria-label="breadcrumb"><a href="/docs/">Docs</a></nav><main><h1>A</h1><p>x</p></main></body></html>' });
   // Every header field the render can emit, from a document that has them all.
   const full = { ...fixtureDocs.get("python-tutorial-intro"), source: { url: "https://example.com/a", finalUrl: "https://example.com/b", retrievedAt: FIXED, fingerprint: "f" },
