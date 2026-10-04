@@ -461,6 +461,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("nav", "determinism", "", JSON.stringify(live.doc) === JSON.stringify(again.doc));
 
   const bad = (edit) => { const d = structuredClone(live.doc); edit(d); try { validate(d); return false; } catch { return true; } };
+  record("ir", "validate", "a loss needs a source (its note label)", bad((d) => { d.sections[0].losses = [{ type: "loss", reason: "r" }]; }) && !bad((d) => { d.sections[0].losses = [{ type: "loss", reason: "r", source: "source-heading-diff" }]; }));
   record("ir", "validate", "scope is a page: window, siblings, unknown keys, bad nav, a second section rejected",
     !bad(() => {}) && bad((d) => { d.scope.kind = "window"; }) && bad((d) => { d.scope.siblings = {}; }) &&
     bad((d) => { d.scope.next = { ...d.scope.next, via: "crawl" }; }) && bad((d) => { d.scope.next = { ...d.scope.next, status: "attached" }; }) && bad((d) => { d.scope.prev = { via: "rel" }; }) &&

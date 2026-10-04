@@ -90,7 +90,8 @@ function validateSection(s, path) {
   if (!Array.isArray(s.blocks)) fail(`${path}.blocks`, "missing");
   for (const b of s.blocks) validateBlock(b, `${path}.blocks`);
   if (!Array.isArray(s.losses)) fail(`${path}.losses`, "missing");
-  for (const l of s.losses) if (!l || typeof l.reason !== "string") fail(`${path}.losses`, "loss: reason string");
+  // The Markdown note's label comes from the source: a loss without one has no note to render.
+  for (const l of s.losses) if (!l || typeof l.reason !== "string" || typeof l.source !== "string") fail(`${path}.losses`, "loss: reason and source strings");
   if (!Array.isArray(s.children)) fail(`${path}.children`, "missing");
   for (const c of s.children) validateSection(c, `${path}.children`);
 }
