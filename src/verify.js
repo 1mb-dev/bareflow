@@ -592,6 +592,7 @@ for (const [id, spec] of Object.entries(inventory)) {
 // the test resolver maps its name to loopback, which the default resolver refuses.
 {
   const server = createServer((req, res) => {
+    if (req.url === "/badloc") { res.writeHead(302, { location: "http://[bad" }); return res.end(); }
     if (req.url === "/drip") { res.writeHead(200, { "content-type": "text/html" }); const t = setInterval(() => res.write(" "), 50); res.on("close", () => clearInterval(t)); return; }
     const hop = Number(req.url.match(/^\/hop(\d)$/)?.[1]);
     setTimeout(() => {
@@ -607,10 +608,12 @@ for (const [id, spec] of Object.entries(inventory)) {
   const chainShort = await timed(`http://site.test:${port}/hop0`, 300);
   const chainLong = await timed(`http://site.test:${port}/hop0`, 3000);
   const guarded = await fetchSnapshot(`http://localhost:${port}/hop3`).then(() => "fetched", (e) => e.message);
+  const badLoc = await fetchSnapshot(`http://site.test:${port}/badloc`, { timeout: 2000, lookup }).then(() => "fetched", (e) => e.message);
   server.close();
   record("fetch", "budget", "a dripping body and a slow redirect chain stop at the budget; the chain completes within a longer one",
     /within 300 ms \(redirects included\)/.test(drip.r) && drip.ms < 1500 && /within 300 ms/.test(chainShort.r) && chainShort.ms < 1500 && chainLong.r.includes("Done"));
   record("fetch", "ssrf", "the default resolver refuses a name that resolves to loopback", guarded.startsWith("blocked address for localhost"));
+  record("fetch", "redirect", "an invalid redirect location rejects with a message, not a crash", /to an invalid location$/.test(badLoc));
 }
 
 // Use log: one JSON line per CLI use when MDFLOW_LOG is set, of fixed keys.

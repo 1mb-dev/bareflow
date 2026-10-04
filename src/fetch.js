@@ -75,10 +75,14 @@ function rawFetch(url, deadline, budget, resolver, depth = 0) {
       res.on("error", reject); // mid-body abort must reject, not crash the process
       if ([301, 302, 303, 307, 308].includes(res.statusCode)) {
         const loc = res.headers.location;
+        // The drained hop's late errors must not reject the fetch the next hop now owns.
+        res.off("error", reject).on("error", () => {});
         res.resume();
         if (!loc) return reject(new Error(`redirect ${res.statusCode} without a location from ${url}`));
+        let next;
+        try { next = new URL(loc, url).toString(); } catch { return reject(new Error(`redirect ${res.statusCode} from ${url} to an invalid location`)); }
         clearTimeout(timer);
-        return rawFetch(new URL(loc, url).toString(), deadline, budget, resolver, depth + 1).then(resolve, reject);
+        return rawFetch(next, deadline, budget, resolver, depth + 1).then(resolve, reject);
       }
       if (res.statusCode >= 400) { res.resume(); return reject(new Error(`HTTP ${res.statusCode} from ${url}; check the URL (mdflow does not retry)`)); }
 
@@ -86,6 +90,7 @@ function rawFetch(url, deadline, budget, resolver, depth = 0) {
       let size = 0;
       res.on("data", (c) => { size += c.length; if (size <= MAX_BYTES) chunks.push(c); });
       res.on("end", async () => {
+        clearTimeout(timer); // the body arrived in time; decompressing it is not the site's delay
         const body = await decompress(Buffer.concat(chunks).subarray(0, MAX_BYTES), (res.headers["content-encoding"] || "").toLowerCase());
         resolve({ status: res.statusCode, contentType: res.headers["content-type"] || "", finalUrl: res.responseUrl || url, body });
       });
