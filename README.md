@@ -26,7 +26,7 @@ recall 0.88. Nav follows standard rel=prev/next (on `<link>` and `<a>`) and, whe
 declares Docusaurus or VitePress as its generator and rel is silent, that generator's docs
 pager; `doc.scope` records which (`via: rel | pager`). Attaching sibling page content was
 measured on 12 real tasks and dropped: it never carried an answer the page lacked
-(`usage/v2/log.md`). The IR is versioned (`mdflow/ir/v1`); that a pinned snapshot version
+(`usage/v2/log.md`). The IR is versioned (`mdflow/ir/v2`); that a pinned snapshot version
 serves a consumer is unproven until one pins it. Extraction is composed
 (Defuddle), not built from scratch; the moat is the contract downstream of extraction.
 

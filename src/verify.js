@@ -287,14 +287,14 @@ for (const [id, spec] of Object.entries(inventory)) {
   const { scope } = live.doc;
   record("nav", "recorded", "live run fetches the page only; prev/next in scope, one section",
     JSON.stringify(fetched) === JSON.stringify([introUrl]) && live.doc.sections.length === 1 && scope.kind === "page" &&
-    scope.next.url === cfUrl && scope.next.via === "rel" && scope.prev.url.endsWith("interpreter.html"));
+    scope.next?.url === cfUrl && scope.next?.via === "rel" && !!scope.prev?.url.endsWith("interpreter.html"));
   const again = await run({ url: introUrl, fetch, retrievedAt: FIXED });
   record("nav", "determinism", "", JSON.stringify(live.doc) === JSON.stringify(again.doc));
 
   const bad = (edit) => { const d = structuredClone(live.doc); edit(d); try { validate(d); return false; } catch { return true; } };
   record("ir", "validate", "scope is a page: window, siblings, unknown keys, bad nav, a second section rejected",
     !bad(() => {}) && bad((d) => { d.scope.kind = "window"; }) && bad((d) => { d.scope.siblings = {}; }) &&
-    bad((d) => { d.scope.next.via = "crawl"; }) && bad((d) => { d.scope.next.status = "attached"; }) && bad((d) => { delete d.scope.prev.url; }) &&
+    bad((d) => { d.scope.next = { ...d.scope.next, via: "crawl" }; }) && bad((d) => { d.scope.next = { ...d.scope.next, status: "attached" }; }) && bad((d) => { d.scope.prev = { via: "rel" }; }) &&
     bad((d) => d.sections.push({ ...structuredClone(d.sections[0]), id: "other" })));
 }
 

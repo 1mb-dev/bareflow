@@ -8,7 +8,7 @@ function norm(s) {
   return (s || "").replace(/\s+/g, " ").trim();
 }
 
-// The one URL canonicalizer: nav targets, sibling keys, and nav truth all compare through it.
+// The one URL canonicalizer: nav targets and nav truth compare through it.
 // null for an href that does not resolve or is not http(s): a nav target of a web document is
 // a web page, never javascript: or file:.
 export function canonicalUrl(href, base) {

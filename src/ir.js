@@ -6,7 +6,7 @@
 // schema revision, not a v1 requirement.
 import { createHash } from "node:crypto";
 
-export const SCHEMA = "mdflow/ir/v1";
+export const SCHEMA = "mdflow/ir/v2";
 
 export const BLOCK_TYPES = new Set([
   "heading", "paragraph", "code", "list", "table", "blockquote", "image",
@@ -75,13 +75,12 @@ export function validate(doc) {
   }
   if (!Array.isArray(doc.breadcrumbs) || !doc.breadcrumbs.every((c) => typeof c?.url === "string" && typeof c.title === "string"))
     fail("breadcrumbs", "array of { title, url }");
-  if (!Array.isArray(doc.sections) || doc.sections.length === 0) fail("sections", "must be non-empty");
+  if (!Array.isArray(doc.sections) || doc.sections.length !== 1) fail("sections", "one page section");
   for (const s of doc.sections) validateSection(s, "sections");
   const ids = [];
   const collect = (s) => { ids.push(s.id); s.children.forEach(collect); };
   doc.sections.forEach(collect);
   if (new Set(ids).size !== ids.length) fail("sections", "section ids must be unique");
-  if (doc.sections.length !== 1) fail("sections", "one page section");
   return doc;
 }
 
