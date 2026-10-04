@@ -48,14 +48,16 @@ function rawFetch(url, timeout, depth = 0) {
   const u = new URL(url);
   const isHttps = u.protocol === "https:";
   if (!isHttps && u.protocol !== "http:") return Promise.reject(new Error(`unsupported protocol: ${u.protocol}`));
-  // Literal-IP hostnames skip the lookup callback, so reject private ones up front.
-  if (isIP(u.hostname) !== 0 && isPrivateIp(u.hostname)) return Promise.reject(new Error(`blocked address for ${u.hostname}`));
+  // Literal-IP hostnames skip the lookup callback, so reject private ones up front. URL keeps
+  // an IPv6 literal's brackets ("[::1]"), which isIP and the socket both reject.
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  if (isIP(host) !== 0 && isPrivateIp(host)) return Promise.reject(new Error(`blocked address for ${host}`));
   const req = isHttps ? httpsRequest : httpRequest;
 
   return new Promise((resolve, reject) => {
     const r = req({
       protocol: u.protocol,
-      hostname: u.hostname,
+      hostname: host,
       port: u.port || (isHttps ? 443 : 80),
       path: u.pathname + u.search,
       method: "GET",

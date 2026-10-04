@@ -12,7 +12,7 @@ import { gzipSync } from "node:zlib";
 import { run } from "./pipeline.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
-import { decompress, MAX_BYTES } from "./fetch.js";
+import { decompress, fetchSnapshot, MAX_BYTES } from "./fetch.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA } from "./ir.js";
 import { renderMarkdown } from "./render.js";
@@ -385,6 +385,14 @@ for (const [id, spec] of Object.entries(inventory)) {
   const allowed = ["8.8.8.8", "1.1.1.1", "2606:4700:4700::1111", "example.com"];
   record("ssrf", "denylist", "non-public blocked, public allowed",
     blocked.every((ip) => isPrivateIp(ip)) && allowed.every((ip) => !isPrivateIp(ip)));
+}
+
+// Fetch SSRF: a literal private address, IPv4 or bracketed IPv6, is refused by the policy itself
+// before any socket (a refused connection or a DNS miss would also reject, so match the message).
+{
+  const refused = await Promise.all(["http://127.0.0.1:9/", "http://[::1]:9/", "http://[fd00::1]/", "http://[::ffff:7f00:1]/"]
+    .map((u) => fetchSnapshot(u).then(() => "fetched", (e) => e.message)));
+  record("fetch", "ssrf", "literal private IPv4 and IPv6 refused as blocked addresses", refused.every((m) => m.startsWith("blocked address for ")));
 }
 
 // Fetch decompression: a small compressed body must not inflate past the cap, and a bomb must
