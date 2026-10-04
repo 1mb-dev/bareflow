@@ -655,6 +655,7 @@ for (const [id, spec] of Object.entries(inventory)) {
 {
   const server = createServer((req, res) => {
     if (req.url === "/endless") { res.writeHead(200, { "content-type": "text/html" }); const mb = Buffer.alloc(1 << 20, 97); const t = setInterval(() => res.write(mb), 5); res.on("close", () => clearInterval(t)); return; }
+    if (req.url === "/badgzip") { res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip" }); return res.end("<html>not gzip</html>"); }
     if (req.url === "/badloc") { res.writeHead(302, { location: "http://[bad" }); return res.end(); }
     if (req.url === "/drip") { res.writeHead(200, { "content-type": "text/html" }); const t = setInterval(() => res.write(" "), 50); res.on("close", () => clearInterval(t)); return; }
     const hop = Number(req.url.match(/^\/hop(\d)$/)?.[1]);
@@ -672,12 +673,14 @@ for (const [id, spec] of Object.entries(inventory)) {
   const chainLong = await timed(`http://site.test:${port}/hop0`, 3000);
   const guarded = await fetchSnapshot(`http://localhost:${port}/hop3`).then(() => "fetched", (e) => e.message);
   const badLoc = await fetchSnapshot(`http://site.test:${port}/badloc`, { timeout: 2000, lookup }).then(() => "fetched", (e) => e.message);
+  const badGzip = await fetchSnapshot(`http://site.test:${port}/badgzip`, { timeout: 2000, lookup }).then(() => "fetched", (e) => e.message);
   const endless = await fetchSnapshot(`http://site.test:${port}/endless`, { timeout: 5000, lookup }).then((x) => x.bytes, (e) => e.message);
   server.close();
   record("fetch", "budget", "a dripping body and a slow redirect chain stop at the budget; the chain completes within a longer one",
     /within 300 ms \(redirects included\)/.test(drip.r) && drip.ms < 1500 && /within 300 ms/.test(chainShort.r) && chainShort.ms < 1500 && chainLong.r.includes("Done"));
   record("fetch", "ssrf", "the default resolver refuses a name that resolves to loopback", guarded.startsWith("blocked address for localhost"));
   record("fetch", "redirect", "an invalid redirect location rejects with a message, not a crash", /to an invalid location$/.test(badLoc));
+  record("fetch", "decode", "a body that is not its declared encoding rejects with the reason", /is not valid gzip/.test(badGzip));
   record("fetch", "cap", "an endless body is read to the byte cap and the connection closed, inside the budget", endless === MAX_BYTES);
 }
 

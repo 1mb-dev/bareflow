@@ -17,22 +17,24 @@ const sha = (b) => createHash("sha256").update(b).digest("hex").slice(0, 16);
 
 // Decompress a capped body, streaming so the decompressed output is also capped at MAX_BYTES:
 // the decompressor is destroyed at the cap, so a bomb costs at most MAX_BYTES of output and the
-// CPU to make it, not the whole expansion. Corrupt data keeps the raw body.
-export function decompress(body, enc) {
+// CPU to make it, not the whole expansion. Corrupt data rejects, unless mdflow cut the body at
+// the cap (truncated): then what decoded so far is the page.
+export function decompress(body, enc, { truncated = false } = {}) {
   const factory = enc.includes("gzip") ? createGunzip : enc.includes("deflate") ? createInflate : enc.includes("br") ? createBrotliDecompress : null;
   if (!factory) return Promise.resolve(body);
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const dec = factory();
     const chunks = [];
     let size = 0, done = false;
     const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    const fail = (e) => { if (!done) { done = true; reject(e); } };
     dec.on("data", (c) => {
       chunks.push(c);
       size += c.length;
       if (size >= MAX_BYTES) { finish(Buffer.concat(chunks).subarray(0, MAX_BYTES)); dec.destroy(); }
     });
     dec.on("end", () => finish(Buffer.concat(chunks).subarray(0, MAX_BYTES)));
-    dec.on("error", () => finish(body));
+    dec.on("error", (e) => (truncated ? finish(Buffer.concat(chunks).subarray(0, MAX_BYTES)) : fail(new Error(`body is not valid ${enc} (${e.message}); the server mislabels its encoding`))));
     dec.end(body);
   });
 }
@@ -82,6 +84,7 @@ function rawFetch(url, deadline, budget, resolver, depth = 0) {
         const loc = res.headers.location;
         // The drained hop's late errors must not reject the fetch the next hop now owns.
         res.off("error", reject).on("error", () => {});
+        r.off("error", reject).on("error", () => {});
         res.resume();
         if (!loc) return reject(new Error(`redirect ${res.statusCode} without a location from ${url}`));
         let next;
@@ -99,13 +102,15 @@ function rawFetch(url, deadline, budget, resolver, depth = 0) {
         if (read) return;
         read = true;
         clearTimeout(timer); // the body is in; decompressing it is not the site's delay
-        const body = await decompress(Buffer.concat(chunks).subarray(0, MAX_BYTES), (res.headers["content-encoding"] || "").toLowerCase());
+        let body;
+        try { body = await decompress(Buffer.concat(chunks).subarray(0, MAX_BYTES), (res.headers["content-encoding"] || "").toLowerCase(), { truncated: size >= MAX_BYTES }); }
+        catch (e) { return reject(new Error(`${e.message}: ${url}`)); }
         resolve({ status: res.statusCode, contentType: res.headers["content-type"] || "", finalUrl: res.responseUrl || url, body });
       };
       res.on("data", (c) => {
         chunks.push(c);
         size += c.length;
-        if (size >= MAX_BYTES) { res.off("error", reject).on("error", () => {}); finish(); res.destroy(); }
+        if (size >= MAX_BYTES) { res.off("error", reject).on("error", () => {}); r.off("error", reject).on("error", () => {}); finish(); res.destroy(); }
       });
       res.on("end", finish);
     });
