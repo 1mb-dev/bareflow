@@ -390,6 +390,9 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("render", "corpus", `adversarial inputs form no block the IR lacks (${corpus.length})${corpusBad.length ? `: ${corpusBad.join(" | ")}` : ""}`, !corpusBad.length);
   const fencedHeading = await run({ url: "https://example.com/f", retrievedAt: FIXED, html: "<html><body><main><h1>F</h1><h2>Using ``` fences</h2><p>Body text of the page.</p></main></body></html>" });
   record("render", "prose", "a heading holding ``` is no loss", !fencedHeading.doc.sections[0].losses.length && renderOk(fencedHeading.doc, fencedHeading.markdown));
+  // run() names a non-absolute URL instead of failing inside compose.
+  const notUrl = await run({ url: "local-fixture", html: "<html><body><p>x</p></body></html>", retrievedAt: FIXED }).then(() => "ran", (e) => e.message);
+  record("pipeline", "url", "a non-absolute URL is refused by name", notUrl.startsWith("not a URL: local-fixture"));
   // A server- or page-chosen URL holding a ' is withheld from the header (an agent single-quotes
   // the URLs it runs); the JSON keeps it.
   {

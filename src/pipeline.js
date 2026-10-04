@@ -39,6 +39,7 @@ function promoteTitle(title, html, blocks) {
 }
 
 export async function run({ url, html, retrievedAt, fetch = fetchSnapshot }) {
+  try { new URL(url); } catch { throw new Error(`not a URL: ${url}; give a full http(s) URL`); }
   let snap;
   if (html != null) {
     snap = {
