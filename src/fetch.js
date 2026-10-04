@@ -21,7 +21,7 @@ const sha = (b) => createHash("sha256").update(b).digest("hex").slice(0, 16);
 // the cap (truncated): then what decoded so far is the page.
 export function decompress(body, enc, { truncated = false } = {}) {
   const factory = enc.includes("gzip") ? createGunzip : enc.includes("deflate") ? createInflate : enc.includes("br") ? createBrotliDecompress : null;
-  if (!factory) return Promise.resolve(body);
+  if (!factory || !body.length) return Promise.resolve(body); // an empty body is an empty page
   return new Promise((resolve, reject) => {
     const dec = factory();
     const chunks = [];

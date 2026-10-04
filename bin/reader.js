@@ -9,6 +9,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { run } from "../src/pipeline.js";
 import { scoreLoss, scoreNav } from "../src/truth.js";
+import { unescape } from "../src/md.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = Number(process.argv[2] ?? 4380);
@@ -25,15 +26,16 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const kindOf = (l) => (l.source?.match(/^source-(heading|code|table)-/) || [])[1] ?? "";
 const short = (s, n = 110) => (s.length > n ? s.slice(0, n) + "..." : s);
 
+// IR prose is inline Markdown; the reader shows its text, so the escapes come off for display.
 function blockHtml(b) {
   switch (b.type) {
-    case "heading": return `<h${Math.min(b.level + 1, 6)} class="h">${"#".repeat(b.level)} ${esc(b.text)}</h${Math.min(b.level + 1, 6)}>`;
-    case "paragraph": return `<p>${esc(b.text)}</p>`;
+    case "heading": return `<h${Math.min(b.level + 1, 6)} class="h">${"#".repeat(b.level)} ${esc(unescape(b.text))}</h${Math.min(b.level + 1, 6)}>`;
+    case "paragraph": return `<p>${esc(unescape(b.text))}</p>`;
     case "code": return `<pre><code>${esc(b.code)}</code></pre>${b.lang ? `<div class="lang">${esc(b.lang)}</div>` : ""}`;
-    case "blockquote": return `<blockquote>${esc(b.text)}</blockquote>`;
-    case "list": return `<${b.ordered ? "ol" : "ul"}>${b.items.map((i) => `<li>${esc(i)}</li>`).join("")}</${b.ordered ? "ol" : "ul"}>`;
+    case "blockquote": return `<blockquote>${esc(unescape(b.text))}</blockquote>`;
+    case "list": return `<${b.ordered ? "ol" : "ul"}>${b.items.map((i) => `<li>${esc(unescape(i))}</li>`).join("")}</${b.ordered ? "ol" : "ul"}>`;
     case "image": return `<p class="muted">[image: ${esc(b.alt)}] ${esc(b.src)}</p>`;
-    case "table": return `<table><tr>${b.headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr>${b.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>`;
+    case "table": return `<table><tr>${b.headers.map((h) => `<th>${esc(unescape(h))}</th>`).join("")}</tr>${b.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(unescape(c))}</td>`).join("")}</tr>`).join("")}</table>`;
     default: return `<p class="muted">[${esc(b.type)}]</p>`;
   }
 }

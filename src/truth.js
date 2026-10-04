@@ -150,7 +150,9 @@ export function scoreLoss(html, doc, spec) {
     }
     return true;
   };
-  const irProse = loose([...walk(doc)].map(({ block: b }) => b.code ?? unescape(b.text ?? [...(b.items || []), ...(b.headers || []), ...(b.rows || []).flat()].join(" "))).join(" "));
+  // Prose and code only: a demoted heading or code block survives as prose, and a table cell
+  // holding the same words is not that.
+  const irProse = loose([...walk(doc)].map(({ block: b }) => b.code ?? unescape(b.text ?? (b.items || []).join(" "))).join(" "));
   for (const it of items) {
     // A demoted table survives as prose cell by cell, not as its joined text.
     const survives = it.kind === "table" ? it.cells.filter((c) => irProse.includes(c)).length >= 0.9 * it.cells.length : irProse.includes(loose(it.text));

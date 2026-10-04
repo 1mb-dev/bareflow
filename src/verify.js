@@ -167,6 +167,12 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("truth-harness", "fails on", "demoted label whose text is gone", fails(withLosses(true), { labels: { demoted: [H("Gone")] } }, /labelled demoted but text not in IR/));
   record("truth-harness", "fails on", "lost label on a block in the IR", fails(doc, lost, /labelled lost but in IR/));
   record("truth-harness", "fails on", "demoted label on a block present as its type", fails(doc, { labels: { demoted: [H("Gone")] } }, /labelled demoted but present as heading/));
+  // A demoted label on a heading that is gone: a table cell with the same words is not it.
+  {
+    const lostHeading = "<html><body><main><h1>T</h1><h2>Options</h2><p>x</p><table><tr><th>Options</th></tr><tr><td>a</td></tr></table></main></body></html>";
+    const ir = { ...doc, sections: [{ ...page, blocks: [{ type: "paragraph", text: "x" }, { type: "table", headers: ["Options"], rows: [["a"]] }], losses: [] }] };
+    record("truth-harness", "fails on", "a demoted label whose words survive only in a table cell", scoreLoss(lostHeading, ir, { labels: { demoted: [H("Options")] } }).errors.some((e) => /labelled demoted but text not in IR/.test(e)));
+  }
   // Two copies of one heading, chrome and demoted: the chrome copy in the IR is not the demoted
   // one. A stale demoted code label is reported as stale, not as layout drift.
   {
@@ -677,6 +683,7 @@ for (const [id, spec] of Object.entries(inventory)) {
     if (req.url === "/endless") { res.writeHead(200, { "content-type": "text/html" }); const mb = Buffer.alloc(1 << 20, 97); const t = setInterval(() => res.write(mb), 5); res.on("close", () => clearInterval(t)); return; }
     if (req.url === "/moved") { res.writeHead(302, { location: "/docs/final/" }); return res.end(); }
     if (req.url === "/docs/final/") { res.writeHead(200, { "content-type": "text/html" }); return res.end('<html><head><title>Final</title></head><body><main><h1>Final</h1><p>See <a href="intro">intro</a> for the page body.</p></main></body></html>'); }
+    if (req.url === "/emptygzip") { res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip" }); return res.end(); }
     if (req.url === "/badgzip") { res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip" }); return res.end("<html>not gzip</html>"); }
     if (req.url === "/badloc") { res.writeHead(302, { location: "http://[bad" }); return res.end(); }
     if (req.url === "/drip") { res.writeHead(200, { "content-type": "text/html" }); const t = setInterval(() => res.write(" "), 50); res.on("close", () => clearInterval(t)); return; }
@@ -695,6 +702,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   const chainLong = await timed(`http://site.test:${port}/hop0`, 3000);
   const guarded = await fetchSnapshot(`http://localhost:${port}/hop3`).then(() => "fetched", (e) => e.message);
   const badLoc = await fetchSnapshot(`http://site.test:${port}/badloc`, { timeout: 2000, lookup }).then(() => "fetched", (e) => e.message);
+  const emptyGzip = await fetchSnapshot(`http://site.test:${port}/emptygzip`, { timeout: 2000, lookup }).then((x) => `bytes ${x.bytes}`, (e) => e.message);
   const badGzip = await fetchSnapshot(`http://site.test:${port}/badgzip`, { timeout: 2000, lookup }).then(() => "fetched", (e) => e.message);
   const moved = await run({ url: `http://site.test:${port}/moved`, fetch: (u) => fetchSnapshot(u, { timeout: 3000, lookup }) });
   const endless = await fetchSnapshot(`http://site.test:${port}/endless`, { timeout: 5000, lookup }).then((x) => x.bytes, (e) => e.message);
@@ -703,7 +711,7 @@ for (const [id, spec] of Object.entries(inventory)) {
     /within 300 ms \(redirects included\)/.test(drip.r) && drip.ms < 1500 && /within 300 ms/.test(chainShort.r) && chainShort.ms < 1500 && chainLong.r.includes("Done"));
   record("fetch", "ssrf", "the default resolver refuses a name that resolves to loopback", guarded.startsWith("blocked address for localhost"));
   record("fetch", "redirect", "an invalid redirect location rejects with a message, not a crash", /to an invalid location$/.test(badLoc));
-  record("fetch", "decode", "a body that is not its declared encoding rejects with the reason", /is not valid gzip/.test(badGzip));
+  record("fetch", "decode", "a body that is not its declared encoding rejects with the reason; an empty one is an empty page", /is not valid gzip/.test(badGzip) && emptyGzip === "bytes 0");
   const finalUrl = `http://site.test:${port}/docs/final/`;
   record("fetch", "redirect", "a real redirect: finalUrl, the header's final line, links resolved against the URL read",
     moved.doc.source.finalUrl === finalUrl && moved.markdown.includes(`\nfinal: ${finalUrl}\n`) && moved.doc.sections[0].blocks[0].text.includes(`](${finalUrl}intro)`) &&
@@ -789,12 +797,13 @@ for (const [id, spec] of Object.entries(inventory)) {
 }
 // The reader's /live, in process with run() over a frozen page.
 {
-  const server = createReader({ run: ({ url }) => run({ url, html: "<html><head><title>Live Page</title></head><body><main><h1>Live Page</h1><p>Body text of the page.</p></main></body></html>", retrievedAt: FIXED }) });
+  const server = createReader({ run: ({ url }) => run({ url, html: "<html><head><title>Live Page</title></head><body><main><h1>Live Page</h1><p>Body text of the page, snake_case and _emph_.</p></main></body></html>", retrievedAt: FIXED }) });
   await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
   const base = `http://127.0.0.1:${server.address().port}/`;
   const [live, bad] = await Promise.all([fetch(base + "live?url=" + encodeURIComponent("https://example.com/live")).then((r) => r.text()), fetch(base + "live?url=").then((r) => r.text())]);
   server.close();
-  record("reader", "live", "/live renders a page through run(); a bad URL shows the reason", live.includes("<h1>Live Page</h1>") && bad.includes("mdflow: not a URL"));
+  record("reader", "live", "/live renders a page through run(), its text without Markdown escapes; a bad URL shows the reason",
+    live.includes("<h1>Live Page</h1>") && live.includes("snake_case and _emph_.") && bad.includes("mdflow: not a URL"));
 }
 
 // The local reader: the page with its nav, judged findings, and the source served without its scripts.
