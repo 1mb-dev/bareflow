@@ -8,6 +8,7 @@
 // wins), and must not match two distinct blocks. `flattened` labels the page as a whole and is
 // scored as its own row, not pooled into block precision. Every known_fp entry carries a `why`.
 import { parseHtml } from "./html.js";
+import { unescape } from "./md.js";
 import { walk } from "./ir.js";
 import { extractNav, canonicalUrl } from "./compose.js";
 
@@ -30,6 +31,8 @@ const tableText = (cells) => vnorm(cells.join(" | "));
 // Block identity ignores whitespace: inline elements join with or without a space depending
 // on the renderer ("Specification#" in source, "Specification #" in the IR).
 const loose = (t) => t.replace(/\s/g, "");
+// IR prose (headings, cells, paragraphs) is inline Markdown; its backslash escapes are not text.
+// Code is verbatim and compared as is.
 
 const AUDIT_KIND = {
   "source-heading-diff": "heading", "source-heading-demoted": "heading",
@@ -82,9 +85,9 @@ function irTexts(doc) {
   };
   doc.sections.forEach(titles);
   for (const { block: b } of walk(doc)) {
-    if (b.type === "heading") m.heading.push(loose(headingText(b.text)));
+    if (b.type === "heading") m.heading.push(loose(headingText(unescape(b.text))));
     else if (b.type === "code") m.code.push(loose(vnorm(b.code)));
-    else if (b.type === "table") m.table.push(loose(tableText([...b.headers, ...b.rows.flat()])));
+    else if (b.type === "table") m.table.push(loose(tableText([...b.headers, ...b.rows.flat()].map(unescape))));
   }
   return m;
 }
@@ -147,7 +150,7 @@ export function scoreLoss(html, doc, spec) {
     }
     return true;
   };
-  const irProse = loose([...walk(doc)].map(({ block: b }) => b.text ?? b.code ?? (b.items || []).join(" ")).join(" "));
+  const irProse = loose([...walk(doc)].map(({ block: b }) => b.code ?? unescape(b.text ?? [...(b.items || []), ...(b.headers || []), ...(b.rows || []).flat()].join(" "))).join(" "));
   for (const it of items) {
     // A demoted table survives as prose cell by cell, not as its joined text.
     const survives = it.kind === "table" ? it.cells.filter((c) => irProse.includes(c)).length >= 0.9 * it.cells.length : irProse.includes(loose(it.text));
@@ -227,9 +230,9 @@ function structureDiffs(items, doc) {
   const rec = (s) => {
     seq.push({ kind: "heading", key: loose(headingText(s.title)), level: null });
     for (const b of s.blocks) {
-      if (b.type === "heading") seq.push({ kind: "heading", key: loose(headingText(b.text)), level: b.level });
+      if (b.type === "heading") seq.push({ kind: "heading", key: loose(headingText(unescape(b.text))), level: b.level });
       else if (b.type === "code") seq.push({ kind: "code", key: loose(vnorm(b.code)) });
-      else if (b.type === "table") seq.push({ kind: "table", key: loose(tableText([...b.headers, ...b.rows.flat()])) });
+      else if (b.type === "table") seq.push({ kind: "table", key: loose(tableText([...b.headers, ...b.rows.flat()].map(unescape))) });
     }
     s.children.forEach(rec);
   };

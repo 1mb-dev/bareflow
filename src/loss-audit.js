@@ -5,6 +5,7 @@
 // not a content detector.
 import { innerMain, parseHtml } from "./html.js";
 import * as ir from "./ir.js";
+import { unescape } from "./md.js";
 
 // Chrome inside the scope: the standard navigation roles, aside, plus one site pattern the
 // truth fixtures need (k8s feedback). aside costs one miss (caniuse usage data sits in one)
@@ -267,7 +268,14 @@ const clip = (s, n = 200) => (s.length > n ? `${s.slice(0, n)}…` : s);
 // and output on a hostile or huge page. No fixture comes near it.
 const MAX_BLOCK_FINDINGS = 500;
 
+const plainProse = (b) => b.type === "code" ? b
+  : b.type === "list" ? { ...b, items: b.items.map(unescape) }
+  : b.type === "table" ? { ...b, headers: b.headers.map(unescape), rows: b.rows.map((r) => r.map(unescape)) }
+  : typeof b.text === "string" ? { ...b, text: unescape(b.text) } : b;
+
 export function auditSourceLoss(html, blocks, title = "") {
+  // IR prose is inline Markdown: compare its text without the escapes; code is verbatim.
+  blocks = blocks.map(plainProse);
   const src = sourceBlocks(html);
   const irc = irCounts(blocks);
   const losses = [];

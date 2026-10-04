@@ -10,6 +10,7 @@ import { auditSourceLoss, restoreCodeLayout, sourceTitle } from "./loss-audit.js
 import { compose, extractNav } from "./compose.js";
 import { validate } from "./ir.js";
 import { renderMarkdown } from "./render.js";
+import { unescape } from "./md.js";
 
 const require = createRequire(import.meta.url);
 export const VERSION = require("../package.json").version;
@@ -29,9 +30,11 @@ function separateLosses(extracted, html, extractedTitle) {
 // the body. The site-name part never counts: a leading brand heading must not become the title.
 const SITE_SEP = /\s+[|\-\u2013\u2014\u00b7:]\s+/;
 function promoteTitle(title, html, blocks) {
-  const lead = blocks[0]?.type === "heading" ? blocks[0].text.trim().toLowerCase() : "";
+  // The title is plain text; an IR heading is inline Markdown, so it is compared and kept unescaped.
+  const head = blocks[0]?.type === "heading" ? unescape(blocks[0].text).trim() : "";
+  const lead = head.toLowerCase();
   const page = (t) => (t || "").split(SITE_SEP)[0].trim().toLowerCase();
-  if (lead && (page(title) === lead || page(sourceTitle(html)) === lead)) return { title: blocks[0].text.trim(), blocks: blocks.slice(1) };
+  if (lead && (page(title) === lead || page(sourceTitle(html)) === lead)) return { title: head, blocks: blocks.slice(1) };
   return { title: title || sourceTitle(html), blocks };
 }
 

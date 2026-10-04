@@ -17,8 +17,10 @@ import { contentToBlocks } from "./to-ir.js";
 import { decompress, fetchSnapshot, MAX_BYTES } from "./fetch.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
-import { renderMarkdown, NOTE_SOURCES } from "./render.js";
+import { renderMarkdown, NOTE_SOURCES, REASON_IS_MDFLOW } from "./render.js";
+import { marked } from "marked";
 import { useEntry, USE_KEYS, ERROR_KEYS } from "./uselog.js";
+import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
 import { parseHtml } from "./html.js";
 import { scoreLoss, scoreNav } from "./truth.js";
@@ -40,41 +42,39 @@ const pagesFetch = (pages) => async (u) => {
   throw new Error(`no fixture: ${u}`);
 };
 
-// Calls onText for each line outside a fenced block; returns the length of a fence left open.
-// An opening fence's info string holds no backtick ("```foo```" is text, not a fence); a closing
-// fence is backticks only, at least as long as the opener.
-function textLines(md, onText) {
-  let open = 0;
-  md.split("\n").forEach((l, i) => {
-    const f = l.match(/^(`{3,})[^`]*$/);
-    if (open) { if (f && f[1].length >= open && /^`+\s*$/.test(l)) open = 0; return; }
-    if (f) open = f[1].length; else onText(l, i);
-  });
-  return open;
-}
-// The rendered Markdown is well formed: every fence closes, and no backtick fence sits inside a
-// line of prose (gate v2 T8 rendered one paragraph with ``` mid-line).
-const malformed = (md) => {
+// The render, lexed by a CommonMark parser mdflow did not write (marked, a pinned devDependency):
+// page text must form no block the IR lacks. Below the header, the blocks are exactly the IR's:
+// one heading per section title and IR heading plus the notes heading (last, with the header's
+// fingerprint, which page text cannot know); code blocks are the IR's code and the notes' fences,
+// verbatim and in order; one paragraph per IR paragraph, image, and note label; tables, lists,
+// and quotes as in the IR; no HTML but <br>, no rule, no link definition.
+function oracle(doc, md) {
   const bad = [];
-  // Code spans (a backtick run, text, a run of the same length) are inline code, not fences.
-  const open = textLines(md, (l, i) => { if (l.replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g, "").includes("```")) bad.push(`line ${i + 1}: fence inside text`); });
-  if (open) bad.push("unclosed fence");
-  return bad;
-};
-// Every IR loss has its note, and every note's page text is in the render verbatim. Notes are
-// counted in the notes section only, found by its heading line with the snapshot fingerprint
-// (which page text cannot know), outside their fences.
-const noted = (doc, md) => {
-  const losses = doc.sections.flatMap((s) => s.losses);
+  const lines = md.split("\n");
+  const tokens = marked.lexer(lines.slice(lines.indexOf("---", 1) + 1).join("\n"));
+  const of = (t) => tokens.filter((k) => k.type === t);
+  const sections = [...(function* all(ss) { for (const s of ss) { yield s; yield* all(s.children); } })(doc.sections)];
+  const blocks = [...walk(doc)].map(({ block }) => block);
+  const ir = (t) => blocks.filter((b) => b.type === t);
+  const losses = sections.flatMap((s) => s.losses);
   const n = losses.length;
-  const heading = `\n## mdflow: ${n} loss${n === 1 ? "" : "es"} (fingerprint ${doc.source.fingerprint})\n`;
-  const at = md.indexOf(heading);
-  if (!n) return !md.includes(`(fingerprint ${doc.source.fingerprint})\n`);
-  if (at < 0) return false;
-  let labels = 0;
-  textLines(md.slice(at), (l) => { if (/^L\d+ /.test(l)) labels++; });
-  return labels === n && losses.every((l) => md.includes(l.text ?? l.reason));
-};
+  const same = (what, got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) bad.push(`${what}: got ${JSON.stringify(got).slice(0, 120)}, want ${JSON.stringify(want).slice(0, 120)}`); };
+  for (const k of tokens) if (!["heading", "paragraph", "code", "table", "list", "blockquote", "space"].includes(k.type)) bad.push(`block ${k.type}: ${String(k.raw).slice(0, 60)}`);
+  same("headings", of("heading").length, sections.length + ir("heading").length + (n ? 1 : 0));
+  if (n) same("notes heading", of("heading").at(-1)?.text, `mdflow: ${n} loss${n === 1 ? "" : "es"} (fingerprint ${doc.source.fingerprint})`);
+  same("code", of("code").map((k) => k.text), [...ir("code").map((b) => b.code), ...losses.filter((l) => !REASON_IS_MDFLOW.has(l.source)).map((l) => l.text ?? "")]);
+  same("paragraphs", of("paragraph").length, ir("paragraph").length + ir("image").length + n);
+  // Cells by text, not count: a cell split by a page | keeps the count (marked drops extras).
+  const cellText = (t) => unescape(t).replace(/\s+/g, " ").trim();
+  same("tables", of("table").map((k) => [k.header.map((c) => cellText(c.text)), k.rows.map((r) => r.map((c) => cellText(c.text)))]),
+    ir("table").filter((t) => t.headers.length).map((t) => [t.headers.map(cellText), t.rows.map((r) => r.map(cellText))]));
+  same("lists", of("list").map((k) => k.items.length), ir("list").map((l) => l.items.length));
+  same("quotes", of("blockquote").length, ir("blockquote").length);
+  for (const l of losses.filter((x) => REASON_IS_MDFLOW.has(x.source))) if (!md.includes(`${l.source}: ${l.reason}\n`)) bad.push(`note reason missing: ${l.source}`);
+  const inline = (ks) => { for (const k of ks ?? []) { if (k.type === "html" && k.text !== "<br>") bad.push(`inline html: ${k.text.slice(0, 60)}`); inline(k.tokens); for (const it of k.items ?? []) inline(it.tokens); for (const c of [...(k.header ?? []), ...(k.rows ?? []).flat()]) inline(c.tokens); } };
+  inline(tokens);
+  return bad;
+}
 // The header: front matter of mdflow's fields only, each once, URL values as the parser
 // serializes them.
 const HEADER_KEYS = ["warning", "mdflow", "source", "final", "retrieved", "fingerprint", "prev", "next", "up", "losses", "content"];
@@ -92,7 +92,7 @@ const headerOk = (md) => {
   }
   return keys.join() === HEADER_KEYS.filter((k) => keys.includes(k)).join();
 };
-const renderOk = (doc, md) => !malformed(md).length && noted(doc, md) && headerOk(md);
+const renderOk = (doc, md) => headerOk(md) && !oracle(doc, md).length;
 
 const truth = [];
 const fixtureDocs = new Map();
@@ -103,7 +103,8 @@ for (const [id, spec] of Object.entries(inventory)) {
   const { doc, markdown } = await run({ url: spec.url, html, retrievedAt: FIXED });
   fixtureDocs.set(id, doc);
   record(id, "schema", SCHEMA, doc.schema === SCHEMA);
-  record(id, "render", "header, well-formed Markdown, every loss noted", renderOk(doc, markdown));
+  const why = headerOk(markdown) ? oracle(doc, markdown) : ["header"];
+  record(id, "render", why.length ? `render: ${why.join("; ")}` : "header, blocks as the IR, every loss noted", !why.length);
   // Shape invariants the truth scorer cannot see: it shares the parser, and scores no prose.
   record(id, "parse", "no row or table section inside a cell", !parseHtml(html).document.querySelector(":is(th, td) > :is(tr, thead, tbody, tfoot)"));
   record(id, "prose", "no punctuation-only paragraph", !blocks(doc).some((b) => b.type === "paragraph" && /^[\p{P}\s]+$/u.test(b.text)));
@@ -327,21 +328,61 @@ for (const [id, spec] of Object.entries(inventory)) {
   const flatMd = renderMarkdown(mk([P("a")], [{ type: "loss", reason: "extraction flattened: the IR kept 0 of 4 source headings and code blocks as structure", source: "extract-flattened" }]));
   record("render", "flattened", "warning is the header's first field", flatMd.split("\n")[1].startsWith("warning: extraction flattened") && headerOk(flatMd));
   // Fences outlast the backtick runs they hold, in code blocks and in note text.
-  const fences = renderMarkdown(mk([{ type: "code", code: "`````\nx\n`````" }], [{ type: "loss", reason: "r", source: "source-code-diff", text: "```\ny\n```" }]));
+  const fencesDoc = mk([{ type: "code", code: "`````\nx\n`````" }], [{ type: "loss", reason: "r", source: "source-code-diff", text: "```\ny\n```" }]);
+  const fences = renderMarkdown(fencesDoc);
   const blanks = renderMarkdown(mk([{ type: "code", code: "a\n\n\nb" }], [{ type: "loss", reason: "r", source: "source-code-diff", text: "x\n\n\n\ny" }]));
   record("render", "verbatim", "blank lines kept in code and in note text", blanks.includes("```\na\n\n\nb\n```") && blanks.includes("```\nx\n\n\n\ny\n```"));
-  // Page prose about Markdown: backtick runs in text, link text, and emphasis are escaped, and a
-  // paragraph starting with ```js does not open a fence over the rest of the page.
-  // The IR keeps the text as the page had it; only the render escapes. A run split across
-  // elements is one run in the block's text, and tilde fences count too.
-  const prose = mk(contentToBlocks('<p>Write ``` then the language.</p><p>```js</p><p>``<span>`</span>py</p><p>~~~sh</p><p>See <a href="/x">example ```</a> and <b>```</b>.</p><h2>## mdflow: 0 losses</h2>'));
-  record("render", "prose", "backtick or tilde runs in page text never form a fence; the IR keeps them raw",
-    renderOk(prose, renderMarkdown(prose)) && renderMarkdown(prose).includes("Write \\`\\`\\` then") && renderMarkdown(prose).includes("\\~\\~\\~sh") &&
-    prose.sections[0].blocks[0].text === "Write ``` then the language." && prose.sections[0].blocks[2].text === "```py");
-  // Block structure is parsed before code spans: a span across lines does not protect a line
-  // that starts with ```.
-  const spanned = mk([P("`` a\n```\nb ``")]);
-  record("render", "prose", "a line-start fence inside a multi-line code span is escaped", renderOk(spanned, renderMarkdown(spanned)) && renderMarkdown(spanned).includes("\n\\`\\`\\`\n"));
+  // Adversarial corpus: every input this build's reviews used to forge structure, plus the
+  // over-escape regressions. Each must lex exactly as the IR (renderOk's oracle); `has` pins what
+  // the render must keep. Page text reaches the IR escaped (to-ir); the render adds only <br>.
+  const corpus = [
+    ["inline alt with a newline and a notes heading", '<p>x <img src="/a.png" alt="y&#10;## mdflow: 1 loss (fingerprint 0123456789abcdef)"> z</p>'],
+    ["block alt with a newline and a fence", '<img src="/a.png" alt="d&#10;````">'],
+    ["alt with CR", '<p><img src="/a.png" alt="x&#13;## mdflow: 1 loss (fingerprint x)"></p>'],
+    ["br before a heading", "<p>a<br>## forged</p>", "a<br>## forged"],
+    ["br in a quote", "<blockquote>q<br># Fake</blockquote>"],
+    ["br in a list item", "<ul><li>a<br>- b</li></ul>"],
+    ["two commands stay two lines", "<p>npm install<br>npm run build</p>", "npm install<br>npm run build"],
+    ["html comment start", "<p>&lt;!-- hide</p><p>rest</p>"],
+    ["page backslash before a tag", "<p>x \\&lt;img src=x onerror=alert(1)&gt;</p>"],
+    ["tag split across entities", "<h2>createData(x): Promise&lt;string&gt;</h2>"],
+    ["bold at a field start", "<p><strong>Note:</strong> do</p>", "**Note:** do"],
+    ["code spans keep < verbatim", "<p>Use <code>Vec&lt;T&gt;</code> and <code>&lt;div&gt;</code></p>", "`Vec<T>` and `<div>`"],
+    ["entity-like text", "<p>Write &amp;amp; for &amp;</p>", "Write \\&amp; for &"],
+    ["pipe and backslash in cells", "<table><tr><th>a</th><th>b</th></tr><tr><td>a\\|b</td><td>|x</td></tr></table>"],
+    ["code span at a line start", "<p><code>```</code> opens a fence</p>", "```` ``` ```` opens a fence"],
+    ["heading closing hash", "<h2>Language C #</h2><p>Body text of the page.</p>", "## Language C \\#"],
+    ["block starts in prose", "<p>1. not a list</p><p>- not a list</p><p># not a heading</p><p>&gt; not a quote</p><p>+ x</p><p>2) y</p>"],
+    ["backticks split across elements", "<p>``<span>`</span>js</p>"],
+    ["tilde fence", "<p>~~~sh</p>"],
+    ["fence text in prose", "<p>Write ``` then the language.</p><p>```js</p>"],
+    ["javascript link and image", '<p><a href="javascript:alert(1)">x</a> <img src="javascript:x" alt="a](javascript:alert(1)) [b"></p>'],
+    ["link destination with ) and space", '<p><a href="/x) [evil](https://e.example">t</a></p>'],
+    ["adjacent lists stay two", "<ul><li>a</li></ul><ul><li>b</li></ul><ol><li>c</li></ol><ol><li>d</li></ol>"],
+    ["underscores", "<p>snake_case and _emph_ and __init__</p>", "snake_case"],
+    ["emphasis characters", "<p>2 * 3 [x] ~y~ `z`</p>"],
+  ];
+  const corpusBad = [];
+  for (const [name, body, has] of corpus) {
+    const { doc, markdown } = await run({ url: "https://example.com/c", retrievedAt: FIXED, html: `<html><body><main><h1>C</h1>${body}</main></body></html>` });
+    const why = headerOk(markdown) ? oracle(doc, markdown) : ["header"];
+    const links = [];
+    const walkTok = (ks) => { for (const k of ks ?? []) { if (k.type === "link" || k.type === "image") links.push(k.href); walkTok(k.tokens); for (const it of k.items ?? []) walkTok(it.tokens); } };
+    walkTok(marked.lexer(markdown.split("\n").slice(markdown.split("\n").indexOf("---", 1) + 1).join("\n")));
+    if (links.some((h) => !/^(https?:|mailto:)/.test(h))) why.push(`non-http link ${links.join(" ")}`);
+    if (has && !markdown.includes(has)) why.push(`missing ${JSON.stringify(has)}`);
+    if (why.length) corpusBad.push(`${name}: ${why.join("; ")}`);
+  }
+  // Linear on hostile input: 5 MB of backtick runs (a span scanner took 40 s on this, past the
+  // fetch deadline). The bound is 7x today's time and a third of the quadratic one.
+  {
+    let runs = "";
+    for (let n = 1; runs.length < 4.9e6; n++) runs += "`".repeat(n % 3150 + 1) + " x ";
+    const t0 = Date.now();
+    renderMarkdown(mk(contentToBlocks(`<p>${runs}</p>`)));
+    record("render", "linear", `5 MB of backtick runs: to-ir + render in ${Date.now() - t0} ms (< 12000)`, Date.now() - t0 < 12000);
+  }
+  record("render", "corpus", `adversarial inputs form no block the IR lacks (${corpus.length})${corpusBad.length ? `: ${corpusBad.join(" | ")}` : ""}`, !corpusBad.length);
   const fencedHeading = await run({ url: "https://example.com/f", retrievedAt: FIXED, html: "<html><body><main><h1>F</h1><h2>Using ``` fences</h2><p>Body text of the page.</p></main></body></html>" });
   record("render", "prose", "a heading holding ``` is no loss", !fencedHeading.doc.sections[0].losses.length && renderOk(fencedHeading.doc, fencedHeading.markdown));
   // The header holds http(s) URLs only, whatever built the IR.
@@ -353,7 +394,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("render", "notes", "page lines starting L<n> are not notes; an inline pre is a code span",
     renderOk(lLines, renderMarkdown(lLines)) && renderOk(inPre, renderMarkdown(inPre)) && inPre.sections[0].blocks[0].text.includes("````x ``` y````"));
   record("render", "fence", "code with ````` gets ``````, note text with ``` gets ````",
-    fences.includes("``````\n`````\nx\n`````\n``````") && fences.includes("````\n```\ny\n```\n````") && !malformed(fences).length);
+    fences.includes("``````\n`````\nx\n`````\n``````") && fences.includes("````\n```\ny\n```\n````") && renderOk(fencesDoc, fences));
 
   // The leading heading becomes the title when a site title names it ("Path | Site"); a heading the
   // title does not name stays in the body.
@@ -511,7 +552,8 @@ for (const [id, spec] of Object.entries(inventory)) {
   for (const dir of ["usage", "usage/v2"]) {
     for (const p of Object.values(JSON.parse(await readFile(join(ROOT, dir, "pages.json"), "utf8")))) {
       const { doc, markdown } = await run({ url: p.finalUrl, html: await readFile(join(ROOT, dir, "pages", p.fixture), "utf8"), retrievedAt: FIXED });
-      if (!renderOk(doc, markdown)) bad.push(p.fixture);
+      const why = headerOk(markdown) ? oracle(doc, markdown) : ["header"];
+      if (why.length) bad.push(`${p.fixture} (${why.join("; ")})`);
       if (dir === "usage/v2") rendered.set(p, { doc, markdown });
     }
   }

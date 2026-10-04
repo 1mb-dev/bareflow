@@ -18,8 +18,8 @@ const NOTE = {
   "source-table-diff": "table dropped; cell text:",
   "extract-unrepresentable": "embed or interactive content not representable; source:",
 };
-const REASON_IS_MDFLOW = new Set(["extract-flattened", "audit-scope-empty", "audit-truncated"]);
-import { fenced } from "./md.js";
+export const REASON_IS_MDFLOW = new Set(["extract-flattened", "audit-scope-empty", "audit-truncated"]);
+import { dest, escapeHeadingEnd, escapeStart, escapeText, fenced } from "./md.js";
 
 export const NOTE_SOURCES = [...Object.keys(NOTE), ...REASON_IS_MDFLOW];
 
@@ -69,47 +69,50 @@ function lossNotes(doc) {
   return out;
 }
 
-// Prose as Markdown: a run of three or more backticks or tildes is escaped wherever a parser
-// could read it as a fence, so page text about Markdown can neither sit a fence mid-line nor open
-// one over the rest of the page. At a line start it is escaped always: block structure is parsed
-// before inline code spans, so a span spanning lines cannot protect it. Mid-line it is escaped
-// outside code spans (a backtick run, text, a run of the same length). The IR keeps the text as
-// the page had it; only this render escapes.
-function prose(t) {
-  t = t.replace(/^( {0,3})(`{3,}|~{3,})/gm, (_, sp, run) => sp + run.replace(/./g, "\\$&"));
-  const out = [];
-  let i = 0;
-  const span = /(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g;
-  for (let m; (m = span.exec(t)); i = span.lastIndex) out.push(escapeRuns(t.slice(i, m.index)), m[0]);
-  out.push(escapeRuns(t.slice(i)));
-  return out.join("");
-}
-const escapeRuns = (t) => t.replace(/`{3,}|~{3,}/g, (m) => m.replace(/./g, "\\$&"));
+// IR prose is inline Markdown with page text already escaped (to-ir.js); its only line break is
+// <br>, written here as an mdflow <br> so no page text starts an output line.
+const br = (t) => t.replace(/\n/g, "<br>");
+// The section title and an image's alt are plain text: escaped like page text in prose.
+const plain = (t) => escapeText((t || "").replace(/\s+/g, " ").trim());
 
 function renderSection(s, depth, out) {
-  out.push(`${"#".repeat(Math.min(depth, 6))} ${prose(s.title)}`, "");
+  out.push(`${"#".repeat(Math.min(depth, 6))} ${escapeHeadingEnd(escapeStart(plain(s.title)))}`, "");
   // A blank line after every block: without it adjacent paragraphs merge, and a paragraph after
   // a list continues the list's last item.
-  for (const b of s.blocks) { const r = renderBlock(b); if (r) out.push(r, ""); }
+  // Two adjacent lists of one kind would merge into one in CommonMark; alternating the marker
+  // keeps them two.
+  let prev = null, alt = false;
+  for (const b of s.blocks) {
+    alt = b.type === "list" && prev?.type === "list" && prev.ordered === b.ordered ? !alt : false;
+    const r = renderBlock(b, alt);
+    if (r) { out.push(r, ""); prev = b; }
+  }
   for (const c of s.children) renderSection(c, depth + 1, out);
 }
 
-function renderBlock(b) {
+function renderBlock(b, alt = false) {
   switch (b.type) {
-    case "heading": return `${"#".repeat(b.level)} ${prose(b.text)}`;
-    case "paragraph": return prose(b.text);
+    case "heading": return `${"#".repeat(b.level)} ${br(b.text)}`;
+    case "paragraph": return br(b.text);
     case "code": return fenced(b.code, b.lang || "");
-    case "blockquote": return `> ${prose(b.text)}`;
-    case "list": return b.items.map((it, i) => b.ordered ? `${i + 1}. ${prose(it)}` : `- ${prose(it)}`).join("\n");
-    case "image": return `![${b.alt || ""}](${b.src})`;
+    case "blockquote": return `> ${br(b.text)}`;
+    case "list": return b.items.map((it, i) => b.ordered ? `${i + 1}${alt ? ")" : "."} ${br(it)}` : `${alt ? "*" : "-"} ${br(it)}`).join("\n");
+    case "image": return image(b);
     case "table": return renderTable(b);
     default: return "";
   }
 }
 
+// A block image: alt escaped as plain text; the src only if http(s), else the alt alone.
+function image(b) {
+  const alt = plain(b.alt);
+  const src = url(b.src);
+  return src ? `![${alt}](${dest(src)})` : escapeStart(alt);
+}
+
 function renderTable(t) {
   if (!t.headers.length) return "";
-  const rows = [t.headers, ...t.rows].map((r) => `| ${r.map((c) => prose(c ?? "").replace(/\|/g, "\\|")).join(" | ")} |`);
+  const rows = [t.headers, ...t.rows].map((r) => `| ${r.map((c) => c ?? "").join(" | ")} |`);
   const sep = `| ${t.headers.map(() => "---").join(" | ")} |`;
   return [rows[0], sep, ...rows.slice(1)].join("\n");
 }

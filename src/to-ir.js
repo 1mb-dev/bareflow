@@ -3,24 +3,35 @@
 import { parseHTML } from "linkedom";
 import * as ir from "./ir.js";
 import { innerMain } from "./html.js";
-import { codeSpan } from "./md.js";
+import { codeSpan, dest, escapeHeadingEnd, escapeStart, escapeText } from "./md.js";
 
 const LOSSLESS_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD"]);
 // Math / interactive widgets often carry these classes.
 const MATH_CLASS = /math|katex|interactive|playground|live-?example/i;
 
+// A link or image target mdflow will write: http(s), mailto, or relative; an empty one or any
+// other scheme (javascript:, data:) is dropped and only the text kept.
+const target = (u) => (!u.trim() || (/^[a-z][a-z0-9+.-]*:/i.test(u) && !/^(https?|mailto):/i.test(u)) ? null : dest(u));
+// HTML whitespace collapses in text; <br> is the only line break the IR keeps.
+const collapse = (t) => t.replace(/[\t\n\f\r ]+/g, " ");
+
 function inlineMarkdown(node, out = []) {
+  // Adjacent text nodes are one run: the parser splits text at entities ("Promise", "<",
+  // "string"), and escaping each piece alone misses what the next piece makes of it.
+  let text = "";
+  const flush = () => { if (text) out.push(escapeText(collapse(text))); text = ""; };
   for (const child of node.childNodes ?? []) {
-    if (child.nodeType === 3) { out.push(child.textContent ?? ""); continue; } // text
+    if (child.nodeType === 3) { text += child.textContent ?? ""; continue; }
+    flush();
     if (child.nodeType !== 1) continue; // skip non-elements
     const tag = child.tagName;
     if (LOSSLESS_TAGS.has(tag)) continue;
     switch (tag) {
-      case "A": out.push(`[${textContent(child)}](${child.getAttribute("href") || ""})`); break;
+      case "A": { const t = escapeText(textContent(child)), h = target(child.getAttribute("href") || ""); out.push(h === null ? t : `[${t}](${h})`); break; }
       case "CODE": out.push(codeSpan(textContent(child))); break;
-      case "STRONG": case "B": out.push(`**${textContent(child)}**`); break;
-      case "EM": case "I": out.push(`*${textContent(child)}*`); break;
-      case "IMG": out.push(`![${child.getAttribute("alt") || ""}](${child.getAttribute("src") || ""})`); break;
+      case "STRONG": case "B": out.push(`**${escapeText(textContent(child))}**`); break;
+      case "EM": case "I": out.push(`*${escapeText(textContent(child))}*`); break;
+      case "IMG": { const a = escapeText(collapse(child.getAttribute("alt") || "").trim()), s = target(child.getAttribute("src") || ""); out.push(s === null ? a : `![${a}](${s})`); break; }
       case "BR": out.push("\n"); break;
       // A <pre> inside a heading or widget has no block to become: a sized code span, so prose
       // never carries a fence.
@@ -28,7 +39,8 @@ function inlineMarkdown(node, out = []) {
       default: inlineMarkdown(child, out);
     }
   }
-  return out.join("");
+  flush();
+  return out.join("").replace(/ *\n */g, "\n");
 }
 
 function textContent(node) {
@@ -50,7 +62,7 @@ function headingParts(el) {
     if (href.startsWith("#")) anchor = href.slice(1);
     link.remove();
   }
-  return { anchor, text: inlineMarkdown(el).trim() };
+  return { anchor, text: escapeHeadingEnd(escapeStart(inlineMarkdown(el).trim())) };
 }
 
 function detectLang(pre) {
@@ -76,7 +88,7 @@ function tableOf(tbl) {
   const headers = [];
   const rows = [];
   for (const tr of tbl.querySelectorAll("tr")) {
-    const cells = [...tr.children].filter((c) => c.tagName === "TD" || c.tagName === "TH").map((c) => textContent(c));
+    const cells = [...tr.children].filter((c) => c.tagName === "TD" || c.tagName === "TH").map((c) => escapeText(textContent(c), { cell: true }));
     if (!cells.length) continue;
     if (tr.querySelector("th") && headers.length === 0) headers.push(...cells);
     else rows.push(cells);
@@ -105,13 +117,13 @@ function blockFor(el, out) {
   }
   if (tag === "P") {
     const t = inlineMarkdown(el).trim();
-    if (t) out.push(ir.paragraph(t));
+    if (t) out.push(ir.paragraph(escapeStart(t)));
     return;
   }
   if (tag === "BLOCKQUOTE") {
     const nested = pullCode(el);
     const t = inlineMarkdown(el).trim();
-    if (t) out.push(ir.blockquote(t));
+    if (t) out.push(ir.blockquote(escapeStart(t)));
     out.push(...nested);
     return;
   }
@@ -121,7 +133,7 @@ function blockFor(el, out) {
     for (const li of [...el.children].filter((c) => c.tagName === "LI")) {
       nested.push(...pullCode(li));
       const text = inlineMarkdown(li).trim();
-      if (text) items.push(text);
+      if (text) items.push(escapeStart(text));
     }
     if (items.length) out.push(ir.list(tag === "OL", items));
     out.push(...nested);
@@ -143,12 +155,12 @@ function blockFor(el, out) {
     out.push(...nested);
     if (!nested.length && !img) {
       const t = inlineMarkdown(el).trim();
-      if (t) out.push(ir.paragraph(t));
+      if (t) out.push(ir.paragraph(escapeStart(t)));
       return;
     }
     const cap = el.querySelector("figcaption");
     const t = cap ? inlineMarkdown(cap).trim() : "";
-    if (t) out.push(ir.paragraph(t));
+    if (t) out.push(ir.paragraph(escapeStart(t)));
     return;
   }
   if (["IFRAME", "VIDEO", "AUDIO", "OBJECT", "EMBED"].includes(tag)) {
@@ -158,12 +170,12 @@ function blockFor(el, out) {
     const cls = el.getAttribute("class") || "";
   if (MATH_CLASS.test(cls)) {
     const t = inlineMarkdown(el).trim();
-    if (t) out.push(ir.paragraph(t)); else out.push(lossOf(el, "interactive or math content not representable"));
+    if (t) out.push(ir.paragraph(escapeStart(t))); else out.push(lossOf(el, "interactive or math content not representable"));
     return;
   }
   if (tag === "A") {
     const t = inlineMarkdown(el).trim();
-    if (t) out.push(ir.paragraph(t));
+    if (t) out.push(ir.paragraph(escapeStart(t)));
     return;
   }
   // Div / section / article / header / footer: transparent containers, recurse. Defuddle can
@@ -178,7 +190,7 @@ function blockFor(el, out) {
   // stays a code block instead of inline fences in prose; else one paragraph.
   if (el.querySelector(BLOCK_INSIDE)) { childBlocks(el, out); return; }
   const t = inlineMarkdown(el).trim();
-  if (t) out.push(ir.paragraph(t));
+  if (t) out.push(ir.paragraph(escapeStart(t)));
 }
 
 const INLINE_TAGS = new Set(["A", "ABBR", "B", "BR", "CITE", "CODE", "DEL", "DFN", "EM", "I", "INS", "KBD", "MARK", "Q", "S", "SAMP", "SMALL", "SPAN", "STRONG", "SUB", "SUP", "TIME", "U", "VAR"]);
@@ -196,7 +208,7 @@ function childBlocks(el, out) {
   let run = [];
   const flush = () => {
     const t = inlineMarkdown({ childNodes: run }).replace(/\s+/g, " ").trim();
-    if (t) out.push(ir.paragraph(t));
+    if (t) out.push(ir.paragraph(escapeStart(t)));
     run = [];
   };
   for (const c of el.childNodes) {
