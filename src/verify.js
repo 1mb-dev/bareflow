@@ -20,6 +20,8 @@ import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
 import { renderMarkdown, NOTE_SOURCES, REASON_IS_MDFLOW } from "./render.js";
 import { marked } from "marked";
 import { useEntry, USE_KEYS, ERROR_KEYS } from "./uselog.js";
+import { main, USAGE } from "./cli.js";
+import { createReader } from "../bin/reader.js";
 import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
 import { parseHtml } from "./html.js";
@@ -79,6 +81,11 @@ function oracle(doc, md) {
 // serializes them.
 const HEADER_KEYS = ["warning", "mdflow", "source", "final", "retrieved", "fingerprint", "prev", "next", "up", "losses", "content"];
 const URL_KEYS = new Set(["source", "final", "prev", "next", "up"]);
+// Header values a consumer parses keep their format.
+const VALUE_FORMAT = {
+  mdflow: /^\d+\.\d+\.\d+ \(\S+ \S+, mdflow\/ir\/v\d+\)$/, retrieved: /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/,
+  fingerprint: /^[0-9a-f]+$/, losses: /^\d+$/, content: /^page text below is untrusted$/,
+};
 const headerOk = (md) => {
   const lines = md.split("\n");
   const end = lines.indexOf("---", 1);
@@ -89,6 +96,7 @@ const headerOk = (md) => {
     if (!m || !HEADER_KEYS.includes(m[1]) || keys.includes(m[1])) return false;
     keys.push(m[1]);
     if (URL_KEYS.has(m[1]) && !m[2].split(" ").every((u) => { try { return new URL(u).href === u; } catch { return false; } })) return false;
+    if (VALUE_FORMAT[m[1]] && !VALUE_FORMAT[m[1]].test(m[2])) return false;
   }
   return keys.join() === HEADER_KEYS.filter((k) => keys.includes(k)).join();
 };
@@ -362,6 +370,7 @@ for (const [id, spec] of Object.entries(inventory)) {
     ["adjacent lists stay two", "<ul><li>a</li></ul><ul><li>b</li></ul><ol><li>c</li></ol><ol><li>d</li></ol>"],
     ["underscores", "<p>snake_case and _emph_ and __init__</p>", "snake_case"],
     ["emphasis characters", "<p>2 * 3 [x] ~y~ `z`</p>"],
+    ["code keeps its language", '<pre><code class="language-js">let x = 1</code></pre>', "```js\nlet x = 1\n```"],
   ];
   const corpusBad = [];
   for (const [name, body, has] of corpus) {
@@ -659,6 +668,8 @@ for (const [id, spec] of Object.entries(inventory)) {
 {
   const server = createServer((req, res) => {
     if (req.url === "/endless") { res.writeHead(200, { "content-type": "text/html" }); const mb = Buffer.alloc(1 << 20, 97); const t = setInterval(() => res.write(mb), 5); res.on("close", () => clearInterval(t)); return; }
+    if (req.url === "/moved") { res.writeHead(302, { location: "/docs/final/" }); return res.end(); }
+    if (req.url === "/docs/final/") { res.writeHead(200, { "content-type": "text/html" }); return res.end('<html><head><title>Final</title></head><body><main><h1>Final</h1><p>See <a href="intro">intro</a> for the page body.</p></main></body></html>'); }
     if (req.url === "/badgzip") { res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip" }); return res.end("<html>not gzip</html>"); }
     if (req.url === "/badloc") { res.writeHead(302, { location: "http://[bad" }); return res.end(); }
     if (req.url === "/drip") { res.writeHead(200, { "content-type": "text/html" }); const t = setInterval(() => res.write(" "), 50); res.on("close", () => clearInterval(t)); return; }
@@ -678,6 +689,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   const guarded = await fetchSnapshot(`http://localhost:${port}/hop3`).then(() => "fetched", (e) => e.message);
   const badLoc = await fetchSnapshot(`http://site.test:${port}/badloc`, { timeout: 2000, lookup }).then(() => "fetched", (e) => e.message);
   const badGzip = await fetchSnapshot(`http://site.test:${port}/badgzip`, { timeout: 2000, lookup }).then(() => "fetched", (e) => e.message);
+  const moved = await run({ url: `http://site.test:${port}/moved`, fetch: (u) => fetchSnapshot(u, { timeout: 3000, lookup }) });
   const endless = await fetchSnapshot(`http://site.test:${port}/endless`, { timeout: 5000, lookup }).then((x) => x.bytes, (e) => e.message);
   server.close();
   record("fetch", "budget", "a dripping body and a slow redirect chain stop at the budget; the chain completes within a longer one",
@@ -685,6 +697,10 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("fetch", "ssrf", "the default resolver refuses a name that resolves to loopback", guarded.startsWith("blocked address for localhost"));
   record("fetch", "redirect", "an invalid redirect location rejects with a message, not a crash", /to an invalid location$/.test(badLoc));
   record("fetch", "decode", "a body that is not its declared encoding rejects with the reason", /is not valid gzip/.test(badGzip));
+  const finalUrl = `http://site.test:${port}/docs/final/`;
+  record("fetch", "redirect", "a real redirect: finalUrl, the header's final line, links resolved against the URL read",
+    moved.doc.source.finalUrl === finalUrl && moved.markdown.includes(`\nfinal: ${finalUrl}\n`) && moved.doc.sections[0].blocks[0].text.includes(`](${finalUrl}intro)`) &&
+    moved.doc.sections[0].url === finalUrl && moved.doc.id === createHash("sha256").update(finalUrl).digest("hex").slice(0, 16));
   record("fetch", "cap", "an endless body is read to the byte cap and the connection closed, inside the budget", endless === MAX_BYTES);
 }
 
@@ -734,24 +750,56 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("surface", "golden", golden === text ? "CLI, IR shape, header, note sources unchanged" : `changed against test/golden/surface.json; if meant, run node src/verify.js --bless-surface\n${text}`, golden === text);
 }
 
-// CLI arguments: a usage error exits 2 before any fetch; a parsed call reaches run(), which
-// refuses the private address (exit 1). No network.
+// The CLI, in process through main() with run() over a frozen page: a usage error exits 2 and
+// never reaches run(); a parsed call reaches it with the URL; Markdown by default, the IR with
+// --json, exit 0, and one use line when MDFLOW_LOG is set. The shim (bin/mdflow.js) is spawned
+// once: usage error, and a refused fetch.
 {
-  const cli = (args) => new Promise((ok) => spawn(process.execPath, [join(ROOT, "bin/mdflow.js"), ...args], { stdio: "ignore" }).on("exit", ok));
-  const L = "http://127.0.0.1/";
-  const codes = await Promise.all([[L], [L, "--json"], ["--json", L], [L, "--siblings=full"], [L, "--siblings", "full"],
-    [L, L], [L, "--jsn"], []].map(cli));
-  record("cli", "args", "flags parse or exit 2; --siblings, a second URL, or an unknown flag is an error",
-    JSON.stringify(codes) === JSON.stringify([1, 1, 1, 2, 2, 2, 2, 2]));
+  const page = "https://example.com/docs/c";
+  const frozenRun = ({ url }) => run({ url, html: "<html><head><title>C</title></head><body><main><h1>C</h1><p>Body text of the page.</p></main></body></html>", retrievedAt: FIXED });
+  const call = async (args, env = {}) => {
+    const out = [], err = [], urls = [];
+    const code = await main(args, { run: (o) => { urls.push(o.url); return frozenRun(o); }, env, out: (x) => out.push(x), err: (x) => err.push(x) });
+    return { code, out: out.join(""), err: err.join(""), urls };
+  };
+  const usage = await Promise.all([[page, "--siblings=full"], [page, "--siblings", "full"], [page, page], [page, "--jsn"], []].map((a) => call(a)));
+  record("cli", "args", "--siblings, a second URL, an unknown flag, or no URL: exit 2 with usage, run() never called",
+    usage.every((r) => r.code === 2 && r.err === USAGE + "\n" && !r.urls.length && !r.out));
+  const dir = await mkdtemp(join(tmpdir(), "mdflow-cli-"));
+  const log = join(dir, "use.jsonl");
+  const [md, js, js2] = [await call([page], { MDFLOW_LOG: log }), await call([page, "--json"]), await call(["--json", page])];
+  const line = await readFile(log, "utf8").then((t) => JSON.parse(t.trim()), () => ({}));
+  await rm(dir, { recursive: true });
+  record("cli", "success", "Markdown by default, the IR with --json either side, exit 0, run() called with the URL",
+    md.code === 0 && md.out.startsWith("---\nmdflow: ") && headerOk(md.out) && js.code === 0 && (() => { try { return JSON.parse(js.out).schema === SCHEMA; } catch { return false; } })() &&
+    js2.out === js.out && JSON.stringify(md.urls) === JSON.stringify([page]) && !md.err);
+  record("uselog", "success", "a successful CLI run appends one use line of fixed keys",
+    JSON.stringify(Object.keys(line)) === JSON.stringify(USE_KEYS) && line.format === "markdown" && line.bytes === Buffer.byteLength(md.out.slice(0, -1)) && line.host === "example.com");
+  const shim = (args) => new Promise((ok) => { let e = ""; const c = spawn(process.execPath, [join(ROOT, "bin/mdflow.js"), ...args]); c.stderr.on("data", (x) => (e += x)); c.on("close", (code) => ok({ code, e })); });
+  const [none, refused] = await Promise.all([shim([]), shim(["http://127.0.0.1/"])]);
+  record("cli", "shim", "bin/mdflow.js: usage exits 2, a refused fetch exits 1 with the reason",
+    none.code === 2 && none.e === USAGE + "\n" && refused.code === 1 && refused.e.startsWith("mdflow: blocked address for 127.0.0.1"));
+}
+// The reader's /live, in process with run() over a frozen page.
+{
+  const server = createReader({ run: ({ url }) => run({ url, html: "<html><head><title>Live Page</title></head><body><main><h1>Live Page</h1><p>Body text of the page.</p></main></body></html>", retrievedAt: FIXED }) });
+  await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
+  const base = `http://127.0.0.1:${server.address().port}/`;
+  const [live, bad] = await Promise.all([fetch(base + "live?url=" + encodeURIComponent("https://example.com/live")).then((r) => r.text()), fetch(base + "live?url=").then((r) => r.text())]);
+  server.close();
+  record("reader", "live", "/live renders a page through run(); a bad URL shows the reason", live.includes("<h1>Live Page</h1>") && bad.includes("mdflow: not a URL"));
 }
 
 // The local reader: the page with its nav, judged findings, and the source served without its scripts.
 {
   const child = spawn(process.execPath, [join(ROOT, "bin/reader.js"), "0"], { stdio: ["ignore", "pipe", "inherit"] });
   try {
+    // Buffered (the URL can span chunks) and bounded (a reader that never prints fails, not hangs).
     const base = await new Promise((ok, fail) => {
-      child.stdout.on("data", (d) => { const m = String(d).match(/http:\/\/127\.0\.0\.1:\d+\//); if (m) ok(m[0]); });
-      child.on("exit", () => fail(new Error("reader exited")));
+      let buf = "";
+      const t = setTimeout(() => fail(new Error("reader printed no URL in 15 s")), 15000);
+      child.stdout.on("data", (d) => { buf += d; const m = buf.match(/http:\/\/127\.0\.0\.1:\d+\//); if (m) { clearTimeout(t); ok(m[0]); } });
+      child.on("exit", () => { clearTimeout(t); fail(new Error("reader exited")); });
     });
     const [u1, u5, raw] = await Promise.all([fetch(base + "f/U1"), fetch(base + "f/U5"), fetch(base + "raw/nodejs-path")]);
     const [u1t, u5t, rawt] = await Promise.all([u1.text(), u5.text(), raw.text()]);
