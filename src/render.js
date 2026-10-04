@@ -21,25 +21,22 @@ const NOTE = {
 const REASON_IS_MDFLOW = new Set(["extract-flattened", "audit-scope-empty", "audit-truncated"]);
 
 export function renderMarkdown(doc) {
-  const page = doc.sections[0];
-  const out = [...header(doc, page), ""];
-  for (const s of doc.sections) renderSection(s, 1, out);
   const n = doc.sections.reduce((k, s) => k + s.losses.length, 0);
+  const out = [...header(doc, doc.sections[0], n), ""];
+  for (const s of doc.sections) renderSection(s, 1, out);
   if (n) out.push(`## mdflow: ${n} loss${n === 1 ? "" : "es"} (fingerprint ${doc.source.fingerprint})`, "", ...lossNotes(doc));
-  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+  // No blank-line squeezing over the whole output: it would rewrite code and verbatim note text.
+  return out.join("\n").trimEnd() + "\n";
 }
 
-// A URL as the WHATWG parser serializes it, or nothing: a header value is one line of URL.
+// A URL as the WHATWG parser serializes it (tab and newline stripped, controls and spaces
+// percent-encoded), or nothing: a header value is one line of URL.
 function url(u) {
-  try {
-    const s = new URL(u).href;
-    return /[\u0000- \u007f]/.test(s) ? null : s;
-  } catch { return null; }
+  try { return new URL(u).href; } catch { return null; }
 }
 
-function header(doc, page) {
+function header(doc, page, losses) {
   const { source: src, generator: g } = doc;
-  const losses = doc.sections.reduce((n, s) => n + s.losses.length, 0);
   const lines = ["---"];
   if (page.losses.some((l) => l.source === "extract-flattened")) lines.push("warning: extraction flattened this page; its structure below is unreliable, see the loss notes");
   lines.push(`mdflow: ${g.version} (${g.extractor} ${g.extractorVersion}, ${doc.schema})`);
@@ -79,7 +76,7 @@ function renderSection(s, depth, out) {
   out.push(`${"#".repeat(Math.min(depth, 6))} ${s.title}`, "");
   // A blank line after every block: without it adjacent paragraphs merge, and a paragraph after
   // a list continues the list's last item.
-  for (const b of s.blocks) out.push(renderBlock(b), "");
+  for (const b of s.blocks) { const r = renderBlock(b); if (r) out.push(r, ""); }
   for (const c of s.children) renderSection(c, depth + 1, out);
 }
 

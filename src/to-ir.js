@@ -21,7 +21,9 @@ function inlineMarkdown(node, out = []) {
       case "EM": case "I": out.push(`*${textContent(child)}*`); break;
       case "IMG": out.push(`![${child.getAttribute("alt") || ""}](${child.getAttribute("src") || ""})`); break;
       case "BR": out.push("\n"); break;
-      case "PRE": out.push(`\`\`\`\n${codeText(child)}\n\`\`\``); break;
+      // A <pre> inside a heading, link, or widget has no block to become: a sized code span, so
+      // prose never carries a fence.
+      case "PRE": out.push(codeSpan(codeText(child).replace(/\s+/g, " ").trim())); break;
       default: inlineMarkdown(child, out);
     }
   }

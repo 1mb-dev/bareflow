@@ -41,19 +41,30 @@ const malformed = (md) => {
   const bad = [];
   let open = 0;
   md.split("\n").forEach((l, i) => {
-    const f = l.match(/^(`{3,})/);
+    // An opening fence's info string holds no backtick ("```foo```" is text, not a fence).
+    const f = l.match(/^(`{3,})[^`]*$/);
     if (open) { if (f && f[1].length >= open && /^`+\s*$/.test(l)) open = 0; return; }
     if (f) open = f[1].length;
-    // Code spans (a backtick run, text, the same run) are inline code, not fences.
-    else if (l.replace(/(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g, "").includes("```")) bad.push(`line ${i + 1}: fence inside text`);
+    // Code spans (a backtick run, text, a run of the same length) are inline code, not fences.
+    else if (l.replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g, "").includes("```")) bad.push(`line ${i + 1}: fence inside text`);
   });
   if (open) bad.push("unclosed fence");
   return bad;
 };
-// Every IR loss has its note, and every note's page text is in the render verbatim.
+// Every IR loss has its note, and every note's page text is in the render verbatim. Notes are
+// counted in the notes section only (after its fingerprinted heading), outside their fences.
 const noted = (doc, md) => {
   const losses = doc.sections.flatMap((s) => s.losses);
-  return md.split("\n").filter((l) => /^L\d+ /.test(l)).length === losses.length && losses.every((l) => md.includes(l.text ?? l.reason));
+  const at = md.lastIndexOf(`\n## mdflow: ${losses.length} loss`);
+  if (!losses.length) return at < 0;
+  if (at < 0 || !md.slice(at).startsWith(`\n## mdflow: ${losses.length} loss${losses.length === 1 ? "" : "es"} (fingerprint ${doc.source.fingerprint})\n`)) return false;
+  let open = 0, labels = 0;
+  for (const l of md.slice(at).split("\n")) {
+    const f = l.match(/^(`{3,})/);
+    if (open) { if (f && f[1].length >= open) open = 0; continue; }
+    if (f) open = f[1].length; else if (/^L\d+ /.test(l)) labels++;
+  }
+  return labels === losses.length && losses.every((l) => md.includes(l.text ?? l.reason));
 };
 // The header: front matter of mdflow's fields only, each once, URL values as the parser
 // serializes them.
@@ -294,6 +305,13 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("render", "flattened", "warning is the header's first field", flatMd.split("\n")[1].startsWith("warning: extraction flattened") && headerOk(flatMd));
   // Fences outlast the backtick runs they hold, in code blocks and in note text.
   const fences = renderMarkdown(mk([{ type: "code", code: "`````\nx\n`````" }], [{ type: "loss", reason: "r", source: "source-code-diff", text: "```\ny\n```" }]));
+  const blanks = renderMarkdown(mk([{ type: "code", code: "a\n\n\nb" }], [{ type: "loss", reason: "r", source: "source-code-diff", text: "x\n\n\n\ny" }]));
+  record("render", "verbatim", "blank lines kept in code and in note text", blanks.includes("```\na\n\n\nb\n```") && blanks.includes("```\nx\n\n\n\ny\n```"));
+  // A page line starting "L2 " is page text, not a note; a <pre> inside a link is a sized code span.
+  const lLines = mk([P("L2 cache misses"), { type: "code", code: "L10 x" }]);
+  const inPre = mk(contentToBlocks('<div><a href="/x">run <pre>x ``` y</pre></a></div>'));
+  record("render", "notes", "page lines starting L<n> are not notes; an inline pre is a code span",
+    renderOk(lLines, renderMarkdown(lLines)) && renderOk(inPre, renderMarkdown(inPre)) && inPre.sections[0].blocks[0].text.includes("````x ``` y````"));
   record("render", "fence", "code with ````` gets ``````, note text with ``` gets ````",
     fences.includes("``````\n`````\nx\n`````\n``````") && fences.includes("````\n```\ny\n```\n````") && !malformed(fences).length);
 
@@ -449,26 +467,28 @@ for (const [id, spec] of Object.entries(inventory)) {
   const bytes = (x) => Buffer.byteLength(x, "utf8");
   const costOk = ({ md, plain, lossText }) => md / plain <= 1.5 || (md / plain < 1.95 && (md - lossText) / plain <= 1.5);
   const bad = [];
+  const rendered = new Map();
   for (const dir of ["usage", "usage/v2"]) {
     for (const p of Object.values(JSON.parse(await readFile(join(ROOT, dir, "pages.json"), "utf8")))) {
       const { doc, markdown } = await run({ url: p.finalUrl, html: await readFile(join(ROOT, dir, "pages", p.fixture), "utf8"), retrievedAt: FIXED });
       if (!renderOk(doc, markdown)) bad.push(p.fixture);
+      if (dir === "usage/v2") rendered.set(p, { doc, markdown });
     }
   }
   record("render", "real pages", `header, well-formed, every loss noted on step-6 + gate v2 pages${bad.length ? `: ${bad.join(", ")}` : ""}`, !bad.length);
 
-  const v2 = Object.values(JSON.parse(await readFile(join(ROOT, "usage/v2/pages.json"), "utf8")));
   const rows = [];
   for (const t of JSON.parse(await readFile(join(ROOT, "usage/v2/tasks.json"), "utf8"))) {
-    const p = v2.find((x) => x.url === t.landing_url || x.finalUrl === t.landing_url);
-    const { doc, markdown } = await run({ url: p.finalUrl, html: await readFile(join(ROOT, "usage/v2/pages", p.fixture), "utf8"), retrievedAt: FIXED });
+    const [, { doc, markdown }] = [...rendered].find(([p]) => p.url === t.landing_url || p.finalUrl === t.landing_url);
     const lossText = doc.sections.flatMap((s) => s.losses).reduce((n, l) => n + bytes(l.text ?? ""), 0);
     rows.push({ id: t.id, md: bytes(markdown), plain: bytes(await readFile(join(ROOT, "usage/v2/runs", t.id, "plain.txt"), "utf8")), lossText });
   }
   const tight = rows.reduce((a, r) => (r.md / r.plain > a.md / a.plain ? r : a));
   record("render", "cost", `R <= 1.5 (or loss text) on ${rows.length} gate v2 pages; max ${tight.id} ${(tight.md / tight.plain).toFixed(2)}${rows.filter((r) => !costOk(r)).map((r) => ` FAIL ${r.id}`).join("")}`,
     rows.length === 12 && rows.every(costOk));
-  record("render", "cost", "the bar can fail: 500 more header bytes on the tightest page", !costOk({ ...tight, md: tight.md + 500 }));
+  record("render", "cost", "the bar: 1.5 passes, over fails, the band passes only on loss text",
+    costOk({ md: 1500, plain: 1000, lossText: 0 }) && !costOk({ md: 1501, plain: 1000, lossText: 0 }) &&
+    costOk({ md: 1800, plain: 1000, lossText: 300 }) && !costOk({ md: 1800, plain: 1000, lossText: 299 }) && !costOk({ md: 1950, plain: 1000, lossText: 1950 }));
 }
 
 // SSRF denylist: the shared policy blocks the full non-public range and rejects nothing public.
