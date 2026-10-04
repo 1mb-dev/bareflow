@@ -289,6 +289,9 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("render", "losses", "notes after the page: enum label + fenced text, mdflow reasons only",
     body(lossy) === "# T\n\na\n\n## mdflow: 2 losses (fingerprint f)\n\nL1 source-heading-diff: heading dropped:\n```\nGone\n```\n\nL2 audit-truncated: audit stopped at 500 findings: 3 more\n" &&
     lossy.includes("\nlosses: 2\n"));
+  // A flattened page says so on the header's first line.
+  const flatMd = renderMarkdown(mk([P("a")], [{ type: "loss", reason: "extraction flattened: the IR kept 0 of 4 source headings and code blocks as structure", source: "extract-flattened" }]));
+  record("render", "flattened", "warning is the header's first field", flatMd.split("\n")[1].startsWith("warning: extraction flattened") && headerOk(flatMd));
   // Fences outlast the backtick runs they hold, in code blocks and in note text.
   const fences = renderMarkdown(mk([{ type: "code", code: "`````\nx\n`````" }], [{ type: "loss", reason: "r", source: "source-code-diff", text: "```\ny\n```" }]));
   record("render", "fence", "code with ````` gets ``````, note text with ``` gets ````",
