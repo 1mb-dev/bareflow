@@ -30,10 +30,11 @@ export function renderMarkdown(doc) {
   return out.join("\n").trimEnd() + "\n";
 }
 
-// A URL as the WHATWG parser serializes it (tab and newline stripped, controls and spaces
-// percent-encoded), or nothing: a header value is one line of URL.
+// An http(s) URL as the WHATWG parser serializes it (tab and newline stripped, controls and
+// spaces percent-encoded), or nothing: a header value is one line of URL. Other schemes keep
+// spaces in their opaque path, so they never reach the header, whatever built the IR.
 function url(u) {
-  try { return new URL(u).href; } catch { return null; }
+  try { const p = new URL(u); return p.protocol === "http:" || p.protocol === "https:" ? p.href : null; } catch { return null; }
 }
 
 function header(doc, page, losses) {
