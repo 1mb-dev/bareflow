@@ -16,7 +16,7 @@ function inlineMarkdown(node, out = []) {
     if (LOSSLESS_TAGS.has(tag)) continue;
     switch (tag) {
       case "A": out.push(`[${textContent(child)}](${child.getAttribute("href") || ""})`); break;
-      case "CODE": out.push(`\`${textContent(child)}\``); break;
+      case "CODE": out.push(codeSpan(textContent(child))); break;
       case "STRONG": case "B": out.push(`**${textContent(child)}**`); break;
       case "EM": case "I": out.push(`*${textContent(child)}*`); break;
       case "IMG": out.push(`![${child.getAttribute("alt") || ""}](${child.getAttribute("src") || ""})`); break;
@@ -26,6 +26,14 @@ function inlineMarkdown(node, out = []) {
     }
   }
   return out.join("");
+}
+
+// Inline code delimited by a backtick run longer than any inside it, padded when it starts or
+// ends with one (CommonMark code spans): `` ``` `` stays code, not a fence.
+function codeSpan(t) {
+  const d = "`".repeat(Math.max(0, ...(t.match(/`+/g) ?? []).map((r) => r.length)) + 1);
+  const pad = /^`|`$/.test(t) ? " " : "";
+  return `${d}${pad}${t}${pad}${d}`;
 }
 
 function textContent(node) {
@@ -171,7 +179,9 @@ function blockFor(el, out) {
     childBlocks(el, out);
     return;
   }
-  // Unknown block element: capture as paragraph if it has text, else recurse.
+  // Unknown element (dl, dd, details): a container when it holds blocks, so a nested <pre>
+  // stays a code block instead of inline fences in prose; else one paragraph.
+  if (el.querySelector(BLOCK_INSIDE)) { childBlocks(el, out); return; }
   const t = inlineMarkdown(el).trim();
   if (t) out.push(ir.paragraph(t));
 }

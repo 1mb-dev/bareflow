@@ -203,11 +203,6 @@
         { "kind": "heading", "key": "Environment API" }
       ],
       "demoted": [
-        { "kind": "code", "key": "# npm 7+" },
-        { "kind": "code", "key": "$ yarn create vite my-vue-app" },
-        { "kind": "code", "key": "$ pnpm create vite my-vue-app" },
-        { "kind": "code", "key": "$ bun create vite my-vue-app" },
-        { "kind": "code", "key": "$ deno init --npm vite my-vue-app" }
       ]
     },
     "known_fp": [],
@@ -227,7 +222,6 @@
         { "kind": "heading", "key": "Environment API" }
       ],
       "demoted": [
-        { "kind": "code", "key": "/// <reference types=\"vite/client\"" }
       ]
     },
     "known_fp": [],
@@ -296,13 +290,9 @@
         { "kind": "heading", "key": "On this page" }
       ],
       "demoted": [
-        { "kind": "heading", "key": "Deep Dive" },
-        { "kind": "heading", "key": "How does React know which state to return?" },
-        { "kind": "code", "key": "let componentHooks" }
       ]
     },
     "known_fp": [
-      { "kind": "heading", "key": "How does React know which state to return?", "why": "heading lands mid-paragraph inside the flattened Deep Dive box; the starts-with rule (fork 5) declines it" }
     ],
     "known_miss": []
   },
@@ -384,7 +374,6 @@
     "url": "https://github.blog/ai-and-ml/generative-ai/migrating-the-github-copilot-runtime-to-rust-using-copilot/",
     "sha256": "5da90503c288f5e33e814579a94bd28d65cd758f437b153a1982f447c813817a",
     "nav": { "prev": "none", "next": "none" },
-    "flattened": true,
     "labels": {
       "chrome": [
         { "kind": "heading", "key": "Categories" },
@@ -412,37 +401,14 @@
         { "kind": "heading", "key": "Company" }
       ],
       "demoted": [
-        { "kind": "heading", "key": "Why we needed to port" },
-        { "kind": "code", "key": "const client = new CopilotClient(); awai" },
-        { "kind": "heading", "key": "What it looked like before" },
-        { "kind": "heading", "key": "In-place porting strategy" },
-        { "kind": "heading", "key": "Getting going" },
         { "kind": "table", "key": "Period | Pull requests | Median changed " },
-        { "kind": "heading", "key": "Interop" },
         { "kind": "table", "key": "SDK | Native bridge | In-process client " },
-        { "kind": "heading", "key": "What the session data shows" },
         { "kind": "table", "key": "Metric | Count | Events | 12,760,995 | U" },
-        { "kind": "heading", "key": "It’s all about caching" },
-        { "kind": "heading", "key": "Yes, static analysis helps" },
-        { "kind": "heading", "key": "Agents like reading" },
         { "kind": "table", "key": "Tool | Calls | Median | Measured hours |" },
         { "kind": "table", "key": "Command family | Calls | Median | Measur" },
-        { "kind": "heading", "key": "Model selection" },
-        { "kind": "heading", "key": "Working with agent fleets" },
-        { "kind": "heading", "key": "Code review at scale" },
-        { "kind": "code", "key": "Squash into a single commit, then rebase" },
-        { "kind": "heading", "key": "Automating the inner loop" },
-        { "kind": "heading", "key": "Two migrations in one" },
-        { "kind": "heading", "key": "How much unsafe?" },
         { "kind": "table", "key": "Why the unsafe block exists | Blocks | S" },
-        { "kind": "heading", "key": "The regressions" },
         { "kind": "table", "key": "Repository | Jan–Apr, before the rewrite" },
-        { "kind": "heading", "key": "If it compiles, it compiles" },
-        { "kind": "heading", "key": "Perf, perf, and more perf" },
-        { "kind": "table", "key": "Scenario | May 12 | Aug 21 out-of-proces" },
-        { "kind": "heading", "key": "What the port cost" },
-        { "kind": "heading", "key": "Lessons learned" },
-        { "kind": "heading", "key": "What’s next?" }
+        { "kind": "table", "key": "Scenario | May 12 | Aug 21 out-of-proces" }
       ]
     },
     "known_fp": [
