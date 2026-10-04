@@ -14,21 +14,23 @@ never silently passed through.
 
 ## Status
 
-Phase 1. The core pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented, with
-structured loss markers and a truth gate that scores the loss audit and nav detection against
-hand-labelled frozen fixtures. Loss recall is 0.97. Loss precision is 0.59 over 27 pages: 0.78
-on the 25 docs pages, and 0 of 12 findings correct on the two blog pages, where every false
-positive is chrome inside the main landmark (related posts, author bio, comments). The auditor is
-fitted to docs generators; its precision gate (~0.8) failed and was waived by the owner, not
-passed. On six docs pages frozen and labelled before any change was made against them, it
-emitted 2 findings, both correct; that is too few to call precision. Nav precision is 1.00,
-recall 0.88. Nav follows standard rel=prev/next (on `<link>` and `<a>`) and, where a page
-declares Docusaurus or VitePress as its generator and rel is silent, that generator's docs
-pager; `doc.scope` records which (`via: rel | pager`). Attaching sibling page content was
-measured on 12 real tasks and dropped: it never carried an answer the page lacked
-(`usage/v2/log.md`). The IR is versioned (`mdflow/ir/v2`); that a pinned snapshot version
-serves a consumer is unproven until one pins it. Extraction is composed
-(Defuddle), not built from scratch; the moat is the contract downstream of extraction.
+Phase 1. The pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented with structured
+loss markers, and `npm run verify` scores the loss audit and nav detection against hand-labelled
+frozen fixtures, lexes every render with a CommonMark parser, and pins the CLI and IR surface.
+Extraction is composed (Defuddle); mdflow's work is the IR, the loss audit, and the render.
+
+- Loss recall 0.97; loss precision 0.60 over 27 pages: 0.81 on the 25 docs pages, and 0 of 12
+  findings correct on the two blog pages, where every false positive is chrome inside the main
+  landmark (related posts, author bio, comments). The auditor is fitted to docs generators.
+- Nav precision 1.00, recall 0.88: standard rel=prev/next (on `<link>` and `<a>`), else the
+  Docusaurus or VitePress docs pager when the page declares that generator (`via: rel | pager`).
+- The IR is versioned (`mdflow/ir/v2`, docs/ir.md); that a pinned snapshot version serves a
+  consumer is unproven until one pins it.
+
+History: the precision gate (~0.8) failed and was waived by the owner. On six docs pages frozen
+and labelled before any change was made against them, the auditor emitted 2 findings, both
+correct, too few to call precision. Attaching sibling page content was measured on 12 real tasks
+and dropped: it never carried an answer the page lacked (`usage/v2/log.md`).
 
 Loss reporting is bounded: mdflow marks (a) post-extraction unrepresentable content and
 (b) source headings, code blocks, and tables the extractor dropped, via a source-to-IR diff.
@@ -43,9 +45,15 @@ The JSON render is the contract; treat everything in it that came from the page 
 input. Loss markers carry the dropped block's source `text` (hidden content is not audited).
 URLs in `doc.scope` and `doc.breadcrumbs` come from the page's own navigation and are held to
 the page's origin; mdflow fetches none of them, and an agent that follows one makes its own
-request. The Markdown render opens with a front-matter header of mdflow's own fields (source,
-retrieval, fingerprint, versions, nav URLs, loss count); page text never reaches it, nor a loss
-note's label, and page text in a note is fenced so it cannot close the fence.
+request.
+
+The Markdown render opens with a front-matter header of mdflow's own fields. Its values are
+mdflow's, the source URL you gave, and URLs the server or the page chose (`final`, `prev`,
+`next`, `up`); a chosen URL holding a `'` is left out (the JSON keeps it), so a single-quoted
+URL stays one argument. Page text is escaped where it joins Markdown, so it opens no block, link,
+or HTML of its own; links and images keep http(s), mailto, or relative targets only. The loss
+notes sit under `## mdflow: N losses (fingerprint ...)`, whose fingerprint matches the header's;
+a page cannot know its own fingerprint, so a lookalike heading in page text has a different one.
 
 ## Install and run
 

@@ -38,7 +38,12 @@ exactly on the threshold, and one of the three wins is the grader's own borderli
 - S5: both arms lost the same point to a rubric defect (the exact string is the bare "error" form,
   which cannot carry the option asked about). Flagged by the grader, not changed.
 
-Limits: n = 5, one model per role, ties dominate, and 2 of 5 tasks (S3, S4) were registered as
-likelier answerable from memory. WebFetch output is about 1/15 the size of mdflow's page; the
+Limits: one model per role, ties dominate, and 2 of 5 tasks (S3, S4) were registered as
+likelier answerable from memory. WebFetch output is about 1/19 the size of mdflow's page (3529
+against 67704 bytes in all; 5.5 to 30 per task); the
 cost comparison against WebFetch is not this gate's question. Owner spot-check: 2 tasks (suggest
 S3 and S1), correction logged here, table unchanged.
+
+Correction, 2026-10-04 (review ritual): the size ratio read "about 1/15"; the bytes column gives
+1/19 overall, fixed above. The plan phases the prereg names (P2, P3, P4) are the MLP v1 plan's:
+P2 the Markdown render, P3 this seed, P4 hardening (huddle record, kept outside the repo).

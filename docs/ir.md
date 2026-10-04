@@ -1,8 +1,9 @@
 # mdflow IR, `mdflow/ir/v2`
 
 The JSON render (`mdflow <url> --json`) is this object. `validate()` in `src/ir.js` is the
-contract; `test/golden/surface.json` pins its shape, and verify fails on any change until it is
-blessed. Everything that came from the page is untrusted text.
+contract; `test/golden/surface.json` pins its shape, and verify fails on any change until
+`node src/verify.js --bless-surface` rewrites it. Everything that came from the page is untrusted
+text.
 
 ## Document
 
@@ -10,7 +11,7 @@ blessed. Everything that came from the page is untrusted text.
 |---|---|---|
 | `schema` | `"mdflow/ir/v2"` | Bumped on any breaking change. |
 | `id` | string | sha256 of the final URL, first 16 hex. |
-| `title` | string | Page title, one line. |
+| `title` | string | Page title, plain text, one line. |
 | `source` | `{ url, finalUrl, retrievedAt, fingerprint }` | `url` as asked, `finalUrl` after redirects, ISO time, sha256 of the fetched bytes (first 16 hex). |
 | `generator` | `{ name, version, extractor, extractorVersion }` | mdflow and Defuddle versions. |
 | `scope` | `{ kind: "page", prev?, next? }` | One page. `prev` / `next`: `{ url, via: "rel" \| "pager" }`, the page's own nav, same-origin, never fetched. |
@@ -21,7 +22,25 @@ Same snapshot + same version + same `retrievedAt` gives byte-identical JSON and 
 
 ## Section
 
-`{ id, title, url, blocks: [Block], losses: [Loss], children: [Section] }`
+`{ id, title, url?, blocks: [Block], losses: [Loss], children: [Section] }`
+
+## Inline text
+
+Prose fields (heading and paragraph `text`, list `items`, blockquote `text`, table cells) are
+inline Markdown: mdflow's own `**`, `*`, links, images, and code spans around page text, which is
+escaped where it joins them, so it opens no construct of its own:
+
+- `` ` `` `*` `[` `]` `~` always; `_` unless both neighbours are letters or digits; `\` before
+  punctuation and at the end of a run; `<` before a letter, `/`, `!`, `?`, or at the end of a run;
+  `&` before an entity-like run (`&amp;`, `&#10;`); `|` in table cells.
+- At the start of a field: `#` `>` `+` `-`, and the `.` or `)` after a leading number; a heading's
+  closing `#` run.
+- Link and image targets: http(s), mailto, or relative (read as a browser reads them, entities
+  decoded); any other scheme keeps the text only. Whitespace is percent-encoded and `( ) \` escaped.
+- The only line break in a prose field is `"\n"`, from `<br>`; other HTML whitespace collapses.
+
+Code (`code` blocks, code spans) is verbatim and not escaped. To compare a prose field with page
+text, remove the backslash escapes.
 
 ## Block
 
@@ -37,7 +56,8 @@ Same snapshot + same version + same `retrievedAt` gives byte-identical JSON and 
 
 ## Loss
 
-`{ type: "loss", reason, source, text? }`: a finding, not content. `source` is one of:
+`{ type: "loss", reason, source, text? }`: a finding, not content; `validate` requires `source`.
+It is one of:
 
 | `source` | Meaning | `text` |
 |---|---|---|
@@ -55,6 +75,19 @@ dropped under a surviving heading) is not detected.
 
 Front matter of mdflow's own fields, in this order when present: `warning` (flattened page),
 `mdflow`, `source`, `final`, `retrieved`, `fingerprint`, `prev`, `next`, `up`, `losses`,
-`content`. URL values are parser-serialized. Then the page, then `## mdflow: N losses
-(fingerprint ...)` with one note per loss: `L<n> <source>: <label>` and the loss text in a fence
-longer than any backtick run inside it.
+`content`. URL values are parser-serialized http(s); `final`, `prev`, `next`, and `up` are chosen
+by the server or the page, and one holding a `'` is left out.
+
+Then the page: the section title as `#`, each block, a prose field's `"\n"` written as `<br>`,
+adjacent lists of one kind with alternating markers so they stay two. The title and an image's
+alt are escaped as page text; an image whose `src` is not http(s) renders as its alt.
+
+Then, when there are losses, one heading, `## mdflow: 1 loss (fingerprint F)` or
+`## mdflow: N losses (fingerprint F)` with F the header's fingerprint, and one note per loss:
+
+- `L<n> <source>: <label>` and the loss text in a fence longer than any backtick run inside it;
+- for `extract-flattened`, `audit-scope-empty`, `audit-truncated` (no page text):
+  `L<n> <source>: <reason>`, no fence.
+
+Render losses against the IR: hard line breaks become `<br>`, a withheld header URL, a non-http(s)
+image `src`, anchors and IDs.
