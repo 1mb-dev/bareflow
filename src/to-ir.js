@@ -10,12 +10,29 @@ const LOSSLESS_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD"
 const MATH_CLASS = /math|katex|interactive|playground|live-?example/i;
 
 // A link or image target mdflow will write: http(s), mailto, or relative; an empty one or any
-// other scheme (javascript:, data:) is dropped and only the text kept.
-const target = (u) => (!u.trim() || (/^[a-z][a-z0-9+.-]*:/i.test(u) && !/^(https?|mailto):/i.test(u)) ? null : dest(u));
+// other scheme (javascript:, data:) is dropped and only the text kept. The scheme is read as a
+// browser reads a rendered href: entities decoded ("javascript&colon;"), leading and trailing C0
+// controls and spaces gone, tab and newline removed ("\x01java\tscript:").
+const asBrowserReads = (u) => parseHTML(`<p>${u.replace(/</g, "&lt;")}</p>`).document.querySelector("p").textContent
+  .replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, "").replace(/[\t\n\r]/g, "");
+const target = (u) => {
+  const v = u.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, "").replace(/[\t\n\r]/g, "");
+  const seen = asBrowserReads(v);
+  return !seen || (/^[a-z][a-z0-9+.-]*:/i.test(seen) && !/^(https?|mailto):/i.test(seen)) ? null : dest(v);
+};
 // HTML whitespace collapses in text; <br> is the only line break the IR keeps.
 const collapse = (t) => t.replace(/[\t\n\f\r ]+/g, " ");
 
-function inlineMarkdown(node, out = []) {
+// A node's inline content as inline Markdown. Joined and cleaned once: spaces at a <br> go, the
+// rest stays as built. (A join per nested element made n elements cost n^2 joins.)
+function inlineMarkdown(node) {
+  const out = [];
+  inlineParts(node, out);
+  const t = out.join("");
+  return t.includes("\n") ? t.split("\n").map((s) => s.trim()).join("\n") : t;
+}
+
+function inlineParts(node, out) {
   // Adjacent text nodes are one run: the parser splits text at entities ("Promise", "<",
   // "string"), and escaping each piece alone misses what the next piece makes of it.
   let text = "";
@@ -36,11 +53,10 @@ function inlineMarkdown(node, out = []) {
       // A <pre> inside a heading or widget has no block to become: a sized code span, so prose
       // never carries a fence.
       case "PRE": out.push(codeSpan(codeText(child).replace(/\s+/g, " ").trim())); break;
-      default: inlineMarkdown(child, out);
+      default: inlineParts(child, out);
     }
   }
   flush();
-  return out.join("").replace(/ *\n */g, "\n");
 }
 
 function textContent(node) {

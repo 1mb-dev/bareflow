@@ -45,9 +45,11 @@ export const escapeStart = (t) => t.replace(/^([#>+-])/, "\\$1").replace(/^(\d{1
 // A heading's closing "#" run would be eaten as the ATX closing sequence ("C #" renders "C").
 export const escapeHeadingEnd = (t) => t.replace(/(^|\s)(#+)\s*$/, "$1\\$2");
 
-// A link or image destination: whitespace percent-encoded, ( ) \ and a leading < escaped, so the
-// URL is unchanged but cannot close the destination early or open another construct.
-export const dest = (u) => u.replace(/\s/g, (c) => encodeURIComponent(c)).replace(/[()\\]/g, "\\$&").replace(/^</, "\\<");
+// A link or image destination: whitespace percent-encoded, ( ) \ and a leading < escaped, and
+// an & before an entity-like run escaped (renderers decode "javascript&colon;" otherwise), so the
+// URL is unchanged but cannot close the destination early, open another construct, or decode.
+export const dest = (u) => u.replace(/\s/g, (c) => encodeURIComponent(c)).replace(/[()\\]/g, "\\$&").replace(/^</, "\\<")
+  .replace(/&(?=#?[A-Za-z0-9]{1,32};)/g, "\\&");
 
 // Markdown backslash escapes removed, for comparing IR text with source text.
 export const unescape = (t) => t.replace(/\\([!-/:-@[-`{-~])/g, "$1");

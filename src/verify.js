@@ -358,6 +358,7 @@ for (const [id, spec] of Object.entries(inventory)) {
     ["fence text in prose", "<p>Write ``` then the language.</p><p>```js</p>"],
     ["javascript link and image", '<p><a href="javascript:alert(1)">x</a> <img src="javascript:x" alt="a](javascript:alert(1)) [b"></p>'],
     ["link destination with ) and space", '<p><a href="/x) [evil](https://e.example">t</a></p>'],
+    ["javascript behind a control char, a tab, an entity", '<p><a href="\x01javascript:alert(1)">a</a> <a href="java\tscript:alert(2)">b</a> <a href="javascript&amp;colon;alert(3)">c</a> <a href="&amp;#106;avascript:x">e</a></p>'],
     ["adjacent lists stay two", "<ul><li>a</li></ul><ul><li>b</li></ul><ol><li>c</li></ol><ol><li>d</li></ol>"],
     ["underscores", "<p>snake_case and _emph_ and __init__</p>", "snake_case"],
     ["emphasis characters", "<p>2 * 3 [x] ~y~ `z`</p>"],
@@ -381,6 +382,10 @@ for (const [id, spec] of Object.entries(inventory)) {
     const t0 = Date.now();
     renderMarkdown(mk(contentToBlocks(`<p>${runs}</p>`)));
     record("render", "linear", `5 MB of backtick runs: to-ir + render in ${Date.now() - t0} ms (< 12000)`, Date.now() - t0 < 12000);
+    // 40k empty inline elements: a join per nested element made this n^2 joins (4k took 24 s).
+    const t1 = Date.now();
+    contentToBlocks(`<p>x${" <span></span>".repeat(40000)} y</p>`);
+    record("render", "linear", `40k empty inline elements in ${Date.now() - t1} ms (< 5000)`, Date.now() - t1 < 5000);
   }
   record("render", "corpus", `adversarial inputs form no block the IR lacks (${corpus.length})${corpusBad.length ? `: ${corpusBad.join(" | ")}` : ""}`, !corpusBad.length);
   const fencedHeading = await run({ url: "https://example.com/f", retrievedAt: FIXED, html: "<html><body><main><h1>F</h1><h2>Using ``` fences</h2><p>Body text of the page.</p></main></body></html>" });
