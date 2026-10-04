@@ -80,7 +80,7 @@ const br = (t) => t.replace(/\n/g, "<br>");
 const plain = (t) => escapeText((t || "").replace(/\s+/g, " ").trim());
 
 function renderSection(s, depth, out) {
-  out.push(`${"#".repeat(Math.min(depth, 6))} ${escapeHeadingEnd(escapeStart(plain(s.title)))}`, "");
+  out.push(`${"#".repeat(Math.min(depth, 6))} ${escapeHeadingEnd(plain(s.title))}`, "");
   // A blank line after every block: without it adjacent paragraphs merge, and a paragraph after
   // a list continues the list's last item.
   // Two adjacent lists of one kind would merge into one in CommonMark; alternating the marker

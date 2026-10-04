@@ -44,10 +44,10 @@ function inlineParts(node, out) {
     const tag = child.tagName;
     if (LOSSLESS_TAGS.has(tag)) continue;
     switch (tag) {
-      case "A": { const t = escapeText(textContent(child)), h = target(child.getAttribute("href") || ""); out.push(h === null ? t : `[${t}](${h})`); break; }
+      case "A": { const t = inner(child), h = target(child.getAttribute("href") || ""); if (t) out.push(h === null ? t : `[${t}](${h})`); break; }
       case "CODE": out.push(codeSpan(textContent(child))); break;
-      case "STRONG": case "B": out.push(`**${escapeText(textContent(child))}**`); break;
-      case "EM": case "I": out.push(`*${escapeText(textContent(child))}*`); break;
+      case "STRONG": case "B": { const t = inner(child); if (t) out.push(`**${t}**`); break; }
+      case "EM": case "I": { const t = inner(child); if (t) out.push(`*${t}*`); break; }
       case "IMG": { const a = escapeText(collapse(child.getAttribute("alt") || "").trim()), s = target(child.getAttribute("src") || ""); out.push(s === null ? a : `![${a}](${s})`); break; }
       case "BR": out.push("\n"); break;
       // A <pre> inside a heading or widget has no block to become: a sized code span, so prose
@@ -58,6 +58,10 @@ function inlineParts(node, out) {
   }
   flush();
 }
+
+// A link's or emphasis's content: its text, or, when it holds elements (an image, code), those
+// as inline Markdown, so a linked image or bold code is not lost; empty means nothing to wrap.
+const inner = (el) => (el.children?.length ? inlineMarkdown(el).trim() : escapeText(textContent(el)));
 
 function textContent(node) {
   return (node.textContent ?? "").replace(/\s+/g, " ").trim();
@@ -78,7 +82,7 @@ function headingParts(el) {
     if (href.startsWith("#")) anchor = href.slice(1);
     link.remove();
   }
-  return { anchor, text: escapeHeadingEnd(escapeStart(inlineMarkdown(el).trim())) };
+  return { anchor, text: escapeHeadingEnd(inlineMarkdown(el).trim()) };
 }
 
 function detectLang(pre) {
@@ -114,6 +118,18 @@ function tableOf(tbl) {
   return { headers, rows };
 }
 
+// A block image renders only with an http(s) source; without one, its alt is a paragraph, and with
+// no alt either it is a loss, never a silent drop.
+function blockImage(img, out) {
+  const src = img.getAttribute("src") || "", alt = collapse(img.getAttribute("alt") || "").trim();
+  if (/^https?:\/\//i.test(src.trim())) out.push(ir.image(src, alt));
+  else if (alt) out.push(para(escapeText(alt)));
+  else out.push(lossOf(img, "image without an http(s) source or alt text"));
+}
+
+// A prose paragraph: its page text is already escaped, and its start must not open a block.
+const para = (t) => ir.paragraph(escapeStart(t));
+
 function lossOf(el, reason) {
   return ir.loss(reason, "extract-unrepresentable", el.outerHTML.slice(0, 120).replace(/\s+/g, " "));
 }
@@ -133,7 +149,7 @@ function blockFor(el, out) {
   }
   if (tag === "P") {
     const t = inlineMarkdown(el).trim();
-    if (t) out.push(ir.paragraph(escapeStart(t)));
+    if (t) out.push(para(t));
     return;
   }
   if (tag === "BLOCKQUOTE") {
@@ -161,22 +177,22 @@ function blockFor(el, out) {
     return;
   }
   if (tag === "IMG") {
-    out.push(ir.image(el.getAttribute("src") || "", el.getAttribute("alt") || ""));
+    blockImage(el, out);
     return;
   }
   if (tag === "FIGURE") {
     const nested = pullCode(el);
     const img = el.querySelector("img");
-    if (img) out.push(ir.image(img.getAttribute("src") || "", img.getAttribute("alt") || ""));
+    if (img) blockImage(img, out);
     out.push(...nested);
     if (!nested.length && !img) {
       const t = inlineMarkdown(el).trim();
-      if (t) out.push(ir.paragraph(escapeStart(t)));
+      if (t) out.push(para(t));
       return;
     }
     const cap = el.querySelector("figcaption");
     const t = cap ? inlineMarkdown(cap).trim() : "";
-    if (t) out.push(ir.paragraph(escapeStart(t)));
+    if (t) out.push(para(t));
     return;
   }
   if (["IFRAME", "VIDEO", "AUDIO", "OBJECT", "EMBED"].includes(tag)) {
@@ -186,12 +202,12 @@ function blockFor(el, out) {
     const cls = el.getAttribute("class") || "";
   if (MATH_CLASS.test(cls)) {
     const t = inlineMarkdown(el).trim();
-    if (t) out.push(ir.paragraph(escapeStart(t))); else out.push(lossOf(el, "interactive or math content not representable"));
+    if (t) out.push(para(t)); else out.push(lossOf(el, "interactive or math content not representable"));
     return;
   }
   if (tag === "A") {
     const t = inlineMarkdown(el).trim();
-    if (t) out.push(ir.paragraph(escapeStart(t)));
+    if (t) out.push(para(t));
     return;
   }
   // Div / section / article / header / footer: transparent containers, recurse. Defuddle can
@@ -205,7 +221,7 @@ function blockFor(el, out) {
   // nested <pre> must stay a code block.
   if (el.querySelector(BLOCK_INSIDE)) { childBlocks(el, out); return; }
   const t = inlineMarkdown(el).trim();
-  if (t) out.push(ir.paragraph(escapeStart(t)));
+  if (t) out.push(para(t));
 }
 
 const INLINE_TAGS = new Set(["A", "ABBR", "B", "BR", "CITE", "CODE", "DEL", "DFN", "EM", "I", "INS", "KBD", "MARK", "Q", "S", "SAMP", "SMALL", "SPAN", "STRONG", "SUB", "SUP", "TIME", "U", "VAR"]);
@@ -223,7 +239,7 @@ function childBlocks(el, out) {
   let run = [];
   const flush = () => {
     const t = inlineMarkdown({ childNodes: run }).replace(/\s+/g, " ").trim();
-    if (t) out.push(ir.paragraph(escapeStart(t)));
+    if (t) out.push(para(t));
     run = [];
   };
   for (const c of el.childNodes) {

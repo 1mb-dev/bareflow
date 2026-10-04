@@ -356,7 +356,12 @@ for (const [id, spec] of Object.entries(inventory)) {
     ["tag split across entities", "<h2>createData(x): Promise&lt;string&gt;</h2>"],
     ["bold at a field start", "<p><strong>Note:</strong> do</p>", "**Note:** do"],
     ["code spans keep < verbatim", "<p>Use <code>Vec&lt;T&gt;</code> and <code>&lt;div&gt;</code></p>", "`Vec<T>` and `<div>`"],
-    ["entity-like text", "<p>Write &amp;amp; for &amp;</p>", "Write \\&amp; for &"],
+    ["entity-like text", "<p>Write &amp;amp; for &amp;</p>", "Write \\&amp; for \\&"],
+    ["an & completed by the next element", "<p>a &amp;<span>amp;</span> b</p>", "a \\&amp; b"],
+    ["a run-final ! before a link stays a link", '<p>Done!<a href="/next">Next step</a></p>', "Done\\![Next step](https://example.com/next)"],
+    ["a linked image and a bold image keep the image", '<p><a href="/x"><img src="https://e.com/b.svg" alt="badge"></a> <strong><img src="https://e.com/l.png" alt="Logo"></strong> <strong></strong></p>', "[![badge](https://e.com/b.svg)](https://example.com/x) **![Logo](https://e.com/l.png)**"],
+    ["an image with no usable source is a loss, not a silent drop", '<p>a</p><img src="blob:https://e.com/x" alt=""><img src="blob:https://e.com/y" alt="chart">', "chart"],
+    ["a numbered heading keeps no escape", "<h2>1. Getting started</h2><p>Body text of the page.</p>", "## 1. Getting started"],
     ["pipe and backslash in cells", "<table><tr><th>a</th><th>b</th></tr><tr><td>a\\|b</td><td>|x</td></tr></table>"],
     ["code span at a line start", "<p><code>```</code> opens a fence</p>", "```` ``` ```` opens a fence"],
     ["heading closing hash", "<h2>Language C #</h2><p>Body text of the page.</p>", "## Language C \\#"],
@@ -396,6 +401,8 @@ for (const [id, spec] of Object.entries(inventory)) {
     contentToBlocks(`<p>x${" <span></span>".repeat(40000)} y</p>`);
     record("render", "linear", `40k empty inline elements in ${Date.now() - t1} ms (< 5000)`, Date.now() - t1 < 5000);
   }
+  const noSrc = await run({ url: "https://example.com/i", retrievedAt: FIXED, html: '<html><body><main><h1>I</h1><p>Body text of the page.</p><img src="blob:https://e.com/x" alt=""></main></body></html>' });
+  record("to-ir", "image", "a block image with no http(s) source and no alt is a loss note", noSrc.doc.sections[0].losses.some((l) => l.source === "extract-unrepresentable" && /image without/.test(l.reason)) && noSrc.markdown.includes("\n## mdflow: 1 loss"));
   record("render", "corpus", `adversarial inputs form no block the IR lacks (${corpus.length})${corpusBad.length ? `: ${corpusBad.join(" | ")}` : ""}`, !corpusBad.length);
   const fencedHeading = await run({ url: "https://example.com/f", retrievedAt: FIXED, html: "<html><body><main><h1>F</h1><h2>Using ``` fences</h2><p>Body text of the page.</p></main></body></html>" });
   record("render", "prose", "a heading holding ``` is no loss", !fencedHeading.doc.sections[0].losses.length && renderOk(fencedHeading.doc, fencedHeading.markdown));

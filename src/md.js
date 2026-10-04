@@ -21,8 +21,8 @@ const PUNCT = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 const ALNUM = /[A-Za-z0-9]/;
 
 // Page text inside inline Markdown, escaped where it would open or close a construct, and only
-// there (escapes cost bytes against the cost bar). One pass, linear. A backslash is escaped
-// before punctuation and at the end of the text, where mdflow's own syntax follows it.
+// there (escapes cost bytes against the cost bar). One pass, linear. At the end of a run mdflow's
+// own syntax may follow, so \ < & ! are escaped there too.
 export function escapeText(t, { cell = false } = {}) {
   let out = "";
   for (let i = 0; i < t.length; i++) {
@@ -31,7 +31,8 @@ export function escapeText(t, { cell = false } = {}) {
     else if ("`*[]~".includes(c)) out += "\\" + c;
     else if (c === "_") out += ALNUM.test(prev) && ALNUM.test(next) ? "_" : "\\_";
     else if (c === "<") out += !next || /[A-Za-z/!?]/.test(next) ? "\\<" : "<";
-    else if (c === "&") out += /^#?[A-Za-z0-9]+;/.test(t.slice(i + 1, i + 34)) ? "\\&" : "&";
+    else if (c === "&") out += !next || /^#?[A-Za-z0-9]+;/.test(t.slice(i + 1, i + 34)) ? "\\&" : "&";
+    else if (c === "!" && !next) out += "\\!"; // before mdflow's [ it would make a link an image
     else if (c === "|" && cell) out += "\\|";
     else out += c;
   }
