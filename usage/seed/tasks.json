@@ -1,0 +1,63 @@
+[
+ {
+  "id": "S1",
+  "repo": "denoland/deno",
+  "release_tag": "v2.9.5",
+  "release_date": "2026-08-06",
+  "feature_entry": "- feat(add): `--unscoped` flag to alias packages by their unscoped name (#36319)",
+  "landing_url": "https://docs.deno.com/runtime/reference/cli/add/",
+  "final_url": "https://docs.deno.com/runtime/reference/cli/add/",
+  "sha256": "8d7a21889c39bafade642694bbcb4d8457257f139f8ea3d9ca345fc801fa2e1f",
+  "page_file": "pages/denoland_deno.html",
+  "question": "How do I make deno add alias a package by its unscoped name in Deno (2.9.5)? Show the exact command-line flag."
+ },
+ {
+  "id": "S2",
+  "repo": "withastro/astro",
+  "release_tag": "astro@7.3.5",
+  "release_date": "2026-09-24",
+  "feature_entry": "- [#17736](https://github.com/withastro/astro/pull/17736) [`2b8b2e8`](https://github.com/withastro/astro/commit/2b8b2e80169da0ab19055166438291c46fcfe320) Thanks [@ematipico](https://github.com/ematipico)! - Adds a new container function called `renderComponent()`, which renders Astro components with inlined styles and scripts.",
+  "landing_url": "https://docs.astro.build/en/reference/container-reference/",
+  "final_url": "https://docs.astro.build/en/reference/container-reference/",
+  "sha256": "d2a7f8c25f0b267fee9196c87e43a7559acd7e2cad731f359f341838403dece2",
+  "page_file": "pages/withastro_astro.html",
+  "question": "How do I render an Astro component with its inlined styles and scripts using the container API in Astro (7.3.5)? Show the exact import and call.",
+  "selection_note": "fallback: entry is under 'Patch Changes' (changeset), starts 'Adds a new'; no Features/Minor Changes heading in any of the repo's 3 releases"
+ },
+ {
+  "id": "S3",
+  "repo": "eslint/eslint",
+  "release_tag": "v10.11.0",
+  "release_date": "2026-09-18",
+  "feature_entry": "* [`d136fa4`](https://github.com/eslint/eslint/commit/d136fa4b0d2dd4a9e738ca1c012cc674d1441127) feat: object-shorthand handle quoted properties for `ignoreConstructors` (#21271) (Pavel)",
+  "landing_url": "https://eslint.org/docs/latest/rules/object-shorthand",
+  "final_url": "https://eslint.org/docs/latest/rules/object-shorthand",
+  "sha256": "3a5fc7c64530e1a7fe22583d929bb2b1d4e640ecf7a2b9de330ff0b39e633efd",
+  "page_file": "pages/eslint_eslint.html",
+  "question": "How do I configure the object-shorthand rule to not report constructor functions in ESLint (10.11.0)? Show the exact rule config."
+ },
+ {
+  "id": "S4",
+  "repo": "rolldown/rolldown",
+  "release_tag": "v1.2.10",
+  "release_date": "2026-09-23",
+  "feature_entry": "- watch: support directories in addWatchFile (#10944) by @shulaoda",
+  "landing_url": "https://rolldown.rs/reference/Interface.PluginContext",
+  "final_url": "https://rolldown.rs/reference/Interface.PluginContext",
+  "sha256": "593b9e0ba6ea22a04ef64003332fc33be50eb15114fc8644e47faeb57e89c73b",
+  "page_file": "pages/rolldown_rolldown.html",
+  "question": "How do I add a file or directory to be watched from a plugin in Rolldown (1.2.10)? Show the exact plugin context call."
+ },
+ {
+  "id": "S5",
+  "repo": "oxc-project/oxc",
+  "release_tag": "oxlint_v1.86.0",
+  "release_date": "2026-09-28",
+  "feature_entry": "- 9d80eed linter/react/only-export-components: Support `allowCompoundComponents` (#27117) (Kuroda Kayn)",
+  "landing_url": "https://oxc.rs/docs/guide/usage/linter/rules/react/only-export-components.html",
+  "final_url": "https://oxc.rs/docs/guide/usage/linter/rules/react/only-export-components.html",
+  "sha256": "09612a9ef4f20ca1919f70951d3ac4f96bad98904006eee43257e1faf5afa4b3",
+  "page_file": "pages/oxc-project_oxc.html",
+  "question": "How do I allow compound component exports in the react/only-export-components rule in Oxlint (1.86.0)? Show the exact option name and rule config."
+ }
+]
