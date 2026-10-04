@@ -1,7 +1,6 @@
-// One SSRF policy: the non-public address ranges a fetch must never reach. Shared by the dev
-// fetch layer (fetch.js, which checks resolved IPs against it) and the Worker boundary
-// (worker.js, which checks literal-IP hostnames against it). Keep it complete for the ranges
-// reachable via DNS; a reachable range missing here is a hole in both paths.
+// One SSRF policy: the non-public address ranges a fetch must never reach. fetch.js checks
+// literal-IP hostnames and resolved IPs against it. Keep it complete for the ranges reachable
+// via DNS; a reachable range missing here is a hole.
 export const PRIVATE_V4 = [
   /^0\./, /^10\./, /^127\./, /^169\.254\./,
   /^172\.(1[6-9]|2[0-9]|3[0-1])\./, /^192\.168\./,

@@ -47,14 +47,10 @@ export function section(id, title, opts = {}) {
   return { id, title, ...(opts.url ? { url: opts.url } : {}), blocks: [], losses: [], children: [] };
 }
 
-// Document is the tree root: document -> section -> block. scope says what the sections cover
-// (one page, or a prev/next window onto a docs section, never the whole section); breadcrumbs
-// is where the page sits in the site.
-export const SCOPE_KINDS = new Set(["page", "window"]);
-export const SIBLING_STATUS = new Set(["attached", "unfetched", "failed", "blocked", "absent"]);
-// An attached sibling is projected: whole verbatim blocks of the kept types, never a summary.
-export const PROJECTIONS = new Set(["headings+code", "full"]);
-export const PROJECTION_KEEP = new Set(["heading", "code"]);
+// Document is the tree root: document -> section -> block. scope says what the sections cover:
+// one page, never its siblings. Its prev/next are the page's own nav targets, recorded and never
+// fetched; breadcrumbs is where the page sits in the site.
+const NAV_VIA = new Set(["rel", "pager"]);
 
 export function document({ id, title, source, generator, scope, breadcrumbs, sections }) {
   return { schema: SCHEMA, id, title, source, generator, scope, breadcrumbs, sections };
@@ -70,22 +66,12 @@ export function validate(doc) {
     fail("source", "url, fingerprint, and retrievedAt required");
   if (!doc.generator || typeof doc.generator.version !== "string" || typeof doc.generator.extractor !== "string" || typeof doc.generator.extractorVersion !== "string")
     fail("generator", "version, extractor, and extractorVersion required");
-  if (!doc.scope || !SCOPE_KINDS.has(doc.scope.kind)) fail("scope.kind", "page | window");
+  if (!doc.scope || doc.scope.kind !== "page") fail("scope.kind", "page");
+  for (const k of Object.keys(doc.scope)) if (k !== "kind" && k !== "prev" && k !== "next") fail(`scope.${k}`, "unknown key: kind, prev, next only");
   for (const r of ["prev", "next"]) {
-    const s = doc.scope.siblings?.[r];
-    if (!s || !SIBLING_STATUS.has(s.status)) fail(`scope.siblings.${r}`, "status: attached | unfetched | failed | blocked | absent");
-    if ((s.status === "absent") !== (s.url === undefined)) fail(`scope.siblings.${r}.url`, "present unless absent");
-    if (s.url !== undefined && s.via !== "rel" && s.via !== "pager") fail(`scope.siblings.${r}.via`, "rel | pager, with url");
-    if (s.status === "attached") {
-      const sec = (Array.isArray(doc.sections) ? doc.sections : []).find((x) => x?.url === s.url);
-      if (!sec || !Array.isArray(sec.blocks)) fail(`scope.siblings.${r}.url`, "attached sibling has a section with that url");
-      const { mode, omitted: o } = s.projection ?? {};
-      const types = o && typeof o === "object" && !Array.isArray(o) ? Object.keys(o) : null;
-      if (!PROJECTIONS.has(mode) || !types || (mode === "full" && types.length) ||
-          (mode !== "full" && !sec.blocks.every((b) => PROJECTION_KEEP.has(b?.type))) ||
-          !types.every((t) => BLOCK_TYPES.has(t) && !PROJECTION_KEEP.has(t) && Number.isInteger(o[t]) && o[t] > 0))
-        fail(`scope.siblings.${r}.projection`, "{ mode: headings+code | full, omitted: { dropped type: count > 0 }, {} under full }; projected blocks only kept types");
-    } else if (s.projection !== undefined) fail(`scope.siblings.${r}`, "no projection unless attached");
+    const s = doc.scope[r];
+    if (s === undefined) continue;
+    if (typeof s?.url !== "string" || !NAV_VIA.has(s.via) || Object.keys(s).length !== 2) fail(`scope.${r}`, "{ url, via: rel | pager }");
   }
   if (!Array.isArray(doc.breadcrumbs) || !doc.breadcrumbs.every((c) => typeof c?.url === "string" && typeof c.title === "string"))
     fail("breadcrumbs", "array of { title, url }");
@@ -95,8 +81,7 @@ export function validate(doc) {
   const collect = (s) => { ids.push(s.id); s.children.forEach(collect); };
   doc.sections.forEach(collect);
   if (new Set(ids).size !== ids.length) fail("sections", "section ids must be unique");
-  const attached = ["prev", "next"].some((r) => doc.scope.siblings[r].status === "attached");
-  if ((doc.scope.kind === "window") !== attached) fail("scope.kind", "window exactly when a sibling is attached");
+  if (doc.sections.length !== 1) fail("sections", "one page section");
   return doc;
 }
 

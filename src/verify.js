@@ -1,7 +1,7 @@
 // The gate: scores the loss audit and nav detection against hand-labelled truth
 // (test/inventory.json, via src/truth.js), fails on any false positive, miss, code drift, or
 // structure diff not named in the fixture's known_* baseline, and checks wiring, mutation, SSRF,
-// and the handler boundary. Determinism compares a pure function to itself (near-tautological). Exit 1 on any
+// and the CLI boundary. Determinism compares a pure function to itself (near-tautological). Exit 1 on any
 // failure.
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -13,9 +13,7 @@ import { run } from "./pipeline.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
 import { decompress, MAX_BYTES } from "./fetch.js";
-import { cacheKey } from "./cache.js";
 import { isPrivateIp } from "./ssrf.js";
-import { handle } from "./worker.js";
 import { walk, validate, SCHEMA } from "./ir.js";
 import { renderMarkdown } from "./render.js";
 import { extractNav } from "./compose.js";
@@ -36,15 +34,6 @@ const pagesFetch = (pages) => async (u) => {
   if (u in pages) return snap(u, pages[u]);
   throw new Error(`no fixture: ${u}`);
 };
-const findSection = (doc, u) => {
-  const rec = (s) => {
-    if (s.url === u) return s;
-    for (const c of s.children) { const f = rec(c); if (f) return f; }
-    return null;
-  };
-  for (const s of doc.sections) { const f = rec(s); if (f) return f; }
-  return null;
-};
 
 const truth = [];
 const pr = (n, d) => (d ? (n / d).toFixed(2) : "-");
@@ -57,13 +46,12 @@ for (const [id, spec] of Object.entries(inventory)) {
   record(id, "parse", "no row or table section inside a cell", !parseHtml(html).document.querySelector(":is(th, td) > :is(tr, thead, tbody, tfoot)"));
   record(id, "prose", "no punctuation-only paragraph", !blocks(doc).some((b) => b.type === "paragraph" && /^[\p{P}\s]+$/u.test(b.text)));
 
-  // A pinned snapshot is one page; nav it does not follow is reported, never an empty section.
+  // One page, one section; nav it records is never an empty section.
   const empty = [...(function* all(ss) { for (const s of ss) { yield s; yield* all(s.children); } })(doc.sections)].filter((s) => !s.blocks.length && !s.children.length);
-  record(id, "scope", "page, siblings unfetched or absent, no empty section",
-    doc.scope.kind === "page" && ["prev", "next"].every((r) => ["unfetched", "absent"].includes(doc.scope.siblings[r].status)) && !empty.length);
+  record(id, "scope", "page, one section, no empty section", doc.scope.kind === "page" && doc.sections.length === 1 && !empty.length);
 
   const nav = scoreNav(html, spec.url, spec.nav);
-  for (const f of nav.fp) record(id, "nav", `wrong sibling ${f}`, false);
+  for (const f of nav.fp) record(id, "nav", `wrong nav target ${f}`, false);
   // Nav misses are baselined like loss misses: a new one fails, a stale entry fails.
   const knownNav = spec.known_nav_miss || [];
   for (const m of nav.miss) if (!knownNav.includes(m.split(":")[0])) record(id, "nav", `new miss ${m}`, false);
@@ -247,10 +235,10 @@ for (const [id, spec] of Object.entries(inventory)) {
 
 
   // Blocks are separated by a blank line, so paragraphs and a list stay distinct in Markdown.
-  const sep = renderMarkdown({ scope: { kind: "page", siblings: { prev: { status: "absent" }, next: { status: "absent" } } },
+  const sep = renderMarkdown({ scope: { kind: "page" },
     sections: [{ title: "T", blocks: [P("a"), P("b"), { type: "list", ordered: false, items: ["x"] }, P("c")], losses: [], children: [] }] });
   record("render", "blocks", "blank line between blocks", sep === "# T\n\na\n\nb\n\n- x\n\nc\n");
-  const lossy = renderMarkdown({ scope: { kind: "page", siblings: { prev: { status: "absent" }, next: { status: "absent" } } },
+  const lossy = renderMarkdown({ scope: { kind: "page" },
     sections: [{ title: "T", blocks: [P("a")], losses: [{ type: "loss", reason: "r", source: "source-heading-diff", text: "Gone" }], children: [] }] });
   record("render", "losses", "loss markers stay in the IR, out of the Markdown", lossy === "# T\n\na\n");
 
@@ -280,167 +268,84 @@ for (const [id, spec] of Object.entries(inventory)) {
     JSON.stringify(optTable?.headers) === '["Option","Description"]' && JSON.stringify(optTable?.rows) === '[["--a","First"],["--b","Second"],["F","G"]]' && !opt.sections[0].losses.length);
 }
 
-// Document-unit round-trip: a live run over frozen pages follows rel=next through the injected
-// fetch; the sibling's blocks equal its own single-page run, order is page < next, the dead
-// prev is a status in doc.scope (not a stub section), and the composed document is
-// deterministic.
+// Nav is recorded, not fetched: a live run over frozen pages reads only the page, records its
+// rel=prev/next targets in doc.scope, and is deterministic.
 {
   const introUrl = "https://docs.python.org/3/tutorial/introduction.html";
   const cfUrl = "https://docs.python.org/3/tutorial/controlflow.html";
-  const fetch = pagesFetch({
+  const fetched = [];
+  const pages = pagesFetch({
     [introUrl]: await readFile(join(ROOT, "test/fixtures/python-tutorial-intro.html"), "utf8"),
     [cfUrl]: await readFile(join(ROOT, "test/fixtures/python-tutorial-controlflow.html"), "utf8"),
   });
-  const composed = await run({ url: introUrl, fetch, retrievedAt: FIXED });
-  const full = await run({ url: introUrl, fetch, retrievedAt: FIXED, siblings: "full" });
-  const secs = composed.doc.sections;
-  const { scope } = composed.doc;
-  record("document-unit", "order", "page < next, dead prev only in scope",
-    secs.length === 2 && secs[0].url === introUrl && secs[1].url === cfUrl && scope.kind === "window" &&
-    scope.siblings.prev.status === "failed" && scope.siblings.prev.url.endsWith("interpreter.html") && scope.siblings.next.status === "attached");
-  record("document-unit", "render", "scope line first",
-    composed.markdown.startsWith("> **Scope:** a prev/next window onto the section, not the whole section (prev: failed, next: attached; siblings show headings and code only)"));
-
-  const cfSingle = await run({ url: cfUrl, fetch, retrievedAt: FIXED });
-  const single = findSection(cfSingle.doc, cfUrl).blocks;
-  const next = findSection(full.doc, cfUrl);
-  record("document-unit", "round-trip", "full sibling blocks equal single-page run",
-    !!next && next.blocks.length > 0 && JSON.stringify(next.blocks) === JSON.stringify(single) && full.doc.scope.siblings.next.projection.mode === "full");
-
-  // The default projection: the single-page run's headings and code, whole and in order, and a
-  // count of every other block type.
-  const proj = findSection(composed.doc, cfUrl).blocks;
-  const kept = single.filter((b) => b.type === "heading" || b.type === "code");
-  const left = {};
-  for (const b of single) if (b.type !== "heading" && b.type !== "code") left[b.type] = (left[b.type] ?? 0) + 1;
-  const sn = composed.doc.scope.siblings.next;
-  record("document-unit", "projection", "headings + code verbatim, omitted counts",
-    proj.length > 0 && JSON.stringify(proj) === JSON.stringify(kept) && JSON.stringify(sn.projection) === JSON.stringify({ mode: "headings+code", omitted: left }) &&
-    composed.doc.scope.siblings.prev.projection === undefined);
-
+  const fetch = (u) => { fetched.push(u); return pages(u); };
+  const live = await run({ url: introUrl, fetch, retrievedAt: FIXED });
+  const { scope } = live.doc;
+  record("nav", "recorded", "live run fetches the page only; prev/next in scope, one section",
+    JSON.stringify(fetched) === JSON.stringify([introUrl]) && live.doc.sections.length === 1 && scope.kind === "page" &&
+    scope.next.url === cfUrl && scope.next.via === "rel" && scope.prev.url.endsWith("interpreter.html"));
   const again = await run({ url: introUrl, fetch, retrievedAt: FIXED });
-  record("document-unit", "determinism", "", JSON.stringify(composed.doc) === JSON.stringify(again.doc));
+  record("nav", "determinism", "", JSON.stringify(live.doc) === JSON.stringify(again.doc));
+
+  const bad = (edit) => { const d = structuredClone(live.doc); edit(d); try { validate(d); return false; } catch { return true; } };
+  record("ir", "validate", "scope is a page: window, siblings, unknown keys, bad nav, a second section rejected",
+    !bad(() => {}) && bad((d) => { d.scope.kind = "window"; }) && bad((d) => { d.scope.siblings = {}; }) &&
+    bad((d) => { d.scope.next.via = "crawl"; }) && bad((d) => { d.scope.next.status = "attached"; }) && bad((d) => { delete d.scope.prev.url; }) &&
+    bad((d) => d.sections.push({ ...structuredClone(d.sections[0]), id: "other" })));
 }
 
-// Projection on real windows: the sibling code a step-6 task needed survives the default
-// projection (U1 prev: Session.get; U4 next: eprintln!), and bytes count UTF-8, not UTF-16.
+// Document integrity: the compose/to-ir bugs that would ship a broken document. 9: direct text
+// nodes in containers must survive. 10: a breadcrumb crumb linking to the page must not drop
+// prev/next. 11: a nav href differing only by host casing canonicalizes. Ambiguous rel (two
+// targets) records nothing.
 {
-  const usagePages = JSON.parse(await readFile(join(ROOT, "usage/pages.json"), "utf8"));
-  const byUrl = new Map();
-  for (const p of Object.values(usagePages)) for (const u of [p.url, p.finalUrl]) byUrl.set(u, p);
-  const frozen = async (u) => {
-    const p = byUrl.get(u);
-    if (!p) throw new Error(`not frozen: ${u}`);
-    return { ...snap(p.finalUrl, await readFile(join(ROOT, "usage/pages", p.fixture), "utf8")), url: u };
-  };
-  const codeOf = (doc, r) => findSection(doc, doc.scope.siblings[r].url)?.blocks.filter((b) => b.type === "code").map((b) => b.code).join("\n") ?? "";
-  const u1 = await run({ url: "https://docs.sqlalchemy.org/en/20/tutorial/orm_related_objects.html", fetch: frozen, retrievedAt: FIXED });
-  const u4 = await run({ url: "https://doc.rust-lang.org/book/ch12-05-working-with-environment-variables.html", fetch: frozen, retrievedAt: FIXED });
-  record("document-unit", "projection", "U1 prev keeps session.get(, U4 next keeps eprintln!",
-    /session\.get\(/.test(codeOf(u1.doc, "prev")) && codeOf(u4.doc, "next").includes("eprintln!") &&
-    u1.doc.scope.siblings.prev.projection.mode === "headings+code" && u4.doc.scope.siblings.next.projection.mode === "headings+code");
-
-  const url = "https://example.com/docs/a/", nextUrl = "https://example.com/docs/b/";
-  const pages = {
-    [url]: '<html><head><link rel="next" href="/docs/b/"></head><body><main><h1>A</h1><p>Page.</p></main></body></html>',
-    [nextUrl]: "<html><body><main><h1>B</h1><h2>Café 日本</h2><p>Prose left out.</p><pre>x = \"é\"</pre></main></body></html>",
-  };
-  const { doc } = await run({ url, fetch: pagesFetch(pages), retrievedAt: FIXED });
-  record("ir", "projection", "omitted counts the dropped prose", JSON.stringify(doc.scope.siblings.next.projection.omitted) === JSON.stringify({ paragraph: 1 }));
-  const bad = (edit, blocks) => { const d = structuredClone(doc); edit(d.scope.siblings); blocks?.(findSection(d, nextUrl).blocks); try { validate(d); return false; } catch { return true; } };
-  record("ir", "validate", "attached sibling needs a projection; others carry none",
-    !bad(() => {}) && bad((x) => delete x.next.projection) && bad((x) => { x.next.projection = { mode: "summary", omitted: {} }; }) &&
-    bad((x) => { x.next.projection.omitted = { paragraph: 0 }; }) && bad((x) => { x.prev.projection = { mode: "full", omitted: {} }; }));
-  record("ir", "validate", "omitted names dropped types only, empty under full; attached url has a section",
-    bad((x) => { x.next.projection.omitted = []; }) &&
-    bad((x) => { x.next.projection.omitted = { paragraph: 1, heading: 1 }; }) && bad((x) => { x.next.projection.omitted = { prose: 1 }; }) &&
-    bad((x) => { x.next.projection.mode = "full"; }) && bad((x) => { x.next.url = "https://example.com/docs/c/"; }) &&
-    bad(() => {}, (b) => b.push({ type: "paragraph", text: "kept prose" })));
-  // An unknown mode fails at the call, not as a mislabelled projection when a sibling attaches.
-  const rejects = await run({ url, fetch: pagesFetch(pages), retrievedAt: FIXED, siblings: "headings" }).then(() => false, (e) => /^siblings: /.test(e.message));
-  record("document-unit", "projection", "run rejects an unknown siblings mode", rejects);
-}
-
-// Sibling losses are the audit trail and are never projected. Code the extractor demoted to a
-// paragraph leaves the projection with the paragraph, but its verbatim source stays in the
-// sibling's losses (gate v2 T2: pydantic validators, next sibling).
-{
-  const v2Pages = JSON.parse(await readFile(join(ROOT, "usage/v2/pages.json"), "utf8"));
-  const byUrl = new Map();
-  for (const p of Object.values(v2Pages)) for (const u of [p.url, p.finalUrl]) byUrl.set(u, p);
-  const frozen = async (u) => {
-    const p = byUrl.get(u);
-    if (!p) throw new Error(`not frozen: ${u}`);
-    return { ...snap(p.finalUrl, await readFile(join(ROOT, "usage/v2/pages", p.fixture), "utf8")), url: u };
-  };
-  const url = "https://docs.pydantic.dev/latest/concepts/validators/";
-  const proj = await run({ url, fetch: frozen, retrievedAt: FIXED });
-  const full = await run({ url, fetch: frozen, retrievedAt: FIXED, siblings: "full" });
-  const sibLosses = (doc) => doc.sections.filter((s) => s.url !== doc.source.finalUrl).map((s) => s.losses);
-  const demoted = sibLosses(proj.doc).flat().filter((l) => l.source === "source-code-demoted");
-  record("document-unit", "projection", "T2 sibling losses unprojected, demoted Python verbatim",
-    proj.doc.scope.siblings.next.status === "attached" && JSON.stringify(sibLosses(proj.doc)) === JSON.stringify(sibLosses(full.doc)) &&
-    demoted.some((l) => /^from pydantic import .+\n/m.test(l.text)));
-}
-
-// Document-unit integrity: the compose/to-ir bugs that would ship broken sibling content.
-// 9: direct text nodes in containers must survive. 10: a breadcrumb crumb linking to the
-// page must not drop prev/next. 11: a nav href differing only by host casing canonicalizes to
-// the fetched sibling. Ambiguous rel (two targets) attaches nothing. Run with full siblings:
-// the markers are prose, which the default projection leaves out.
-{
-  const textOf = (s) => (s?.blocks || []).map((b) => b.text || "").join(" ");
   const url = "https://example.com/docs/page/";
   const prevUrl = "https://example.com/docs/prev/", nextUrl = "https://example.com/docs/next/";
-  const sib = {
-    [prevUrl]: "<html><body><main><h1>Prev</h1><p>Prev content.</p></main></body></html>",
-    [nextUrl]: "<html><body><main><h1>Next</h1><p>Next content.</p></main></body></html>",
-  };
+  const nav = (doc) => `${doc.scope.prev?.url ?? "-"} ${doc.scope.next?.url ?? "-"}`;
   const page = (head, body = "") => `<html><head>${head}</head><body>${body}<main><h1>Page</h1><p>Page content.</p></main></body></html>`;
 
   // 10: breadcrumb crumb linking to the page itself.
   {
     const html = page('<link rel="prev" href="/docs/prev/"><link rel="next" href="/docs/next/">',
       '<nav aria-label="breadcrumb"><a href="/docs/">Docs</a> <a href="/docs/page/">Page</a></nav>');
-    const { doc } = await run({ url, fetch: pagesFetch({ [url]: html, ...sib }), retrievedAt: FIXED, siblings: "full" });
-    record("document-unit", "integrity", "breadcrumb page-url keeps prev/next",
-      textOf(findSection(doc, prevUrl)).includes("Prev content") && textOf(findSection(doc, nextUrl)).includes("Next content"));
+    const { doc } = await run({ url, fetch: pagesFetch({ [url]: html }), retrievedAt: FIXED });
+    record("document-unit", "integrity", "breadcrumb page-url keeps prev/next", nav(doc) === `${prevUrl} ${nextUrl}`);
     record("document-unit", "breadcrumbs", "trail in doc.breadcrumbs, self excluded, not sections",
-      JSON.stringify(doc.breadcrumbs) === JSON.stringify([{ title: "Docs", url: "https://example.com/docs/" }]) && doc.sections.length === 3);
+      JSON.stringify(doc.breadcrumbs) === JSON.stringify([{ title: "Docs", url: "https://example.com/docs/" }]) && doc.sections.length === 1);
     const up = await run({ url, fetch: pagesFetch({ [url]: page('<link rel="up" href="/docs/" title="Docs">') }), retrievedAt: FIXED });
     record("document-unit", "breadcrumbs", "rel=up without a trail", up.doc.breadcrumbs.length === 1 && up.doc.breadcrumbs[0].url === "https://example.com/docs/" && up.doc.sections.length === 1);
   }
 
-  // 11: an upper-cased host in the nav href still reaches the sibling.
+  // 11: an upper-cased host in the nav href canonicalizes to the same target.
   {
     const html = page('<link rel="next" href="https://EXAMPLE.com/docs/next/">');
-    const { doc } = await run({ url, fetch: pagesFetch({ [url]: html, ...sib }), retrievedAt: FIXED, siblings: "full" });
-    record("document-unit", "integrity", "host-cased nav href attaches content", textOf(findSection(doc, nextUrl)).includes("Next content"));
+    const { doc } = await run({ url, fetch: pagesFetch({ [url]: html }), retrievedAt: FIXED });
+    record("document-unit", "integrity", "host-cased nav href canonicalizes", doc.scope.next?.url === nextUrl);
   }
 
-  // rel is a token list on <a> too; two different next targets attach neither.
+  // rel is a token list on <a> too; two different next targets record neither.
   {
-    const tok = await run({ url, fetch: pagesFetch({ [url]: page("", '<a rel="next prefetch" href="/docs/next/">Next</a>'), ...sib }), retrievedAt: FIXED, siblings: "full" });
-    record("document-unit", "nav", "rel token on <a> attaches", textOf(findSection(tok.doc, nextUrl)).includes("Next content"));
-    const two = await run({ url, fetch: pagesFetch({ [url]: page('<link rel="next" href="/docs/next/">', '<a rel="next" href="/docs/other/">x</a>'), ...sib }), retrievedAt: FIXED, siblings: "full" });
-    record("document-unit", "nav", "ambiguous rel attaches nothing", two.doc.sections.length === 1);
+    const tok = await run({ url, fetch: pagesFetch({ [url]: page("", '<a rel="next prefetch" href="/docs/next/">Next</a>') }), retrievedAt: FIXED });
+    record("document-unit", "nav", "rel token on <a> recorded", tok.doc.scope.next?.url === nextUrl);
+    const two = await run({ url, fetch: pagesFetch({ [url]: page('<link rel="next" href="/docs/next/">', '<a rel="next" href="/docs/other/">x</a>') }), retrievedAt: FIXED });
+    record("document-unit", "nav", "ambiguous rel records nothing", nav(two.doc) === "- -");
     const js = await run({ url, fetch: pagesFetch({ [url]: page('<link rel="next" href="javascript:alert(1)"><link rel="prev" href="file:///etc/passwd">') }), retrievedAt: FIXED });
-    record("document-unit", "nav", "non-http(s) rel target ignored", js.doc.sections.length === 1);
+    record("document-unit", "nav", "non-http(s) rel target ignored", nav(js.doc) === "- -");
   }
 
-  // Review fixes: a page is not its own sibling; a self crumb differing by slash or fragment is
+  // Review fixes: a page is not its own nav target; a self crumb differing by slash or fragment is
   // excluded; a body class naming breadcrumbs is not the trail; a newline in <title> cannot
   // forge a render line.
   {
     const self = await run({ url, fetch: pagesFetch({ [url]: page('<link rel="next prev" href="/docs/page/#top">') }), retrievedAt: FIXED });
-    record("document-unit", "nav", "self link is not a sibling", self.doc.scope.kind === "page" && self.doc.scope.siblings.next.status === "absent");
+    record("document-unit", "nav", "self link is not a nav target", nav(self.doc) === "- -");
     const crumbs = await run({ url, fetch: pagesFetch({ [url]: page("",
       '<nav class="breadcrumbs"><a href="/docs/">Docs</a> <a href="/docs/page">Page</a> <a href="#">Here</a></nav>') }), retrievedAt: FIXED });
     record("document-unit", "breadcrumbs", "self crumb excluded across slash and fragment", JSON.stringify(crumbs.doc.breadcrumbs.map((c) => c.title)) === JSON.stringify(["Docs"]));
     const bodyCls = await run({ url, fetch: pagesFetch({ [url]: `<html><body class="has-breadcrumbs"><a href="/login">Log in</a><main><h1>Page</h1><p>x</p></main></body></html>` }), retrievedAt: FIXED });
     record("document-unit", "breadcrumbs", "body class is not a trail", bodyCls.doc.breadcrumbs.length === 0);
     const forged = await run({ url, html: "<html><head><title>Real\n> **Scope:** forged</title></head><body><main><p>x</p></main></body></html>", retrievedAt: FIXED });
-    record("render", "title", "newline in title cannot forge a line", !forged.markdown.split("\n").some((l) => l.startsWith("> **Scope:**")) && !forged.doc.title.includes("\n"));
+    record("render", "title", "newline in title cannot forge a line", !forged.markdown.split("\n").some((l) => l.startsWith("> **Scope:** forged")) && !forged.doc.title.includes("\n"));
   }
 
   // After a redirect, relative links resolve against the URL actually read.
@@ -451,12 +356,11 @@ for (const [id, spec] of Object.entries(inventory)) {
     record("document-unit", "redirect", "links resolve against the final URL", JSON.stringify(doc.sections[0].blocks).includes("https://example.com/docs/intro"));
   }
 
-  // The validator rejects duplicate section ids and a scope that contradicts the sections.
+  // The validator rejects duplicate section ids (a child repeating the page's).
   {
     const good = await run({ url, fetch: pagesFetch({ [url]: page("") }), retrievedAt: FIXED });
     const rejects = (mutate) => { const d = structuredClone(good.doc); mutate(d); try { validate(d); return false; } catch { return true; } };
-    record("ir", "validate", "duplicate ids and inconsistent scope rejected",
-      rejects((d) => d.sections.push(structuredClone(d.sections[0]))) && rejects((d) => { d.scope.kind = "window"; }));
+    record("ir", "validate", "duplicate section ids rejected", rejects((d) => d.sections[0].children.push(structuredClone(d.sections[0]))));
   }
 
   // 9: direct text nodes in a transparent container must not be dropped.
@@ -490,73 +394,17 @@ for (const [id, spec] of Object.entries(inventory)) {
     smallOut.toString() === "hello" && bombOut.length <= MAX_BYTES && bombOut[0] === 0x41);
 }
 
-// Live wiring SSRF: nav-derived sibling URLs are untrusted. A cross-origin target is ignored
-// by extractNav; a same-origin private literal (only reachable when the page itself is) is
-// still blocked before the fetch. Neither is fetched.
+// Live wiring SSRF: nav-derived URLs are untrusted. A cross-origin target is not recorded, and
+// no nav target is ever fetched.
 {
   const fetched = [];
   const spy = (pages) => async (u) => { fetched.push(u); return pagesFetch(pages)(u); };
   const cross = "https://example.com/page/";
   const x = await run({ url: cross, fetch: spy({ [cross]: `<html><head><link rel="next" href="http://169.254.169.254/"></head><body><main><h1>Page</h1></main></body></html>` }), retrievedAt: FIXED });
-  const local = "http://127.0.0.1/p/";
-  const l = await run({ url: local, fetch: spy({ [local]: `<html><head><link rel="next" href="/q/"></head><body><main><h1>Page</h1></main></body></html>` }), retrievedAt: FIXED });
-  record("wiring", "ssrf", "cross-origin sibling ignored, private sibling blocked, neither fetched",
-    JSON.stringify(fetched) === JSON.stringify([cross, local]) && x.doc.scope.siblings.next.status === "absent" &&
-    l.doc.scope.siblings.next.status === "blocked" && l.doc.sections.length === 1);
-}
-
-// Agent surface: cache key + HTTP handler boundary.
-{
-  const makeKv = () => {
-    const m = new Map();
-    return {
-      async get(key, type) { const v = m.get(key); return v == null ? null : type === "json" ? JSON.parse(v) : v; },
-      async put(key, value) { m.set(key, value); },
-    };
-  };
-  const doc = { schema: "mdflow/ir/v1", id: "x", title: "T", source: { url: "u", retrievedAt: "2026-01-01", fingerprint: "f" }, generator: { name: "mdflow", version: "0.1.0", extractor: "defuddle", extractorVersion: "0.19.4" }, sections: [] };
-  const markdown = "# T\n";
-  const snapshot = { retrievedAt: "2026-01-01", fingerprint: "f" };
-  const okRun = async () => ({ doc, markdown, snapshot });
-  const failRun = async () => { throw new Error("upstream down"); };
-  const req = (q = "https://example.com", headers) => new Request(`https://m/?url=${q}`, headers ? { headers } : undefined);
-
-  record("agent-surface", "cache-key", "versioned",
-    cacheKey("https://e.com", "0.1.0", "0.19.4") !== cacheKey("https://e.com", "0.1.0", "0.20.0"));
-
-  record("agent-surface", "cache-key", "sibling projection separates entries",
-    cacheKey("https://e.com", "0.1.0", "0.19.4") !== cacheKey("https://e.com", "0.1.0", "0.19.4", "full") &&
-    cacheKey("https://e.com", "0.1.0", "0.19.4") === cacheKey("https://e.com", "0.1.0", "0.19.4", "headings+code"));
-  const modes = [];
-  const spyRun = async (o) => { modes.push(o.siblings); return okRun(); };
-  await handle(req("https://example.com/a"), {}, { run: spyRun, kv: makeKv() });
-  await handle(new Request("https://m/?url=https://example.com/b&siblings=full"), {}, { run: spyRun, kv: makeKv() });
-  await handle(new Request("https://m/?url=https://example.com/c&siblings=bogus"), {}, { run: spyRun, kv: makeKv() });
-  record("agent-surface", "siblings", "default projection, siblings=full passes through, anything else is the default",
-    JSON.stringify(modes) === JSON.stringify(["headings+code", "full", "headings+code"]));
-  // The projection is in the cache key as handle() builds it: one URL, one shared kv, default
-  // then full is two misses, and a repeat of each is a hit.
-  const kv = makeKv();
-  const cacheOf = async (q) => (await handle(new Request(`https://m/?url=https://example.com/d${q}`), {}, { run: okRun, kv })).headers.get("x-mdflow-cache");
-  const seen = [await cacheOf(""), await cacheOf("&siblings=full"), await cacheOf(""), await cacheOf("&siblings=full")];
-  record("agent-surface", "cache-key", "same URL, shared kv: default and full cached apart",
-    JSON.stringify(seen) === JSON.stringify(["miss", "miss", "hit", "hit"]));
-
-  const r6 = await handle(new Request("https://m/"), {}, { run: okRun, kv: makeKv() });
-  record("agent-surface", "boundary", "400", r6.status === 400);
-
-  const r7 = await handle(req("https://example.com", { accept: "application/json" }), {}, { run: okRun, kv: makeKv() });
-  const r7body = await r7.text();
-  record("agent-surface", "boundary", "json-content-type", r7.headers.get("content-type") === "application/json" && JSON.parse(r7body).schema === "mdflow/ir/v1");
-
-  const r8 = await handle(req("http://127.0.0.1/"), {}, { run: okRun, kv: makeKv() });
-  record("agent-surface", "boundary", "ssrf-block", r8.status === 400);
-  const r8b = await handle(req("http://[::1]/"), {}, { run: okRun, kv: makeKv() });
-  record("agent-surface", "boundary", "ssrf-ipv6", r8b.status === 400);
-
-  const r9 = await handle(new Request("https://m/?url=https://example.com&format=json"), {}, { run: failRun, kv: makeKv() });
-  const r9body = await r9.text();
-  record("agent-surface", "boundary", "json-error", r9.headers.get("content-type") === "application/json" && JSON.parse(r9body).code === 502);
+  const same = "https://example.com/p/";
+  const l = await run({ url: same, fetch: spy({ [same]: `<html><head><link rel="next" href="/q/"></head><body><main><h1>Page</h1></main></body></html>` }), retrievedAt: FIXED });
+  record("wiring", "ssrf", "cross-origin nav not recorded, same-origin recorded, neither fetched",
+    JSON.stringify(fetched) === JSON.stringify([cross, same]) && x.doc.scope.next === undefined && l.doc.scope.next?.url === "https://example.com/q/");
 }
 
 // Generator pagers: filled only for the declared generator's docs page, never over rel, and held
@@ -568,8 +416,8 @@ for (const [id, spec] of Object.entries(inventory)) {
   const links = '<a class="pagination-nav__link pagination-nav__link--prev" href="/docs/a">A</a><a class="pagination-nav__link pagination-nav__link--next" href="/docs/c">C</a>';
   const nav = (html) => { const r = extractNav(html, u).rel; return `${r.prev?.via ?? "-"}:${r.prev?.url ?? "-"} ${r.next?.via ?? "-"}:${r.next?.url ?? "-"}`; };
   record("nav", "pager", "Docusaurus docs page: pager fills prev/next", nav(docu(meta, "docs-doc-page", links)) === "pager:https://d.example/docs/a pager:https://d.example/docs/c");
-  record("nav", "pager", "blog post (not a docs page): no siblings", nav(docu(meta, "blog-post-page", links)) === "-:- -:-");
-  record("nav", "pager", "no generator meta: no siblings", nav(docu("", "docs-doc-page", links)) === "-:- -:-");
+  record("nav", "pager", "blog post (not a docs page): no nav", nav(docu(meta, "blog-post-page", links)) === "-:- -:-");
+  record("nav", "pager", "no generator meta: no nav", nav(docu("", "docs-doc-page", links)) === "-:- -:-");
   record("nav", "pager", "rel wins over the pager", nav(docu(meta, "docs-doc-page", links, '<link rel="next" href="/docs/z">')) === "pager:https://d.example/docs/a rel:https://d.example/docs/z");
   record("nav", "pager", "cross-origin, self, and ambiguous pager links attach nothing",
     nav(docu(meta, "docs-doc-page", '<a class="pagination-nav__link--prev" href="https://evil.example/docs/a">A</a><a class="pagination-nav__link--next" href="/docs/b#x">B</a>')) === "-:- -:-" &&
@@ -579,7 +427,7 @@ for (const [id, spec] of Object.entries(inventory)) {
     nav(`<html><head>${vp}</head><body><nav class="prev-next"><a class="VPLink link pager-link prev" href="/docs/a">A</a></nav></body></html>`) === "pager:https://d.example/docs/a -:-" &&
     nav(`<html><head>${vp}</head><body><footer><a class="prev-link" href="/docs/a">A</a></footer></body></html>`) === "-:- -:-");
   const { doc } = await run({ url: u, html: docu(meta, "docs-doc-page", links, "<title>B</title>").replace("<body>", "<body><main><h1>B</h1><p>Body text of the page, long enough to be content.</p></main>"), retrievedAt: FIXED });
-  record("nav", "pager", "via reaches scope.siblings", doc.scope.siblings.prev.via === "pager" && doc.scope.siblings.next.status === "unfetched" && doc.scope.siblings.next.via === "pager");
+  record("nav", "pager", "via reaches scope", doc.scope.prev?.via === "pager" && doc.scope.next?.via === "pager");
 }
 
 // CLI arguments: a usage error exits 2 before any fetch; a parsed call reaches run(), which
@@ -587,13 +435,13 @@ for (const [id, spec] of Object.entries(inventory)) {
 {
   const cli = (args) => new Promise((ok) => spawn(process.execPath, [join(ROOT, "bin/mdflow.js"), ...args], { stdio: "ignore" }).on("exit", ok));
   const L = "http://127.0.0.1/";
-  const codes = await Promise.all([[L], [L, "--siblings=full"], [L, "--siblings", "headings+code"], ["--siblings", "full", L],
-    [L, "--siblings=bogus"], [L, L], ["--siblings", L], [L, "--jsn"], []].map(cli));
-  record("agent-surface", "cli", "flags parse or exit 2; a second URL, unknown flag, or bad mode is an error",
-    JSON.stringify(codes) === JSON.stringify([1, 1, 1, 1, 2, 2, 2, 2, 2]));
+  const codes = await Promise.all([[L], [L, "--json"], ["--json", L], [L, "--siblings=full"], [L, "--siblings", "full"],
+    [L, L], [L, "--jsn"], []].map(cli));
+  record("cli", "args", "flags parse or exit 2; --siblings, a second URL, or an unknown flag is an error",
+    JSON.stringify(codes) === JSON.stringify([1, 1, 1, 2, 2, 2, 2, 2]));
 }
 
-// The local reader: frozen window, judged findings, and the source served without its scripts.
+// The local reader: the page with its nav, judged findings, and the source served without its scripts.
 {
   const child = spawn(process.execPath, [join(ROOT, "bin/reader.js"), "0"], { stdio: ["ignore", "pipe", "inherit"] });
   try {
@@ -603,7 +451,7 @@ for (const [id, spec] of Object.entries(inventory)) {
     });
     const [u1, u5, raw] = await Promise.all([fetch(base + "f/U1"), fetch(base + "f/U5"), fetch(base + "raw/nodejs-path")]);
     const [u1t, u5t, rawt] = await Promise.all([u1.text(), u5.text(), raw.text()]);
-    record("reader", "window", "U1 shows prev, page, next", ["prev", "page", "next"].every((r) => u1t.includes(`class="role">${r}<`)));
+    record("reader", "document", "U1 shows the page and its nav, no window", u1t.includes("scope: <b>page</b>") && u1t.includes("prev: via rel") && !u1t.includes('class="role"'));
     record("reader", "findings", "U5 demotions judged against labels", (u5t.match(/<b>demoted<\/b> source-heading-demoted/g) || []).length === 2);
     record("reader", "source", "no page scripts, base after the doctype",
       raw.headers.get("content-security-policy")?.includes("script-src 'none'") && rawt.startsWith('<!doctype html><base href="https://nodejs.org/api/path.html">'));

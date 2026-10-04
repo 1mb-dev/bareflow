@@ -2,8 +2,7 @@
 // The connection is pinned to a validated public address: node:https/http is given a custom
 // lookup that resolves the host, rejects private/loopback/link-local addresses, and returns a
 // validated IP for the actual socket. There is no second resolution, so DNS rebinding cannot
-// slip a private address past the check. This is the dev-side guard; the deployed Worker also
-// relies on the platform egress filter.
+// slip a private address past the check.
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { lookup } from "node:dns";

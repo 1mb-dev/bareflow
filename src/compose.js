@@ -1,6 +1,6 @@
 // Navigation: reads a page's own nav (rel=prev/next/up, breadcrumbs) and composes the page
-// with whichever prev/next siblings were attached. This is not a crawl; it attaches only the
-// provided siblings, and doc.scope says what the result covers.
+// document. Nav targets are document structure, recorded in doc.scope and doc.breadcrumbs;
+// mdflow never fetches them.
 import { parseHtml } from "./html.js";
 import * as ir from "./ir.js";
 
@@ -35,9 +35,9 @@ const PAGERS = [
 ];
 
 // rel is a token list on <link> and <a> alike ("next prefetch" is next); only the standard
-// prev/next/up keywords count. A sibling must be another page on the same origin: a link to
+// prev/next/up keywords count. A nav target must be another page on the same origin: a link to
 // the page itself or to another site (user content can carry rel=next) is ignored. Two
-// different targets for one relation are ambiguous and attach neither: a wrong sibling is
+// different targets for one relation are ambiguous and record neither: a wrong target is
 // worse than none. rel wins; a generator's pager fills only a relation rel leaves empty.
 export function extractNav(html, url) {
   const { document } = parseHtml(html);
@@ -80,51 +80,22 @@ export function extractNav(html, url) {
   return { rel, breadcrumbs };
 }
 
-// A sibling is projected, not summarized: its headings and code blocks, whole and verbatim, in
-// order, with a count of each block type left out. "full" keeps every block.
-function project(blocks, mode) {
-  if (mode === "full") return { blocks, projection: { mode, omitted: {} } };
-  const omitted = {};
-  const kept = [];
-  for (const b of blocks) if (ir.PROJECTION_KEEP.has(b.type)) kept.push(b); else omitted[b.type] = (omitted[b.type] ?? 0) + 1;
-  return { blocks: kept, projection: { mode, omitted } };
-}
-
-// Build a Document: the page plus whichever prev/next siblings were attached, in order. The
-// result is a window onto the docs section, not the section, and says so in doc.scope; where
-// the page sits (breadcrumbs, else rel=up) is doc.breadcrumbs, not empty ancestor sections.
-// nav is extractNav's result for this page; siblings maps prev/next to { status, url?, via?,
-// title?, blocks?, losses? } with status attached | unfetched | failed | blocked | absent;
-// siblingMode is "headings+code" (the default) or "full".
-export function compose({ url, nav, title, blocks, losses = [], source, generator, siblings, siblingMode = "headings+code" }) {
+// Build a Document: one page section. Its prev/next nav targets go in doc.scope; where the page
+// sits (breadcrumbs, else rel=up) is doc.breadcrumbs, not empty ancestor sections. nav is
+// extractNav's result for this page.
+export function compose({ url, nav, title, blocks, losses = [], source, generator }) {
   // Titles are page text on one line: a newline in <title> must not forge render lines.
   title = norm(title);
   const page = ir.section(ir.stableId(url), title || url, { url });
   page.blocks = blocks;
   page.losses = losses;
 
-  const projected = {};
-  const attached = (r) => {
-    const s = siblings[r];
-    if (s.status !== "attached") return null;
-    const sec = ir.section(ir.stableId(s.url), norm(s.title) || nav.rel[r]?.title || s.url, { url: s.url });
-    projected[r] = project(s.blocks, siblingMode);
-    sec.blocks = projected[r].blocks;
-    sec.losses = s.losses;
-    return sec;
-  };
-  const sections = [attached("prev"), page, attached("next")].filter(Boolean);
-
   // A crumb that links to the page itself is the page, not a place above it.
   const trail = nav.breadcrumbs.filter((c) => !samePage(c.url, canonicalUrl(url) ?? url));
   const breadcrumbs = trail.length ? trail : nav.rel.up ? [{ title: nav.rel.up.title, url: nav.rel.up.url }] : [];
 
-  const status = (r) => ({
-    status: siblings[r].status,
-    ...(siblings[r].url ? { url: siblings[r].url, via: siblings[r].via } : {}),
-    ...(projected[r] ? { projection: projected[r].projection } : {}),
-  });
-  const scope = { kind: sections.length > 1 ? "window" : "page", siblings: { prev: status("prev"), next: status("next") } };
+  const scope = { kind: "page" };
+  for (const r of ["prev", "next"]) if (nav.rel[r]) scope[r] = { url: nav.rel[r].url, via: nav.rel[r].via };
 
-  return ir.document({ id: ir.stableId(url), title: title || "Document", source, generator, scope, breadcrumbs, sections });
+  return ir.document({ id: ir.stableId(url), title: title || "Document", source, generator, scope, breadcrumbs, sections: [page] });
 }
