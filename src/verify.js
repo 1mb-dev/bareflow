@@ -5,7 +5,9 @@
 // failure.
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -553,6 +555,32 @@ for (const [id, spec] of Object.entries(inventory)) {
     nav(`<html><head>${vp}</head><body><footer><a class="prev-link" href="/docs/a">A</a></footer></body></html>`) === "-:- -:-");
   const { doc } = await run({ url: u, html: docu(meta, "docs-doc-page", links, "<title>B</title>").replace("<body>", "<body><main><h1>B</h1><p>Body text of the page, long enough to be content.</p></main>"), retrievedAt: FIXED });
   record("nav", "pager", "via reaches scope", doc.scope.prev?.via === "pager" && doc.scope.next?.via === "pager");
+}
+
+// Fetch budget: one deadline for the whole fetch, redirects included, so a server that drips
+// bytes or chains slow redirects cannot hold the caller. A local server stands in for the site;
+// the test resolver maps its name to loopback, which the default resolver refuses.
+{
+  const server = createServer((req, res) => {
+    if (req.url === "/drip") { res.writeHead(200, { "content-type": "text/html" }); const t = setInterval(() => res.write(" "), 50); res.on("close", () => clearInterval(t)); return; }
+    const hop = Number(req.url.match(/^\/hop(\d)$/)?.[1]);
+    setTimeout(() => {
+      if (hop < 3) { res.writeHead(302, { location: `/hop${hop + 1}` }); res.end(); }
+      else { res.writeHead(200, { "content-type": "text/html" }); res.end("<html><body><main><h1>Done</h1></main></body></html>"); }
+    }, 120);
+  });
+  await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
+  const port = server.address().port;
+  const lookup = (host, opts, cb) => (opts?.all ? cb(null, [{ address: "127.0.0.1", family: 4 }]) : cb(null, "127.0.0.1", 4));
+  const timed = async (u, timeout) => { const t0 = Date.now(); const r = await fetchSnapshot(u, { timeout, lookup }).then((s) => s.html, (e) => e.message); return { r, ms: Date.now() - t0 }; };
+  const drip = await timed(`http://site.test:${port}/drip`, 300);
+  const chainShort = await timed(`http://site.test:${port}/hop0`, 300);
+  const chainLong = await timed(`http://site.test:${port}/hop0`, 3000);
+  const guarded = await fetchSnapshot(`http://localhost:${port}/hop3`).then(() => "fetched", (e) => e.message);
+  server.close();
+  record("fetch", "budget", "a dripping body and a slow redirect chain stop at the budget; the chain completes within a longer one",
+    /within 300 ms \(redirects included\)/.test(drip.r) && drip.ms < 1500 && /within 300 ms/.test(chainShort.r) && chainShort.ms < 1500 && chainLong.r.includes("Done"));
+  record("fetch", "ssrf", "the default resolver refuses a name that resolves to loopback", guarded.startsWith("blocked address for localhost"));
 }
 
 // CLI arguments: a usage error exits 2 before any fetch; a parsed call reaches run(), which
