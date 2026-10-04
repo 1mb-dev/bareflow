@@ -103,3 +103,6 @@ Cost unit (2026-09-27): "~Tokens" in the Results table is chars / 4 of arm A as 
 pretty-printed JSON. Gate v2 measures UTF-8 bytes of each arm input as written, arm A compact,
 and calls nothing tokens. Gate v2 (`v2/prereg.md`) does not include designed lossy pages; the
 auditor's re-entry set is a separate step.
+
+Scripts (`arms.js`, `freeze.js`, `plain.js`) removed in 0.3.0 with the sibling path; run them
+from commit 873121e.
