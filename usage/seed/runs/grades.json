@@ -1,0 +1,129 @@
+{
+  "S1": {
+    "X": {
+      "must_contain": [
+        {"score": 1, "reason": "Literal --unscoped appears in prose and command."},
+        {"score": 1, "reason": "States the flag uses the package name without its scope as the alias."},
+        {"score": 0, "reason": "Never mentions that packages with an explicit alias are unaffected."}
+      ],
+      "wrong": [
+        {"score": 0, "reason": "Uses --unscoped, not --no-scope/--strip-scope."},
+        {"score": 0, "reason": "Makes no claim that --unscoped overrides explicit aliases."}
+      ]
+    },
+    "Y": {
+      "must_contain": [
+        {"score": 1, "reason": "Literal --unscoped appears in prose and command."},
+        {"score": 1, "reason": "States the flag uses the package name without its scope as the alias."},
+        {"score": 1, "reason": "States a package given an explicit alias is unaffected by --unscoped."}
+      ],
+      "wrong": [
+        {"score": 0, "reason": "Uses --unscoped, not --no-scope/--strip-scope."},
+        {"score": 0, "reason": "Says explicit aliases are unaffected, the opposite of the wrong claim."}
+      ]
+    }
+  },
+  "S2": {
+    "X": {
+      "must_contain": [
+        {"score": 1, "reason": "Literal 'const result = await container.renderComponent(Card);' appears in the snippet."},
+        {"score": 1, "reason": "Literal import with ?container appears in the snippet."},
+        {"score": 1, "reason": "States leaving off ?container gives the same output as renderToString()."}
+      ],
+      "wrong": [
+        {"score": 0, "reason": "Uses the ?container query string; astro/container is only the source of experimental_AstroContainer."},
+        {"score": 0, "reason": "States @import assets are not rendered."}
+      ]
+    },
+    "Y": {
+      "must_contain": [
+        {"score": 0, "reason": "Snippet calls container.renderToString(Card); the exact renderComponent line is absent and the method is rejected."},
+        {"score": 1, "reason": "Literal import with ?container appears in the snippet."},
+        {"score": 1, "reason": "States without ?container you get the plain renderToString() output."}
+      ],
+      "wrong": [
+        {"score": 0, "reason": "Uses the ?container query string, not a special module."},
+        {"score": 0, "reason": "States @import assets are not rendered."}
+      ]
+    }
+  },
+  "S3": {
+    "X": {
+      "must_contain": [
+        {"score": 1, "reason": "Exact config string appears in the JSON block."},
+        {"score": 1, "reason": "States ignoreConstructors: true prevents reporting constructor functions."},
+        {"score": 0, "reason": "Says the option 'works with' always or methods but does not state the restriction (only those)."}
+      ],
+      "wrong": [
+        {"score": 0, "reason": "Does not claim it combines with \"properties\"."},
+        {"score": 0, "reason": "Does not claim constructors are ignored by default."}
+      ]
+    },
+    "Y": {
+      "must_contain": [
+        {"score": 1, "reason": "Exact config string appears in the JSON block."},
+        {"score": 1, "reason": "States the option stops the rule reporting constructor functions."},
+        {"score": 1, "reason": "States the option only works when the string option is always or methods."}
+      ],
+      "wrong": [
+        {"score": 0, "reason": "Does not claim it combines with \"properties\"."},
+        {"score": 0, "reason": "States by default constructors are treated like any other function."}
+      ]
+    }
+  },
+  "S4": {
+    "X": {
+      "must_contain": [
+        {"score": 1, "reason": "this.addWatchFile appears, called on the plugin context inside a transform hook."},
+        {"score": 1, "reason": "States absolute file or directory path, or relative to the cwd option."},
+        {"score": 1, "reason": "States it adds files monitored in watch mode so changes trigger rebuilds."}
+      ],
+      "wrong": [
+        {"score": 0, "reason": "Says directories are accepted."},
+        {"score": 0, "reason": "Says relative paths resolve against the cwd option."}
+      ]
+    },
+    "Y": {
+      "must_contain": [
+        {"score": 1, "reason": "this.addWatchFile appears, called on the plugin context inside a transform hook."},
+        {"score": 1, "reason": "States absolute file or directory path, or relative to the cwd option."},
+        {"score": 1, "reason": "States rebuilds trigger when the watched file changes, in watch mode."}
+      ],
+      "wrong": [
+        {"score": 0, "reason": "Says directories are accepted."},
+        {"score": 0, "reason": "Says relative paths resolve against the cwd option."}
+      ]
+    }
+  },
+  "S5": {
+    "X": {
+      "must_contain": [
+        {"score": 1, "reason": "Literal allowCompoundComponents appears."},
+        {"score": 0, "reason": "Uses the array form [\"error\", {...}]; the literal '\"react/only-export-components\": \"error\"' does not appear."},
+        {"score": 1, "reason": "States it allows an exported object when every property is a React component."}
+      ],
+      "wrong": [
+        {"score": 0, "reason": "Names the option allowCompoundComponents, not allowCompound."},
+        {"score": 0, "reason": "States the object must contain no nested objects, spreads, or accessors."}
+      ]
+    },
+    "Y": {
+      "must_contain": [
+        {"score": 1, "reason": "Literal allowCompoundComponents appears."},
+        {"score": 0, "reason": "Uses the array form [\"error\", {...}] split across lines; the literal '\"react/only-export-components\": \"error\"' does not appear."},
+        {"score": 1, "reason": "States you can export an object where every property is a React component."}
+      ],
+      "wrong": [
+        {"score": 0, "reason": "Names the option allowCompoundComponents, not allowCompound."},
+        {"score": 0, "reason": "States the object must contain no nested objects, spreads, or accessors."}
+      ]
+    }
+  },
+  "flags": [
+    "S5 must_contain[1]: the exact string is the bare \"error\" form, but the question asks to enable an option, which needs the [\"error\", {...}] array form. Both answers give a correct .oxlintrc.json config with plugins [\"react\"] and score 0 only on the literal match. Suggest accepting '\"react/only-export-components\"' plus the option as the exact token.",
+    "S4 must_contain[0]: the quoted string 'Using this.addWatchFile from within the transform hook' is doc prose, not code. Scored on the code token this.addWatchFile plus use in transform. Neither answer reproduces the full sentence.",
+    "S3 X must_contain[2]: borderline. X says the option 'works with' always or methods but leaves out 'only'. Scored 0 because the claim is the restriction, but a lenient reading would give 1.",
+    "S2 Y: the snippet replaces the documented renderComponent with renderToString and calls the doc's method unrecognised. This substantive error is caught only by must_contain[0]; no wrong claim covers 'use renderToString instead of renderComponent'.",
+    "S2 X: says renderComponent was 'added in astro@7.3.5' and S5 X says the rule was 'added in v1.23.0'. Both are tagged [doc] but the rubric quotes cannot confirm them. Not scored."
+  ]
+}

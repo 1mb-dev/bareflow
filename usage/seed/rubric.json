@@ -1,0 +1,139 @@
+{
+  "S1": {
+    "must_contain": [
+      {
+        "claim": "The flag is --unscoped",
+        "exact": true,
+        "quote": "--unscoped"
+      },
+      {
+        "claim": "It uses the package name without its scope as the alias",
+        "quote": "Use the package name without its scope as the alias"
+      },
+      {
+        "claim": "Packages given an explicit alias are not affected",
+        "quote": "Packages given an explicit alias are unaffected."
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "The flag is --no-scope (or --strip-scope)",
+        "contradicting_quote": "--unscoped"
+      },
+      {
+        "claim": "--unscoped overrides explicit aliases",
+        "contradicting_quote": "Packages given an explicit alias are unaffected."
+      }
+    ]
+  },
+  "S2": {
+    "must_contain": [
+      {
+        "claim": "Call container.renderComponent on the component",
+        "exact": true,
+        "quote": "const result = await container.renderComponent(Card);"
+      },
+      {
+        "claim": "The component is imported with the ?container query string",
+        "exact": true,
+        "quote": "import Card from \"../src/components/Card.astro?container\";"
+      },
+      {
+        "claim": "Omitting ?container gives the same output as renderToString()",
+        "quote": "Omitting the ?container query string will result in the same output as renderToString()"
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "Import the component from a special astro:container module instead of using a query string",
+        "contradicting_quote": "It takes an Astro component imported with the ?container query string as an argument."
+      },
+      {
+        "claim": "renderComponent also renders assets pulled in via @import",
+        "contradicting_quote": "The container renders only scripts and styles that are inlined."
+      }
+    ]
+  },
+  "S3": {
+    "must_contain": [
+      {
+        "claim": "Set the ignoreConstructors option with the always string option",
+        "exact": true,
+        "quote": "\"object-shorthand\": [\"error\", \"always\", { \"ignoreConstructors\": true }]"
+      },
+      {
+        "claim": "The option prevents reporting constructor functions",
+        "quote": "\"ignoreConstructors\": true can be used to prevent the rule from reporting errors for constructor functions."
+      },
+      {
+        "claim": "The option only works when the string option is always or methods",
+        "quote": "this option can only be enabled when the string option is set to \"always\" or \"methods\""
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "ignoreConstructors can be combined with the \"properties\" string option",
+        "contradicting_quote": "this option can only be enabled when the string option is set to \"always\" or \"methods\""
+      },
+      {
+        "claim": "By default the rule already ignores constructor functions",
+        "contradicting_quote": "By default, the rule treats constructors the same way as other functions."
+      }
+    ]
+  },
+  "S4": {
+    "must_contain": [
+      {
+        "claim": "Call this.addWatchFile from the plugin context, ideally within the transform hook",
+        "exact": true,
+        "quote": "Using this.addWatchFile from within the transform hook"
+      },
+      {
+        "claim": "The path may be an absolute file or directory path or relative to cwd",
+        "quote": "This can be an absolute path to a file or directory, or a path relative to the cwd option."
+      },
+      {
+        "claim": "It adds files monitored in watch mode so changes trigger rebuilds",
+        "quote": "Adds additional files to be monitored in watch mode so that changes to these files will trigger rebuilds."
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "addWatchFile only accepts file paths, not directories",
+        "contradicting_quote": "This can be an absolute path to a file or directory, or a path relative to the cwd option."
+      },
+      {
+        "claim": "Relative paths resolve against the config file directory",
+        "contradicting_quote": "a path relative to the cwd option"
+      }
+    ]
+  },
+  "S5": {
+    "must_contain": [
+      {
+        "claim": "The option is allowCompoundComponents",
+        "exact": true,
+        "quote": "Allowed when allowCompoundComponents: true"
+      },
+      {
+        "claim": "The rule is enabled as react/only-export-components in .oxlintrc.json with the react plugin",
+        "exact": true,
+        "quote": "\"react/only-export-components\": \"error\""
+      },
+      {
+        "claim": "It allows an exported object when every property is a React component",
+        "quote": "Allow an exported object when every property is a React component."
+      }
+    ],
+    "wrong": [
+      {
+        "claim": "The option is named allowCompound",
+        "contradicting_quote": "Allowed when allowCompoundComponents: true"
+      },
+      {
+        "claim": "The compound object may contain nested objects and spreads",
+        "contradicting_quote": "contain no nested objects, spreads, or accessors"
+      }
+    ]
+  }
+}
