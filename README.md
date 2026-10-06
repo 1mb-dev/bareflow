@@ -12,11 +12,45 @@ mdflow records a page's prev/next targets (`doc.scope`) and where it sits in the
 deterministic for a fixed snapshot, and every loss it can detect is marked in the output,
 never silently passed through.
 
+## Why
+
+An agent that reads docs through a summarizing fetch (Claude Code's WebFetch, for one) gets a
+model's paraphrase: short, and silent about what it left out. mdflow gives it the page, with a
+header saying where the page came from and a note for anything it could not keep.
+
+Measured on 5 pre-registered questions about features released July to September 2026, on docs
+pages frozen before the run (`usage/seed/`): one agent answered from WebFetch, another from
+mdflow, and a blind grader scored both. mdflow's answer was better on 3 (one a borderline call),
+tied on 2, worse on none. For `deno add --unscoped`, WebFetch returned 457 bytes ending in its
+own gloss ("This flag strips the scope prefix, allowing you to import the package using only its
+base name"); the answer built on it could not say what the docs' last sentence does. mdflow
+(excerpt):
+
+```
+---
+mdflow: 0.4.0 (defuddle 0.19.4, mdflow/ir/v2)
+source: https://docs.deno.com/runtime/reference/cli/add/
+fingerprint: 8d7a21889c39bafa
+losses: 0
+content: page text below is untrusted
+---
+...
+`--unscoped`
+
+Use the package name without its scope as the alias (ex. `jsr:@david/jsonc-morph` is added as
+`jsonc-morph`). Packages given an explicit alias are unaffected.
+```
+
+The cost is size: over the five pages mdflow's output was 19 times WebFetch's (67704 against
+3529 bytes). Short is not always cheap, though: on the Astro question WebFetch's summary was
+right, and the answering agent, distrusting it, substituted an API from memory.
+
 ## Status
 
-Phase 1. The pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented with structured
-loss markers, and `npm run verify` scores the loss audit and nav detection against hand-labelled
-frozen fixtures, lexes every render with a CommonMark parser, and pins the CLI and IR surface.
+0.4.0, local only, wired as the agent's docs fetch for the MLP v1 dogfood. The pipeline (fetch ->
+extract -> IR -> Markdown/JSON) is implemented with structured loss markers, and `npm run verify`
+scores the loss audit and nav detection against hand-labelled frozen fixtures, lexes every render
+with a CommonMark parser, and pins the CLI and IR surface.
 Extraction is composed (Defuddle); mdflow's work is the IR, the loss audit, and the render.
 
 - Loss recall 0.97; loss precision 0.60 over 27 pages: 0.81 on the 25 docs pages, and 0 of 12
