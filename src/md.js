@@ -52,5 +52,20 @@ export const escapeHeadingEnd = (t) => t.replace(/(^|\s)(#+)\s*$/, "$1\\$2");
 export const dest = (u) => u.replace(/\s/g, (c) => encodeURIComponent(c)).replace(/[()\\]/g, "\\$&").replace(/^</, "\\<")
   .replace(/&(?=#?[A-Za-z0-9]{1,32};)/g, "\\&");
 
-// Markdown backslash escapes removed, for comparing IR text with source text.
-export const unescape = (t) => t.replace(/\\([!-/:-@[-`{-~])/g, "$1");
+// Markdown backslash escapes removed, for comparing IR text with source text. A code span is
+// literal (a backslash in `C:\` or `\d` is page text), so it is copied as is; an escaped backtick
+// opens no span.
+export function unescape(t) {
+  let out = "";
+  for (let i = 0; i < t.length;) {
+    if (t[i] === "\\" && /[!-/:-@[-`{-~]/.test(t[i + 1] ?? "")) { out += t[i + 1]; i += 2; continue; }
+    if (t[i] === "`") {
+      const run = t.slice(i).match(/^`+/)[0];
+      const close = t.slice(i + run.length).match(new RegExp(`(?<!\`)${run}(?!\`)`));
+      const end = close ? i + run.length + close.index + run.length : i + run.length;
+      out += t.slice(i, end); i = end; continue;
+    }
+    out += t[i++];
+  }
+  return out;
+}

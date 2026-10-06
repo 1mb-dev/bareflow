@@ -797,13 +797,13 @@ for (const [id, spec] of Object.entries(inventory)) {
 }
 // The reader's /live, in process with run() over a frozen page.
 {
-  const server = createReader({ run: ({ url }) => run({ url, html: "<html><head><title>Live Page</title></head><body><main><h1>Live Page</h1><p>Body text of the page, snake_case and _emph_.</p></main></body></html>", retrievedAt: FIXED }) });
+  const server = createReader({ run: ({ url }) => run({ url, html: "<html><head><title>Live Page</title></head><body><main><h1>Live Page</h1><p>Body text of the page, snake_case and _emph_.</p><p>Glob <code>C:\\dir\\*</code> here.</p></main></body></html>", retrievedAt: FIXED }) });
   await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
   const base = `http://127.0.0.1:${server.address().port}/`;
   const [live, bad] = await Promise.all([fetch(base + "live?url=" + encodeURIComponent("https://example.com/live")).then((r) => r.text()), fetch(base + "live?url=").then((r) => r.text())]);
   server.close();
-  record("reader", "live", "/live renders a page through run(), its text without Markdown escapes; a bad URL shows the reason",
-    live.includes("<h1>Live Page</h1>") && live.includes("snake_case and _emph_.") && bad.includes("mdflow: not a URL"));
+  record("reader", "live", "/live renders a page through run(), its text without Markdown escapes, a code span as is; a bad URL shows the reason",
+    live.includes("<h1>Live Page</h1>") && live.includes("snake_case and _emph_.") && live.includes("Glob `C:\\dir\\*` here.") && bad.includes("mdflow: not a URL"));
 }
 
 // The local reader: the page with its nav, judged findings, and the source served without its scripts.
