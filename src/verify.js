@@ -700,7 +700,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   });
   await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
   const port = server.address().port;
-  const lookup = (host, opts, cb) => (opts?.all ? cb(null, [{ address: "127.0.0.1", family: 4 }]) : cb(null, "127.0.0.1", 4));
+  const lookup = (_host, opts, cb) => (opts?.all ? cb(null, [{ address: "127.0.0.1", family: 4 }]) : cb(null, "127.0.0.1", 4));
   const timed = async (u, timeout) => { const t0 = Date.now(); const r = await fetchSnapshot(u, { timeout, lookup }).then((s) => s.html, (e) => e.message); return { r, ms: Date.now() - t0 }; };
   const drip = await timed(`http://site.test:${port}/drip`, 300);
   const chainShort = await timed(`http://site.test:${port}/hop0`, 300);
