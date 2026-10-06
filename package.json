@@ -9,7 +9,8 @@
   "scripts": {
     "mdflow": "node bin/mdflow.js",
     "verify": "node src/verify.js",
-    "reader": "node bin/reader.js"
+    "reader": "node bin/reader.js",
+    "bar": "node usage/dogfood/bar.js"
   },
   "dependencies": {
     "defuddle": "0.19.4",
