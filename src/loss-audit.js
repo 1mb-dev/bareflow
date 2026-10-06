@@ -54,13 +54,15 @@ function preText(pre) {
   return codes.length && !bare ? codes.map((c) => c.textContent).join("\n") : pre.textContent;
 }
 
-// A same-page anchor whose only text is a glyph is a permalink, not heading text ("Path#").
+// A same-page anchor is a permalink, not heading text, when its only text is a glyph ("Path#") or
+// it links to the heading itself and is not all of its text (Deno: "Examples Jump to heading#").
 const PERMALINK = /^\s*[#¶§]\s*$/u;
 function headingText(h) {
-  const marks = [...h.querySelectorAll("a[href^='#']")].filter((a) => PERMALINK.test(a.textContent));
-  if (!marks.length) return h.textContent;
+  const self = h.getAttribute("id") ? `#${h.getAttribute("id")}` : null;
+  const isMark = (a) => PERMALINK.test(a.textContent) || (a.getAttribute("href") === self && a.textContent.trim() !== h.textContent.trim());
+  if (![...h.querySelectorAll("a[href^='#']")].some(isMark)) return h.textContent;
   const c = h.cloneNode(true);
-  for (const a of c.querySelectorAll("a[href^='#']")) if (PERMALINK.test(a.textContent)) a.remove();
+  for (const a of c.querySelectorAll("a[href^='#']")) if (isMark(a)) a.remove();
   return c.textContent;
 }
 

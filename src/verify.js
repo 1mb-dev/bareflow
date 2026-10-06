@@ -260,6 +260,11 @@ for (const [id, spec] of Object.entries(inventory)) {
   const ui = auditSourceLoss(`<main><h2>Path<a class="mark" href="#path">#</a></h2><h2>C#</h2><pre><input type="checkbox"><code>${long}</code><div><span>javascript</span><button>copy</button></div></pre></main>`,
     [Hd("Path"), Hd("C#"), C(long)]);
   record("loss-audit", "identity", "permalink glyph and code toolbar are not block text", ui.length === 0);
+  // A link to the heading itself is a permalink whatever its text (Deno's screen-reader label),
+  // unless it is the whole heading: then it is the heading's text, and its drop is a loss.
+  const self = auditSourceLoss(`<main><h2 id="ex">Examples <a href="#ex"><span class="sr-only">Jump to heading</span><span aria-hidden="true">#</span></a></h2><h2 id="opt"><a href="#opt">Options</a></h2></main>`, [Hd("Examples")]);
+  record("loss-audit", "identity", "a self-link is a permalink unless it is the whole heading",
+    JSON.stringify(src(self)) === JSON.stringify(["source-heading-diff"]) && self[0].text === "Options");
 
   // A first line whose leading whitespace Defuddle trimmed is restored from the source; a block
   // that differs in any other way is left for the audit.
