@@ -14,6 +14,7 @@ import { run } from "./pipeline.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
 import { decompress, fetchSnapshot, MAX_BYTES } from "./fetch.js";
+import { fetchPage } from "./fetch-policy.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
 import { renderMarkdown, NOTE_SOURCES, REASON_IS_MDFLOW } from "./render.js";
@@ -678,6 +679,29 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   const refused = await Promise.all(["http://127.0.0.1:9/", "http://[::1]:9/", "http://[fd00::1]/", "http://[::ffff:7f00:1]/"]
     .map((u) => fetchSnapshot(u).then(() => "fetched", (e) => e.message)));
   record("fetch", "ssrf", "literal private IPv4 and IPv6 refused as blocked addresses", refused.every((m) => m.startsWith("blocked address for ")));
+}
+
+// The fetch policy over a scripted transport (the edge Function's transport gets the same):
+// redirects resolve relative and are re-checked each hop, a private literal is refused before
+// any request, the hop budget holds, a name that looks like a range is still a name, and the
+// text keeps a BOM.
+{
+  const asked = [];
+  const script = (routes) => async (u) => { asked.push(u); return routes[u] ?? { status: 404 }; };
+  const page = (text) => ({ status: 200, contentType: "text/html", body: new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(text)]) });
+  const outcome = (url, routes) => fetchPage(url, script(routes)).then((s) => s, (e) => e.message);
+  const ok = await outcome("https://a.example/x", { "https://a.example/x": { status: 301, location: "/y" }, "https://a.example/y": page("<p>Y</p>") });
+  const hops = Object.fromEntries(Array.from({ length: 7 }, (_, i) => [`https://a.example/${i}`, { status: 302, location: `/${i + 1}` }]));
+  const [tooMany, priv, scheme, missing] = await Promise.all([
+    outcome("https://a.example/0", hops),
+    outcome("https://a.example/p", { "https://a.example/p": { status: 307, location: "http://127.0.0.1/admin" } }),
+    outcome("https://a.example/f", { "https://a.example/f": { status: 302, location: "ftp://a.example/" } }),
+    outcome("https://10.example.com/", {}),
+  ]);
+  record("fetch", "policy", "relative redirect, hop budget, private literal before any request, scheme, a range-like name, BOM kept",
+    ok.finalUrl === "https://a.example/y" && ok.url === "https://a.example/x" && ok.html === "\ufeff<p>Y</p>" && ok.fingerprint === sha256(page("<p>Y</p>").body).slice(0, 16) &&
+    tooMany === "more than 5 redirects from https://a.example/6" && priv === "blocked address for 127.0.0.1: mdflow fetches public addresses only" && !asked.includes("http://127.0.0.1/admin") &&
+    scheme.startsWith("unsupported protocol ftp:") && missing.startsWith("HTTP 404 from https://10.example.com/") && asked.includes("https://10.example.com/"));
 }
 
 // Fetch decompression: a small compressed body must not inflate past the cap, and a bomb must
