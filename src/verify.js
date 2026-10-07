@@ -27,6 +27,7 @@ import { scoreLoss, scoreNav } from "./truth.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const inventory = JSON.parse(await readFile(join(ROOT, "test/inventory.json"), "utf8"));
+const realPages = JSON.parse(await readFile(join(ROOT, "test/pages.json"), "utf8"));
 const FIXED = "2026-01-01T00:00:00.000Z";
 
 const blocks = (doc) => [...walk(doc)].map(({ block }) => block);
@@ -608,8 +609,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   const costOk = ({ md, plain, lossText }) => md / plain <= 1.5 || (md / plain < 1.95 && (md - lossText) / plain <= 1.5);
   const bad = [];
   const rows = [];
-  const pages = JSON.parse(await readFile(join(ROOT, "test/pages.json"), "utf8"));
-  for (const [name, p] of Object.entries(pages)) {
+  for (const [name, p] of Object.entries(realPages)) {
     const html = await readFile(join(ROOT, "test/pages", name), "utf8");
     if (createHash("sha256").update(html).digest("hex") !== p.sha256) { bad.push(`${name} (sha256)`); continue; }
     const { doc, markdown } = await run({ url: p.finalUrl, html, retrievedAt: FIXED });
@@ -619,22 +619,28 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
     const lossText = doc.sections.flatMap((s) => s.losses).reduce((n, l) => n + bytes(l.text ?? ""), 0);
     rows.push({ id: name, md: bytes(markdown), plain: bytes(plainText(html)), lossText });
   }
-  record("render", "real pages", `header, well-formed, every loss noted on ${Object.keys(pages).length} real pages${bad.length ? `: ${bad.join(", ")}` : ""}`, !bad.length);
+  record("render", "real pages", `header, well-formed, every loss noted on ${Object.keys(realPages).length} real pages${bad.length ? `: ${bad.join(", ")}` : ""}`, !bad.length);
 
-  const tight = rows.reduce((a, r) => (r.md / r.plain > a.md / a.plain ? r : a));
-  record("render", "cost", `R <= 1.5 (or loss text) on ${rows.length} pages; max ${tight.id} ${(tight.md / tight.plain).toFixed(2)}${rows.filter((r) => !costOk(r)).map((r) => ` FAIL ${r.id}`).join("")}`,
+  const tight = rows.reduce((a, r) => (r.md / r.plain > a.md / a.plain ? r : a), rows[0]);
+  record("render", "cost", `R <= 1.5 (or loss text) on ${rows.length} pages; ${tight ? `max ${tight.id} ${(tight.md / tight.plain).toFixed(2)}` : "none"}${rows.filter((r) => !costOk(r)).map((r) => ` FAIL ${r.id}`).join("")}`,
     rows.length === 12 && rows.every(costOk));
   record("render", "cost", "the bar: 1.5 passes, over fails, the band passes only on loss text",
     costOk({ md: 1500, plain: 1000, lossText: 0 }) && !costOk({ md: 1501, plain: 1000, lossText: 0 }) &&
     costOk({ md: 1800, plain: 1000, lossText: 300 }) && !costOk({ md: 1800, plain: 1000, lossText: 299 }) && !costOk({ md: 1950, plain: 1000, lossText: 1950 }));
 }
 
-// Every frozen third-party page is named in NOTICE, with its source and the takedown route.
+// Every frozen page is in its manifest (inventory.json, pages.json), so the gate runs it, and
+// NOTICE names exactly the manifests' pages, each with its source URL: a page missing from
+// either, a wrong URL, or a stale NOTICE entry fails.
 {
-  const notice = new Set((await readFile(join(ROOT, "NOTICE"), "utf8")).split("\n"));
-  const unnamed = [];
-  for (const dir of ["test/fixtures", "test/pages"]) for (const f of await readdir(join(ROOT, dir))) if (!notice.has(`${dir}/${f}`)) unnamed.push(`${dir}/${f}`);
-  record("notice", "pages", `every frozen page is named in NOTICE${unnamed.length ? `: missing ${unnamed.join(", ")}` : ""}`, !unnamed.length);
+  const want = new Map([...Object.values(inventory).map((s) => [`test/fixtures/${s.fixture}`, s.url]), ...Object.entries(realPages).map(([f, p]) => [`test/pages/${f}`, p.url])]);
+  const lines = (await readFile(join(ROOT, "NOTICE"), "utf8")).split(/\r?\n/);
+  const named = new Map(lines.flatMap((l, i) => (l.startsWith("test/") ? [[l, lines[i + 1]?.trim()]] : [])));
+  const bad = [];
+  for (const dir of ["test/fixtures", "test/pages"]) for (const f of await readdir(join(ROOT, dir))) if (f.endsWith(".html") && !want.has(`${dir}/${f}`)) bad.push(`${dir}/${f} not in its manifest`);
+  for (const [f, u] of want) if (named.get(f) !== u) bad.push(`${f} not in NOTICE with ${u}`);
+  for (const f of named.keys()) if (!want.has(f)) bad.push(`NOTICE names ${f}, no such page: remove it`);
+  record("notice", "pages", `every frozen page is in its manifest and in NOTICE with its URL${bad.length ? `: ${bad.join("; ")}` : ""}`, !bad.length);
 }
 
 // SSRF denylist: the shared policy blocks the full non-public range and rejects nothing public.
@@ -800,9 +806,10 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
 }
 // Escapes removed from IR text give back the page's text; a code span is copied as is.
 {
-  const [p, g] = contentToBlocks("<p>Body text of the page, snake_case and _emph_.</p><p>Glob <code>C:\\dir\\*</code> here.</p>");
+  const { doc } = await run({ url: "https://example.com/u", retrievedAt: FIXED, html: "<html><head><title>U</title></head><body><main><h1>U</h1><p>Body text of the page, snake_case and _emph_.</p><p>Glob <code>C:\\dir\\*</code> here.</p></main></body></html>" });
+  const [p, g] = blocks(doc).filter((b) => b.type === "paragraph");
   record("md", "unescape", "IR text without Markdown escapes is the page's text; a code span as is",
-    unescape(p.text) === "Body text of the page, snake_case and _emph_." && unescape(g.text) === "Glob `C:\\dir\\*` here.");
+    unescape(p.text) === "Body text of the page, snake_case and _emph_." && unescape(g.text) === "Glob `C:\\dir\\*` here." && p.text !== unescape(p.text));
 }
 
 const failed = results.filter((r) => !r.ok);

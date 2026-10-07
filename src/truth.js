@@ -211,14 +211,9 @@ export function scoreLoss(html, doc, spec) {
   const lost = items.filter((it) => it.label === "lost").length;
   return {
     errors,
-    items,
-    fps,
-    misses,
     counts: { universe: items.length, lost, tp, fp: fps.length, miss: misses.length, demoted },
     structure: structure.length,
     flat: { labelled: !!spec.flattened, emitted: flatEmitted },
-    precision: tp + fps.length ? tp / (tp + fps.length) : null,
-    recall: lost ? tp / lost : null,
   };
 }
 
