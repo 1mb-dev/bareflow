@@ -617,7 +617,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
     if (why.length) bad.push(`${name} (${why.join("; ")})`);
     if (!p.cost) continue;
     const lossText = doc.sections.flatMap((s) => s.losses).reduce((n, l) => n + bytes(l.text ?? ""), 0);
-    rows.push({ id: name, md: bytes(markdown), plain:bytes(plainText(html)), lossText });
+    rows.push({ id: name, md: bytes(markdown), plain: bytes(plainText(html)), lossText });
   }
   record("render", "real pages", `header, well-formed, every loss noted on ${Object.keys(pages).length} real pages${bad.length ? `: ${bad.join(", ")}` : ""}`, !bad.length);
 
@@ -777,8 +777,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
 
 // The CLI, in process through main() with run() over a frozen page: a usage error exits 2 and
 // never reaches run(); a parsed call reaches it with the URL; Markdown by default, the IR with
-// --json, exit 0. The shim (bin/mdflow.js) is spawned
-// once: usage error, and a refused fetch.
+// --json, exit 0. The shim (bin/mdflow.js) is spawned once: usage error, and a refused fetch.
 {
   const page = "https://example.com/docs/c";
   const frozenRun = ({ url }) => run({ url, html: "<html><head><title>C</title></head><body><main><h1>C</h1><p>Body text of the page.</p></main></body></html>", retrievedAt: FIXED });
