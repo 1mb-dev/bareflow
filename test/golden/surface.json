@@ -3,9 +3,7 @@
   "usage": "usage: mdflow <url> [--json]",
   "usageExit": 2,
   "errorExit": 1,
-  "env": [
-   "MDFLOW_LOG"
-  ]
+  "env": []
  },
  "schema": "mdflow/ir/v2",
  "document": [
@@ -89,22 +87,5 @@
   "source-heading-demoted",
   "source-heading-diff",
   "source-table-diff"
- ],
- "uselog": {
-  "use": [
-   "day",
-   "url",
-   "host",
-   "format",
-   "bytes",
-   "losses",
-   "flattened"
-  ],
-  "error": [
-   "day",
-   "url",
-   "host",
-   "error"
-  ]
- }
+ ]
 }

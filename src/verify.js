@@ -5,9 +5,8 @@
 // failure.
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -20,7 +19,6 @@ import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
 import { renderMarkdown, NOTE_SOURCES, REASON_IS_MDFLOW } from "./render.js";
 import { marked } from "marked";
 import { parseHTML } from "linkedom";
-import { useEntry, USE_KEYS, ERROR_KEYS } from "./uselog.js";
 import { main, USAGE } from "./cli.js";
 import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
@@ -28,8 +26,6 @@ import { parseHtml } from "./html.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-// The CLI runs verify spawns must not write to the developer's dogfood log.
-delete process.env.MDFLOW_LOG;
 const inventory = JSON.parse(await readFile(join(ROOT, "test/inventory.json"), "utf8"));
 const FIXED = "2026-01-01T00:00:00.000Z";
 
@@ -741,21 +737,6 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   record("fetch", "cap", "an endless body is read to the byte cap and the connection closed, inside the budget", endless === MAX_BYTES);
 }
 
-// Use log: one JSON line per CLI use when MDFLOW_LOG is set, of fixed keys.
-{
-  const { doc, markdown } = await run({ url: "https://example.com/u", html: "<html><body><main><h1>U</h1><p>x</p></main></body></html>", retrievedAt: FIXED });
-  const ok = useEntry({ url: "https://example.com/u", format: "markdown", output: markdown, doc, at: new Date(FIXED) });
-  const err = useEntry({ url: "http://127.0.0.1/", error: new Error("blocked"), at: new Date(FIXED) });
-  const dir = await mkdtemp(join(tmpdir(), "mdflow-verify-"));
-  const logged = join(dir, "use.jsonl");
-  await new Promise((ok) => spawn(process.execPath, [join(ROOT, "bin/mdflow.js"), "http://127.0.0.1/"], { stdio: "ignore", env: { ...process.env, MDFLOW_LOG: logged } }).on("exit", ok));
-  const lines = (await readFile(logged, "utf8")).trim().split("\n").map((l) => JSON.parse(l));
-  record("uselog", "schema", "fixed keys for a use and an error; the CLI appends one error line when set",
-    JSON.stringify(Object.keys(ok)) === JSON.stringify(USE_KEYS) && ok.day === "2026-01-01" && ok.host === "example.com" && ok.bytes === Buffer.byteLength(markdown) &&
-    JSON.stringify(Object.keys(err)) === JSON.stringify(ERROR_KEYS) && lines.length === 1 && JSON.stringify(Object.keys(lines[0])) === JSON.stringify(ERROR_KEYS) && lines[0].error.startsWith("blocked address"));
-  await rm(dir, { recursive: true });
-}
-
 // The frozen surface (MLP v1): CLI usage and exit codes, the IR's shape, the header's fields, and
 // the loss notes' sources, against test/golden/surface.json. A change fails until blessed:
 // `node src/verify.js --bless-surface` rewrites the golden file, for a change that is meant.
@@ -764,7 +745,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   // 'close', not 'exit': stderr may still be unread when the process exits.
   const cliRun = (args) => new Promise((ok) => { let e = ""; const c = spawn(process.execPath, [join(ROOT, "bin/mdflow.js"), ...args]); c.stderr.on("data", (x) => (e += x)); c.on("close", (code) => ok({ code, line: e.trim() })); });
   const [usage, failed] = await Promise.all([cliRun([]), cliRun(["http://127.0.0.1/"])]);
-  const env = [...new Set((await readFile(join(ROOT, "src/cli.js"), "utf8")).match(/\benv\.[A-Z_]+/g).map((m) => m.slice(4)))].sort();
+  const env = [...new Set(((await readFile(join(ROOT, "src/cli.js"), "utf8")).match(/\benv\.[A-Z_]+/g) ?? []).map((m) => m.slice(4)))].sort();
   const crumbed = await run({ url: "https://example.com/docs/a/", retrievedAt: FIXED, html: '<html><body><nav aria-label="breadcrumb"><a href="/docs/">Docs</a></nav><main><h1>A</h1><p>x</p></main></body></html>' });
   // Every header field the render can emit, from a document that has them all.
   const full = { ...fixtureDocs.get("python-tutorial-intro"), source: { url: "https://example.com/a", finalUrl: "https://example.com/b", retrievedAt: FIXED, fingerprint: "f" },
@@ -778,7 +759,6 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
     section: keys(sec), loss: keys(loss), blockTypes: [...BLOCK_TYPES].sort(),
     header: fullMd.slice(1, fullMd.indexOf("---", 1)).map((l) => l.split(":")[0]),
     noteSources: [...NOTE_SOURCES].sort(),
-    uselog: { use: USE_KEYS, error: ERROR_KEYS },
   };
   const goldenPath = join(ROOT, "test/golden/surface.json");
   const text = JSON.stringify(current, null, 1) + "\n";
@@ -789,29 +769,23 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
 
 // The CLI, in process through main() with run() over a frozen page: a usage error exits 2 and
 // never reaches run(); a parsed call reaches it with the URL; Markdown by default, the IR with
-// --json, exit 0, and one use line when MDFLOW_LOG is set. The shim (bin/mdflow.js) is spawned
+// --json, exit 0. The shim (bin/mdflow.js) is spawned
 // once: usage error, and a refused fetch.
 {
   const page = "https://example.com/docs/c";
   const frozenRun = ({ url }) => run({ url, html: "<html><head><title>C</title></head><body><main><h1>C</h1><p>Body text of the page.</p></main></body></html>", retrievedAt: FIXED });
-  const call = async (args, env = {}) => {
+  const call = async (args) => {
     const out = [], err = [], urls = [];
-    const code = await main(args, { run: (o) => { urls.push(o.url); return frozenRun(o); }, env, out: (x) => out.push(x), err: (x) => err.push(x) });
+    const code = await main(args, { run: (o) => { urls.push(o.url); return frozenRun(o); }, out: (x) => out.push(x), err: (x) => err.push(x) });
     return { code, out: out.join(""), err: err.join(""), urls };
   };
   const usage = await Promise.all([[page, "--siblings=full"], [page, "--siblings", "full"], [page, page], [page, "--jsn"], []].map((a) => call(a)));
   record("cli", "args", "--siblings, a second URL, an unknown flag, or no URL: exit 2 with usage, run() never called",
     usage.every((r) => r.code === 2 && r.err === USAGE + "\n" && !r.urls.length && !r.out));
-  const dir = await mkdtemp(join(tmpdir(), "mdflow-cli-"));
-  const log = join(dir, "use.jsonl");
-  const [md, js, js2] = [await call([page], { MDFLOW_LOG: log }), await call([page, "--json"]), await call(["--json", page])];
-  const line = await readFile(log, "utf8").then((t) => JSON.parse(t.trim()), () => ({}));
-  await rm(dir, { recursive: true });
+  const [md, js, js2] = [await call([page]), await call([page, "--json"]), await call(["--json", page])];
   record("cli", "success", "Markdown by default, the IR with --json either side, exit 0, run() called with the URL",
     md.code === 0 && md.out.startsWith("---\nmdflow: ") && headerOk(md.out) && js.code === 0 && (() => { try { return JSON.parse(js.out).schema === SCHEMA; } catch { return false; } })() &&
     js2.out === js.out && JSON.stringify(md.urls) === JSON.stringify([page]) && !md.err);
-  record("uselog", "success", "a successful CLI run appends one use line of fixed keys",
-    JSON.stringify(Object.keys(line)) === JSON.stringify(USE_KEYS) && line.format === "markdown" && line.bytes === Buffer.byteLength(md.out.slice(0, -1)) && line.host === "example.com");
   const shim = (args) => new Promise((ok) => { let e = ""; const c = spawn(process.execPath, [join(ROOT, "bin/mdflow.js"), ...args]); c.stderr.on("data", (x) => (e += x)); c.on("close", (code) => ok({ code, e })); });
   const [none, refused] = await Promise.all([shim([]), shim(["http://127.0.0.1/"])]);
   record("cli", "shim", "bin/mdflow.js: usage exits 2, a refused fetch exits 1 with the reason",
