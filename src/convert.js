@@ -1,5 +1,6 @@
 // The conversion: one page's HTML -> IR -> {markdown, json}, no fetch. Deterministic: same html,
-// url, retrievedAt, and fingerprint, same version -> same document.
+// url, retrievedAt, fingerprint, and input, same version -> same document. The fingerprint is the
+// fetched bytes' when a fetch made them, else the HTML's.
 import { extract, EXTRACTOR } from "./extract.js";
 import { contentToBlocks } from "./to-ir.js";
 import { auditSourceLoss, restoreCodeLayout, sourceTitle } from "./loss-audit.js";
@@ -8,6 +9,7 @@ import { validate } from "./ir.js";
 import { renderMarkdown } from "./render.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
 import { unescape } from "./md.js";
+import { sha256 } from "./sha256.js";
 
 export function checkUrl(url) {
   try { new URL(url); } catch { throw new Error(`not a URL: ${url}; give a full http(s) URL`); }
@@ -35,7 +37,7 @@ function promoteTitle(title, html, blocks) {
   return { title: title || sourceTitle(html), blocks };
 }
 
-export async function convert({ url, finalUrl = url, html, retrievedAt, fingerprint }) {
+export async function convert({ url, finalUrl = url, html, retrievedAt, fingerprint = sha256(html).slice(0, 16), input }) {
   checkUrl(url);
   const ex = await extract(html, finalUrl);
   const { title, blocks, losses } = separateLosses(contentToBlocks(ex.contentHtml), html, ex.title);
@@ -43,7 +45,7 @@ export async function convert({ url, finalUrl = url, html, retrievedAt, fingerpr
   // Nav targets are recorded, never fetched: one run reads one page.
   const nav = extractNav(html, finalUrl);
 
-  const source = { url, finalUrl, retrievedAt, fingerprint };
+  const source = { url, finalUrl, retrievedAt, fingerprint, input };
   const generator = { name: "mdflow", version: VERSION, extractor: EXTRACTOR, extractorVersion: EXTRACTOR_VERSION };
   const doc = compose({ url: finalUrl, nav, title, blocks, losses, source, generator });
   validate(doc);

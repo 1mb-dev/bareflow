@@ -79,12 +79,12 @@ function oracle(doc, md) {
 }
 // The header: front matter of mdflow's fields only, each once, URL values as the parser
 // serializes them.
-const HEADER_KEYS = ["warning", "mdflow", "source", "final", "retrieved", "fingerprint", "prev", "next", "up", "losses", "content"];
+const HEADER_KEYS = ["warning", "mdflow", "source", "final", "retrieved", "fingerprint", "input", "prev", "next", "up", "losses", "content"];
 const URL_KEYS = new Set(["source", "final", "prev", "next", "up"]);
 // Header values a consumer parses keep their format.
 const VALUE_FORMAT = {
   mdflow: /^\d+\.\d+\.\d+ \(\S+ \S+, mdflow\/ir\/v\d+\)$/, retrieved: /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/,
-  fingerprint: /^[0-9a-f]+$/, losses: /^\d+$/, content: /^page text below is untrusted$/,
+  fingerprint: /^[0-9a-f]+$/, input: /^(fetch|edge|paste)$/, losses: /^\d+$/, content: /^page text below is untrusted$/,
 };
 const headerOk = (md) => {
   const lines = md.split("\n");
@@ -330,7 +330,7 @@ for (const [id, spec] of Object.entries(inventory)) {
 
 
   // Blocks are separated by a blank line, so paragraphs and a list stay distinct in Markdown.
-  const mk = (blocks, losses = []) => ({ schema: SCHEMA, id: "x", title: "T", source: { url: "https://example.com/t", finalUrl: "https://example.com/t", retrievedAt: FIXED, fingerprint: "f" },
+  const mk = (blocks, losses = []) => ({ schema: SCHEMA, id: "x", title: "T", source: { url: "https://example.com/t", finalUrl: "https://example.com/t", retrievedAt: FIXED, fingerprint: "f", input: "fetch" },
     generator: { name: "mdflow", version: "0.0.0", extractor: "defuddle", extractorVersion: "0.19.4" }, scope: { kind: "page" }, breadcrumbs: [],
     sections: [{ id: "s", title: "T", blocks, losses, children: [] }] });
   const body = (md) => md.slice(md.indexOf("\n---\n", 3) + 5).replace(/^\n+/, "");
@@ -571,6 +571,7 @@ for (const [id, spec] of Object.entries(inventory)) {
     const good = await run({ url, fetch: pagesFetch({ [url]: page("") }), retrievedAt: FIXED });
     const rejects = (mutate) => { const d = structuredClone(good.doc); mutate(d); try { validate(d); return false; } catch { return true; } };
     record("ir", "validate", "duplicate section ids rejected", rejects((d) => d.sections[0].children.push(structuredClone(d.sections[0]))));
+    record("ir", "validate", "source.input missing or not fetch | edge | paste rejected", rejects((d) => delete d.source.input) && rejects((d) => (d.source.input = "dom")) && !rejects(() => {}));
   }
 
   // 9: direct text nodes in a transparent container must not be dropped.
@@ -806,7 +807,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   const env = [...new Set(((await readFile(join(ROOT, "src/cli.js"), "utf8")).match(/\benv\.[A-Z_]+/g) ?? []).map((m) => m.slice(4)))].sort();
   const crumbed = await run({ url: "https://example.com/docs/a/", retrievedAt: FIXED, html: '<html><body><nav aria-label="breadcrumb"><a href="/docs/">Docs</a></nav><main><h1>A</h1><p>x</p></main></body></html>' });
   // Every header field the render can emit, from a document that has them all.
-  const full = { ...fixtureDocs.get("python-tutorial-intro"), source: { url: "https://example.com/a", finalUrl: "https://example.com/b", retrievedAt: FIXED, fingerprint: "f" },
+  const full = { ...fixtureDocs.get("python-tutorial-intro"), source: { url: "https://example.com/a", finalUrl: "https://example.com/b", retrievedAt: FIXED, fingerprint: "f", input: "paste" },
     breadcrumbs: [{ title: "Up", url: "https://example.com/" }], sections: [{ ...fixtureDocs.get("python-tutorial-intro").sections[0], losses: [{ type: "loss", reason: "flat", source: "extract-flattened" }] }] };
   const fullMd = renderMarkdown(full).split("\n");
   const d = fixtureDocs.get("python-tutorial-intro"), sec = d.sections[0], loss = fixtureDocs.get("tailwind-install").sections[0].losses.find((l) => l.text != null);

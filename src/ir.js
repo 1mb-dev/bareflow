@@ -8,6 +8,10 @@ import { sha256 } from "./sha256.js";
 
 export const SCHEMA = "mdflow/ir/v2";
 
+// How the HTML reached the conversion: fetched by the CLI, fetched by the edge Function, or
+// pasted by a person (its URL is then their assertion).
+export const INPUTS = new Set(["fetch", "edge", "paste"]);
+
 export const BLOCK_TYPES = new Set([
   "heading", "paragraph", "code", "list", "table", "blockquote", "image",
 ]);
@@ -64,6 +68,7 @@ export function validate(doc) {
   if (typeof doc.title !== "string") fail("title", "missing");
   if (!doc.source || typeof doc.source.url !== "string" || typeof doc.source.fingerprint !== "string" || typeof doc.source.retrievedAt !== "string")
     fail("source", "url, fingerprint, and retrievedAt required");
+  if (!INPUTS.has(doc.source.input)) fail("source", `input is one of ${[...INPUTS].join(", ")}`);
   if (!doc.generator || typeof doc.generator.version !== "string" || typeof doc.generator.extractor !== "string" || typeof doc.generator.extractorVersion !== "string")
     fail("generator", "version, extractor, and extractorVersion required");
   if (!doc.scope || doc.scope.kind !== "page") fail("scope.kind", "page");

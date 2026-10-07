@@ -12,7 +12,7 @@ text.
 | `schema` | `"mdflow/ir/v2"` | Bumped on any breaking change. |
 | `id` | string | sha256 of the final URL, first 16 hex. |
 | `title` | string | Page title, plain text, one line. |
-| `source` | `{ url, finalUrl, retrievedAt, fingerprint }` | `url` as asked, `finalUrl` after redirects, ISO time, sha256 of the fetched bytes (first 16 hex). |
+| `source` | `{ url, finalUrl, retrievedAt, fingerprint, input }` | `url` as asked, `finalUrl` after redirects, ISO time, sha256 of the fetched bytes or, with no fetch, of the HTML (first 16 hex). `input`: `"fetch"` (the CLI fetched it), `"edge"` (the web Function fetched it), or `"paste"` (a person gave the HTML; `url` is their assertion). |
 | `generator` | `{ name, version, extractor, extractorVersion }` | mdflow and Defuddle versions. |
 | `scope` | `{ kind: "page", prev?, next? }` | One page. `prev` / `next`: `{ url, via: "rel" \| "pager" }`, the page's own nav, same-origin, never fetched. |
 | `breadcrumbs` | `[{ title, url }]` | Where the page sits, same-origin; else `rel=up`. |
@@ -77,7 +77,7 @@ dropped under a surviving heading) is not detected.
 ## Markdown render
 
 Front matter of mdflow's own fields, in this order when present: `warning` (flattened page),
-`mdflow`, `source`, `final`, `retrieved`, `fingerprint`, `prev`, `next`, `up`, `losses`,
+`mdflow`, `source`, `final`, `retrieved`, `fingerprint`, `input`, `prev`, `next`, `up`, `losses`,
 `content`. URL values are parser-serialized http(s); `final`, `prev`, `next`, and `up` are chosen
 by the server or the page, and one holding a `'` is left out.
 

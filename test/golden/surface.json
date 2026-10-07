@@ -19,6 +19,7 @@
  "source": [
   "finalUrl",
   "fingerprint",
+  "input",
   "retrievedAt",
   "url"
  ],
@@ -71,6 +72,7 @@
   "final",
   "retrieved",
   "fingerprint",
+  "input",
   "prev",
   "next",
   "up",

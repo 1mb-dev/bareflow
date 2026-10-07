@@ -51,7 +51,7 @@ function header(doc, page, losses) {
   const from = url(src.url), final = chosen(src.finalUrl ?? src.url);
   if (from) lines.push(`source: ${from}`);
   if (final && final !== from) lines.push(`final: ${final}`);
-  lines.push(`retrieved: ${src.retrievedAt}`, `fingerprint: ${src.fingerprint}`);
+  lines.push(`retrieved: ${src.retrievedAt}`, `fingerprint: ${src.fingerprint}`, `input: ${src.input}`);
   for (const r of ["prev", "next"]) { const u = doc.scope[r] && chosen(doc.scope[r].url); if (u) lines.push(`${r}: ${u}`); }
   const up = doc.breadcrumbs.map((c) => chosen(c.url)).filter(Boolean);
   if (up.length) lines.push(`up: ${up.join(" ")}`);
