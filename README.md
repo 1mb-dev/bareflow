@@ -92,10 +92,11 @@ a page cannot know its own fingerprint, so a lookalike heading in page text has 
 ## Install and run
 
 ```
-npm install && npm link           # puts `mdflow` on PATH (tested on Node 26)
+npm install && npm link           # puts `mdflow` on PATH (tested on Node 22 and 26)
 mdflow <url>                      # Markdown: header, page, loss notes
 mdflow <url> --json               # the typed IR (docs/ir.md)
 npm run verify                    # truth gate: loss + nav precision/recall per fixture
+npm run bundle                    # dist/mdflow.js: convert() for the browser, as verify checks it
 ```
 
 Exit 0 with the document on stdout; 2 on a usage error; 1 when the fetch or extraction fails,
