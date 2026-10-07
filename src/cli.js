@@ -1,5 +1,5 @@
-// The mdflow CLI as a function: bin/mdflow.js passes process args and streams; verify
-// passes its own run() over frozen pages. Returns the exit code: 0 document on out, 2 usage
+// The mdflow CLI as a function: bin/mdflow.js passes process args; verify passes its own run()
+// over frozen pages and its own streams. Returns the exit code: 0 document on out, 2 usage
 // error, 1 fetch or extraction failure with the reason on err.
 import { run as pipelineRun } from "./pipeline.js";
 

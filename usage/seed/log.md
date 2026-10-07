@@ -49,4 +49,4 @@ Correction, 2026-10-04 (review ritual): the size ratio read "about 1/15"; the by
 P2 the Markdown render, P3 this seed, P4 hardening (huddle record, kept outside the repo).
 
 Removed in 0.5.0: frozen pages and M inputs (third-party page text), selection; W inputs,
-answers, grades, scores, rubric and prereg stay. The full record is at commit 2ffc9d4.
+answers, grades, scores, rubric and prereg stay. The full record is at commit d3917fd.
