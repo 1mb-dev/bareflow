@@ -18,17 +18,23 @@ export const REDIRECT = new Set([301, 302, 303, 307, 308]);
 export const noAnswer = (url, budget) => new Error(`no answer from ${url} within ${budget} ms (redirects included); retry, or open it in a browser`);
 export const blocked = (host) => new Error(`blocked address for ${host}: mdflow fetches public addresses only`);
 
+// The one URL check: parsed, and http(s). Both the fetch and a pasted page's asserted URL go
+// through it.
+export function httpUrl(url) {
+  let u;
+  try { u = new URL(url); } catch { throw new Error(`not a URL: ${url}; give a full http(s) URL`); }
+  if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error(`unsupported protocol ${u.protocol} in ${url}; give an http(s) URL`);
+  return u;
+}
+
 // URL keeps an IPv6 literal's brackets ("[::1]") and normalizes every IPv4 spelling (0x7f.1,
 // 2130706433) to dotted form, so a literal is a dotted quad or contains ":". A name is never
 // matched against the ranges: "10.example.com" is a name.
 export function checkTarget(url) {
-  let u;
-  try { u = new URL(url); } catch { throw new Error(`not a URL: ${url}; give a full http(s) URL`); }
-  if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error(`unsupported protocol ${u.protocol} in ${url}; give an http(s) URL`);
-  const host = u.hostname.replace(/^\[|\]$/g, "");
+  const host = httpUrl(url).hostname.replace(/^\[|\]$/g, "");
   const literal = /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":");
   if (literal && isPrivateIp(host)) throw blocked(host);
-  return { u, host };
+  return { host };
 }
 
 // transport(url, { host, headers, deadline, budget }) resolves one response:

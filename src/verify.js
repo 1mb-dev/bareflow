@@ -579,8 +579,10 @@ for (const [id, spec] of Object.entries(inventory)) {
     const good = await run({ url, fetch: pagesFetch({ [url]: page("") }), retrievedAt: FIXED });
     const rejects = (mutate) => { const d = structuredClone(good.doc); mutate(d); try { validate(d); return false; } catch { return true; } };
     record("ir", "validate", "duplicate section ids rejected", rejects((d) => d.sections[0].children.push(structuredClone(d.sections[0]))));
-    const noHtml = await convert({ url, retrievedAt: FIXED, input: "paste" }).then(() => "converted", (e) => e.message);
-    record("convert", "input", "no HTML is refused by name", noHtml === "no page HTML: give the page's HTML as a string");
+    const refused = (o) => convert({ url, html: "<p>x</p>", retrievedAt: FIXED, input: "paste", ...o }).then(() => "converted", (e) => e.message);
+    const why = await Promise.all([{ html: undefined }, { retrievedAt: undefined }, { input: "dom" }, { url: "file:///etc/passwd" }].map(refused));
+    record("convert", "input", "no HTML, no retrievedAt, an unknown input, or a non-http(s) URL is refused by name",
+      JSON.stringify(why) === JSON.stringify(["no page HTML: give the page's HTML as a string", "no retrievedAt: give the retrieval time as an ISO string", "input is one of fetch, edge, paste", "unsupported protocol file: in file:///etc/passwd; give an http(s) URL"]));
     record("ir", "validate", "source.input missing or not fetch | edge | paste rejected", rejects((d) => delete d.source.input) && rejects((d) => (d.source.input = "dom")) && !rejects(() => {}));
   }
 
@@ -676,7 +678,9 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
 }
 
 // The browser bundle (scripts/bundle.js) in a context with web globals only, no process, Buffer,
-// or require: the same Markdown and JSON as the CLI on every fixture and the adversarial corpus.
+// or require: the same Markdown and JSON as the CLI on every fixture and the adversarial corpus,
+// and as convert() on the edge and paste call shapes. The context stands in for the Web Worker
+// the web app runs the bundle in: no window or document (temml branches on document).
 {
   const web = { URL, URLSearchParams, TextEncoder, TextDecoder, console, setTimeout, clearTimeout, queueMicrotask, structuredClone, atob, btoa };
   const off = [];
@@ -686,7 +690,16 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
     const b = await api.convert({ url: r.url, html: r.html, retrievedAt: FIXED, input: "fetch" }).catch((e) => ({ error: String(e?.message || e) }));
     if (b.error || b.markdown !== r.markdown || JSON.stringify(b.doc) !== JSON.stringify(r.doc)) off.push(`${r.name}${b.error ? ` (${b.error.slice(0, 80)})` : ""}`);
   }
-  record("bundle", "parity", `browser bundle, web globals only: Markdown and JSON equal to the CLI on ${cliRuns.length} pages${off.length ? `; differ: ${off.join(", ")}` : ""}`, !!api && !off.length);
+  // Edge: a redirect moved the page and the Function hashed the bytes. Paste: no fetch at all.
+  const shapes = cliRuns.slice(0, 3).flatMap((r) => [
+    { name: `${r.name} as edge`, url: r.url, finalUrl: `${r.url}${r.url.includes("?") ? "&" : "?"}moved`, html: r.html, retrievedAt: FIXED, fingerprint: "0123456789abcdef", input: "edge" },
+    { name: `${r.name} as paste`, url: r.url, html: r.html, retrievedAt: FIXED, input: "paste" },
+  ]);
+  for (const { name, ...args } of api ? shapes : []) {
+    const [a, b] = await Promise.all([convert(args), api.convert(args)].map((p) => p.catch((e) => ({ error: String(e?.message || e) }))));
+    if (a.error || b.error || a.markdown !== b.markdown || JSON.stringify(a.doc) !== JSON.stringify(b.doc)) off.push(`${name}${a.error || b.error ? ` (${(a.error || b.error).slice(0, 80)})` : ""}`);
+  }
+  record("bundle", "parity", `browser bundle, web globals only: Markdown and JSON equal to the CLI on ${cliRuns.length} pages and ${shapes.length} edge/paste calls${off.length ? `; differ: ${off.join(", ")}` : ""}`, !!api && !off.length);
 }
 
 // SSRF denylist: the shared policy blocks the full non-public range and rejects nothing public.

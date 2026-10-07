@@ -6,15 +6,12 @@ import { extract, EXTRACTOR } from "./extract.js";
 import { contentToBlocks } from "./to-ir.js";
 import { auditSourceLoss, restoreCodeLayout, sourceTitle } from "./loss-audit.js";
 import { compose, extractNav } from "./compose.js";
-import { validate } from "./ir.js";
+import { INPUTS, validate } from "./ir.js";
 import { renderMarkdown } from "./render.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
 import { unescape } from "./md.js";
 import { sha256 } from "./sha256.js";
-
-export function checkUrl(url) {
-  try { new URL(url); } catch { throw new Error(`not a URL: ${url}; give a full http(s) URL`); }
-}
+import { httpUrl } from "./fetch-policy.js";
 
 // Split extraction output into content blocks and loss markers, then append the source-loss
 // audit's drops. Loss markers are findings, not content, so they live in section.losses.
@@ -39,8 +36,10 @@ function promoteTitle(title, html, blocks) {
 }
 
 export async function convert({ url, finalUrl = url, html, retrievedAt, fingerprint, input }) {
-  checkUrl(url);
+  httpUrl(url);
   if (typeof html !== "string") throw new Error("no page HTML: give the page's HTML as a string");
+  if (typeof retrievedAt !== "string") throw new Error("no retrievedAt: give the retrieval time as an ISO string");
+  if (!INPUTS.has(input)) throw new Error(`input is one of ${[...INPUTS].join(", ")}`);
   fingerprint ??= sha256(html).slice(0, 16);
   const ex = await extract(html, finalUrl);
   const { title, blocks, losses } = separateLosses(contentToBlocks(ex.contentHtml), html, ex.title);
