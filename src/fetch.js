@@ -10,8 +10,6 @@ import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
 import { isPrivateIp } from "./ssrf.js";
 import { blocked, fetchPage, MAX_BYTES, noAnswer, REDIRECT } from "./fetch-policy.js";
 
-export { MAX_BYTES };
-
 // Decompress a capped body, streaming so the decompressed output is also capped at MAX_BYTES:
 // the decompressor is destroyed at the cap, so a bomb costs at most MAX_BYTES of output and the
 // CPU to make it, not the whole expansion. Corrupt data rejects, unless mdflow cut the body at

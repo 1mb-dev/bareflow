@@ -38,8 +38,10 @@ function promoteTitle(title, html, blocks) {
   return { title: title || sourceTitle(html), blocks };
 }
 
-export async function convert({ url, finalUrl = url, html, retrievedAt, fingerprint = sha256(html).slice(0, 16), input }) {
+export async function convert({ url, finalUrl = url, html, retrievedAt, fingerprint, input }) {
   checkUrl(url);
+  if (typeof html !== "string") throw new Error("no page HTML: give the page's HTML as a string");
+  fingerprint ??= sha256(html).slice(0, 16);
   const ex = await extract(html, finalUrl);
   const { title, blocks, losses } = separateLosses(contentToBlocks(ex.contentHtml), html, ex.title);
 

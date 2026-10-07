@@ -12,10 +12,11 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { run } from "./pipeline.js";
+import { convert } from "./convert.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
-import { decompress, fetchSnapshot, MAX_BYTES } from "./fetch.js";
-import { fetchPage } from "./fetch-policy.js";
+import { decompress, fetchSnapshot } from "./fetch.js";
+import { fetchPage, MAX_BYTES } from "./fetch-policy.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
 import { renderMarkdown, NOTE_SOURCES, REASON_IS_MDFLOW } from "./render.js";
@@ -578,6 +579,8 @@ for (const [id, spec] of Object.entries(inventory)) {
     const good = await run({ url, fetch: pagesFetch({ [url]: page("") }), retrievedAt: FIXED });
     const rejects = (mutate) => { const d = structuredClone(good.doc); mutate(d); try { validate(d); return false; } catch { return true; } };
     record("ir", "validate", "duplicate section ids rejected", rejects((d) => d.sections[0].children.push(structuredClone(d.sections[0]))));
+    const noHtml = await convert({ url, retrievedAt: FIXED, input: "paste" }).then(() => "converted", (e) => e.message);
+    record("convert", "input", "no HTML is refused by name", noHtml === "no page HTML: give the page's HTML as a string");
     record("ir", "validate", "source.input missing or not fetch | edge | paste rejected", rejects((d) => delete d.source.input) && rejects((d) => (d.source.input = "dom")) && !rejects(() => {}));
   }
 
