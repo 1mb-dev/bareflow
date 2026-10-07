@@ -24,6 +24,7 @@ import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
 import { parseHtml } from "./html.js";
 import { scoreLoss, scoreNav } from "./truth.js";
+import { VERSION, EXTRACTOR_VERSION } from "./version.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const inventory = JSON.parse(await readFile(join(ROOT, "test/inventory.json"), "utf8"));
@@ -641,6 +642,14 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   for (const [f, u] of want) if (named.get(f) !== u) bad.push(`${f} not in NOTICE with ${u}`);
   for (const f of named.keys()) if (!want.has(f)) bad.push(`NOTICE names ${f}, no such page: remove it`);
   record("notice", "pages", `every frozen page is in its manifest and in NOTICE with its URL${bad.length ? `: ${bad.join("; ")}` : ""}`, !bad.length);
+}
+
+// The versions the header and IR report match package.json and the defuddle that runs.
+{
+  const pkg = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8"));
+  const defuddle = JSON.parse(await readFile(join(ROOT, "node_modules/defuddle/package.json"), "utf8"));
+  record("version", "pinned", `src/version.js is ${VERSION}, defuddle ${EXTRACTOR_VERSION}; package.json ${pkg.version}, defuddle pinned ${pkg.dependencies.defuddle}, installed ${defuddle.version}`,
+    VERSION === pkg.version && EXTRACTOR_VERSION === defuddle.version && pkg.dependencies.defuddle === defuddle.version);
 }
 
 // SSRF denylist: the shared policy blocks the full non-public range and rejects nothing public.

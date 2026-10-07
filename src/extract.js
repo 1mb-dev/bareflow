@@ -3,12 +3,9 @@
 // The contract downstream (IR, composer, snapshot, loss) does not depend on Defuddle.
 import { parseHtml } from "./html.js";
 import { Defuddle } from "defuddle/node";
-import { readFileSync } from "node:fs";
+import { EXTRACTOR_VERSION } from "./version.js";
 
 export const EXTRACTOR = "defuddle";
-export const EXTRACTOR_VERSION = JSON.parse(
-  readFileSync(new URL("../node_modules/defuddle/package.json", import.meta.url), "utf8")
-).version;
 
 export async function extract(html, url) {
   const { document } = parseHtml(html);

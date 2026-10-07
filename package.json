@@ -6,6 +6,7 @@
   "bin": {
     "mdflow": "./bin/mdflow.js"
   },
+  "files": ["bin", "src", "!src/verify.js", "!src/truth.js", "docs", "NOTICE"],
   "scripts": {
     "mdflow": "node bin/mdflow.js",
     "verify": "node src/verify.js"

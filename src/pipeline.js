@@ -2,18 +2,16 @@
 // fixed snapshot AND pinned retrievedAt: same html + same version + same retrievedAt -> same
 // document. Live fetch bakes in the retrieval time, so live runs differ.
 import { createHash } from "node:crypto";
-import { createRequire } from "node:module";
 import { fetchSnapshot } from "./fetch.js";
-import { extract, EXTRACTOR, EXTRACTOR_VERSION } from "./extract.js";
+import { extract, EXTRACTOR } from "./extract.js";
 import { contentToBlocks } from "./to-ir.js";
 import { auditSourceLoss, restoreCodeLayout, sourceTitle } from "./loss-audit.js";
 import { compose, extractNav } from "./compose.js";
 import { validate } from "./ir.js";
 import { renderMarkdown } from "./render.js";
+import { VERSION, EXTRACTOR_VERSION } from "./version.js";
 import { unescape } from "./md.js";
 
-const require = createRequire(import.meta.url);
-export const VERSION = require("../package.json").version;
 const sha = (s) => createHash("sha256").update(s).digest("hex").slice(0, 16);
 
 // Split extraction output into content blocks and loss markers, then append the source-loss
