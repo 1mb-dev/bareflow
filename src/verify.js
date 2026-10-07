@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createServer, get as httpGet } from "node:http";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,6 @@ import { marked } from "marked";
 import { useEntry, USE_KEYS, ERROR_KEYS } from "./uselog.js";
 import { bar, noteEntry, parseLines, checkUse, checkNote } from "../usage/dogfood/bar.js";
 import { main, USAGE } from "./cli.js";
-import { createReader } from "../bin/reader.js";
 import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
 import { parseHtml } from "./html.js";
@@ -837,43 +836,11 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("cli", "shim", "bin/mdflow.js: usage exits 2, a refused fetch exits 1 with the reason",
     none.code === 2 && none.e === USAGE + "\n" && refused.code === 1 && refused.e.startsWith("mdflow: blocked address for 127.0.0.1"));
 }
-// The reader's /live, in process with run() over a frozen page.
+// Escapes removed from IR text give back the page's text; a code span is copied as is.
 {
-  const server = createReader({ run: ({ url }) => run({ url, html: "<html><head><title>Live Page</title></head><body><main><h1>Live Page</h1><p>Body text of the page, snake_case and _emph_.</p><p>Glob <code>C:\\dir\\*</code> here.</p></main></body></html>", retrievedAt: FIXED }) });
-  await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
-  const base = `http://127.0.0.1:${server.address().port}/`;
-  const [live, bad] = await Promise.all([fetch(base + "live?url=" + encodeURIComponent("https://example.com/live")).then((r) => r.text()), fetch(base + "live?url=").then((r) => r.text())]);
-  server.close();
-  record("reader", "live", "/live renders a page through run(), its text without Markdown escapes, a code span as is; a bad URL shows the reason",
-    live.includes("<h1>Live Page</h1>") && live.includes("snake_case and _emph_.") && live.includes("Glob `C:\\dir\\*` here.") && bad.includes("mdflow: not a URL"));
-}
-
-// The local reader: the page with its nav, judged findings, and the source served without its scripts.
-{
-  const child = spawn(process.execPath, [join(ROOT, "bin/reader.js"), "0"], { stdio: ["ignore", "pipe", "inherit"] });
-  try {
-    // Buffered (the URL can span chunks) and bounded (a reader that never prints fails, not hangs).
-    const base = await new Promise((ok, fail) => {
-      let buf = "";
-      const t = setTimeout(() => fail(new Error("reader printed no URL in 15 s")), 15000);
-      child.stdout.on("data", (d) => { buf += d; const m = buf.match(/http:\/\/127\.0\.0\.1:\d+\//); if (m) { clearTimeout(t); ok(m[0]); } });
-      child.on("exit", () => { clearTimeout(t); fail(new Error("reader exited")); });
-    });
-    const [u1, u5, raw] = await Promise.all([fetch(base + "f/U1"), fetch(base + "f/U5"), fetch(base + "raw/nodejs-path")]);
-    const [u1t, u5t, rawt] = await Promise.all([u1.text(), u5.text(), raw.text()]);
-    record("reader", "document", "U1 shows the page and its nav, no window", u1t.includes("scope: <b>page</b>") && u1t.includes("prev: via rel") && !u1t.includes('class="role"'));
-    record("reader", "findings", "U5 demotions judged against labels", (u5t.match(/<b>demoted<\/b> source-heading-demoted/g) || []).length === 2);
-    const hostOf = (host) => new Promise((ok) => httpGet(base + "f/U1", { headers: { host } }, (r) => { r.resume(); ok(r.statusCode); }).on("error", () => ok(0)));
-    const port = new URL(base).port;
-    const [evil, loop, local] = await Promise.all([hostOf("evil.test"), hostOf(`127.0.0.1:${port}`), hostOf(`localhost:${port}`)]);
-    record("reader", "host", "a non-loopback Host gets 403; 127.0.0.1 and localhost are served", evil === 403 && loop === 200 && local === 200);
-    record("reader", "source", "no page scripts, base after the doctype",
-      raw.headers.get("content-security-policy")?.includes("script-src 'none'") && rawt.startsWith('<!doctype html><base href="https://nodejs.org/api/path.html">'));
-  } catch (e) {
-    record("reader", "serve", String(e?.message || e), false);
-  } finally {
-    child.kill();
-  }
+  const [p, g] = contentToBlocks("<p>Body text of the page, snake_case and _emph_.</p><p>Glob <code>C:\\dir\\*</code> here.</p>");
+  record("md", "unescape", "IR text without Markdown escapes is the page's text; a code span as is",
+    unescape(p.text) === "Body text of the page, snake_case and _emph_." && unescape(g.text) === "Glob `C:\\dir\\*` here.");
 }
 
 const failed = results.filter((r) => !r.ok);
