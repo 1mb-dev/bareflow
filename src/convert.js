@@ -1,6 +1,7 @@
 // The conversion: one page's HTML -> IR -> {markdown, json}, no fetch. Deterministic: same html,
 // url, retrievedAt, fingerprint, and input, same version -> same document. The fingerprint is the
-// fetched bytes' when a fetch made them, else the HTML's.
+// fetched bytes' when a fetch made them, else the HTML's. Nothing on this path may need Node: the
+// browser bundle runs it, and verify's parity check fails on a node: import, Buffer, or process.
 import { extract, EXTRACTOR } from "./extract.js";
 import { contentToBlocks } from "./to-ir.js";
 import { auditSourceLoss, restoreCodeLayout, sourceTitle } from "./loss-audit.js";

@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import vm from "node:vm";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -27,6 +28,7 @@ import { parseHtml } from "./html.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
 import { sha256 } from "./sha256.js";
+import { bundle } from "../scripts/bundle.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const inventory = JSON.parse(await readFile(join(ROOT, "test/inventory.json"), "utf8"));
@@ -104,12 +106,15 @@ const renderOk = (doc, md) => headerOk(md) && !oracle(doc, md).length;
 
 const truth = [];
 const fixtureDocs = new Map();
+// Every CLI conversion of a fixture or corpus page, for the bundle parity check.
+const cliRuns = [];
 const pr = (n, d) => (d ? (n / d).toFixed(2) : "-");
 for (const [id, spec] of Object.entries(inventory)) {
   const html = await readFile(join(ROOT, "test/fixtures", spec.fixture), "utf8");
   record(id, "fixture", "sha256", createHash("sha256").update(html).digest("hex") === spec.sha256);
   const { doc, markdown } = await run({ url: spec.url, html, retrievedAt: FIXED });
   fixtureDocs.set(id, doc);
+  cliRuns.push({ name: id, url: spec.url, html, doc, markdown });
   record(id, "schema", SCHEMA, doc.schema === SCHEMA);
   const why = headerOk(markdown) ? oracle(doc, markdown) : ["header"];
   record(id, "render", why.length ? `render: ${why.join("; ")}` : "header, blocks as the IR, every loss noted", !why.length);
@@ -390,7 +395,9 @@ for (const [id, spec] of Object.entries(inventory)) {
   ];
   const corpusBad = [];
   for (const [name, body, has] of corpus) {
-    const { doc, markdown } = await run({ url: "https://example.com/c", retrievedAt: FIXED, html: `<html><body><main><h1>C</h1>${body}</main></body></html>` });
+    const html = `<html><body><main><h1>C</h1>${body}</main></body></html>`;
+    const { doc, markdown } = await run({ url: "https://example.com/c", retrievedAt: FIXED, html });
+    cliRuns.push({ name: `corpus: ${name}`, url: "https://example.com/c", html, doc, markdown });
     const why = headerOk(markdown) ? oracle(doc, markdown) : ["header"];
     const links = [];
     const walkTok = (ks) => { for (const k of ks ?? []) { if (k.type === "link" || k.type === "image") links.push(k.href); walkTok(k.tokens); for (const it of k.items ?? []) walkTok(it.tokens); } };
@@ -663,6 +670,20 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   const pagesHtml = await Promise.all([...Object.values(inventory).map((s) => join(ROOT, "test/fixtures", s.fixture)), ...Object.keys(realPages).map((f) => join(ROOT, "test/pages", f))].map((f) => readFile(f, "utf8")));
   const off = [...edges, ...pagesHtml].filter((x) => sha256(x) !== node(x));
   record("sha256", "node:crypto", `equal on ${edges.length} edge inputs and ${pagesHtml.length} frozen pages${off.length ? `; ${off.length} differ` : ""}`, !off.length);
+}
+
+// The browser bundle (scripts/bundle.js) in a context with web globals only, no process, Buffer,
+// or require: the same Markdown and JSON as the CLI on every fixture and the adversarial corpus.
+{
+  const web = { URL, URLSearchParams, TextEncoder, TextDecoder, console, setTimeout, clearTimeout, queueMicrotask, structuredClone, atob, btoa };
+  const off = [];
+  let api;
+  try { api = vm.runInContext(`${await bundle()}\n;mdflow`, vm.createContext(web)); } catch (e) { off.push(`bundle: ${e.message}`); }
+  for (const r of api ? cliRuns : []) {
+    const b = await api.convert({ url: r.url, html: r.html, retrievedAt: FIXED, input: "fetch" }).catch((e) => ({ error: String(e?.message || e) }));
+    if (b.error || b.markdown !== r.markdown || JSON.stringify(b.doc) !== JSON.stringify(r.doc)) off.push(`${r.name}${b.error ? ` (${b.error.slice(0, 80)})` : ""}`);
+  }
+  record("bundle", "parity", `browser bundle, web globals only: Markdown and JSON equal to the CLI on ${cliRuns.length} pages${off.length ? `; differ: ${off.join(", ")}` : ""}`, !!api && !off.length);
 }
 
 // SSRF denylist: the shared policy blocks the full non-public range and rejects nothing public.

@@ -6,10 +6,18 @@
   "bin": {
     "mdflow": "./bin/mdflow.js"
   },
-  "files": ["bin", "src", "!src/verify.js", "!src/truth.js", "docs", "NOTICE"],
+  "files": [
+    "bin",
+    "src",
+    "!src/verify.js",
+    "!src/truth.js",
+    "docs",
+    "NOTICE"
+  ],
   "scripts": {
     "mdflow": "node bin/mdflow.js",
-    "verify": "node src/verify.js"
+    "verify": "node src/verify.js",
+    "bundle": "node scripts/bundle.js"
   },
   "dependencies": {
     "defuddle": "0.19.4",
@@ -17,6 +25,7 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "esbuild": "0.28.2",
     "marked": "18.0.14"
   }
 }
