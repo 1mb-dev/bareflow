@@ -53,10 +53,10 @@ scores the loss audit and nav detection against hand-labelled frozen fixtures, l
 with a CommonMark parser, and pins the CLI and IR surface.
 Extraction is composed (Defuddle); mdflow's work is the IR, the loss audit, and the render.
 
-- Loss recall 0.97; loss precision 0.60 over 27 pages: 0.81 on the 25 docs pages, and 0 of 12
+- Loss recall 0.97; loss precision 0.60 over 29 pages: 0.81 on the 27 docs pages, and 0 of 12
   findings correct on the two blog pages, where every false positive is chrome inside the main
   landmark (related posts, author bio, comments). The auditor is fitted to docs generators.
-- Nav precision 1.00, recall 0.88: standard rel=prev/next (on `<link>` and `<a>`), else the
+- Nav precision 1.00, recall 0.89: standard rel=prev/next (on `<link>` and `<a>`), else the
   Docusaurus or VitePress docs pager when the page declares that generator (`via: rel | pager`).
 - The IR is versioned (`mdflow/ir/v2`, docs/ir.md); that a pinned snapshot version serves a
   consumer is unproven until one pins it.

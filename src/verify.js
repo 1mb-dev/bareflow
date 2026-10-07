@@ -19,6 +19,7 @@ import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
 import { renderMarkdown, NOTE_SOURCES, REASON_IS_MDFLOW } from "./render.js";
 import { marked } from "marked";
+import { parseHTML } from "linkedom";
 import { useEntry, USE_KEYS, ERROR_KEYS } from "./uselog.js";
 import { bar, noteEntry, parseLines, checkUse, checkNote } from "../usage/dogfood/bar.js";
 import { main, USAGE } from "./cli.js";
@@ -584,32 +585,49 @@ for (const [id, spec] of Object.entries(inventory)) {
   }
 }
 
-// The render on real pages: header, well-formed, every loss noted, on the step-6 and gate v2
-// frozen pages; and the cost bar on the 12 gate v2 landing pages, as bytes against the plain-text
-// arm. Owner rule (2026-10-04): R <= 1.5, or below 1.95 when every byte over 1.5 is verbatim loss text.
+// The plain-text arm the cost bar divides by: a page as an agent's fetch tool hands it over. Block
+// elements end a line; pre keeps its text; script, style and hidden content are dropped. Raw
+// linkedom, not parseHtml: the arm must not share the pipeline's parser repairs.
+function plainText(html) {
+  const { document } = parseHTML(html);
+  const out = [];
+  const walkNode = (n) => {
+    if (n.nodeType === 3) { out.push(n.textContent.replace(/\s+/g, " ")); return; }
+    if (n.nodeType !== 1 || PLAIN_DROP.has(n.tagName)) return;
+    if (n.tagName === "PRE") { out.push("\n", n.textContent, "\n"); return; }
+    if (n.tagName === "TD" || n.tagName === "TH") out.push(" | ");
+    for (const c of n.childNodes) walkNode(c);
+    if (PLAIN_BLOCK.has(n.tagName)) out.push("\n");
+  };
+  walkNode(document.documentElement);
+  return out.join("").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+}
+const PLAIN_BLOCK = new Set(["P", "DIV", "LI", "TR", "H1", "H2", "H3", "H4", "H5", "H6", "SECTION", "ARTICLE", "HEADER", "FOOTER", "NAV", "ASIDE", "MAIN", "BLOCKQUOTE", "DT", "DD", "TABLE", "UL", "OL", "FIGURE", "FIGCAPTION", "DETAILS", "SUMMARY", "BR", "HR"]);
+const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "HEAD"]);
+
+// The render on real pages (test/pages.json): header, well-formed, every loss noted; and the cost
+// bar on the 12 pages marked `cost`, as bytes against the plain-text arm. Owner rule
+// (2026-10-04): R <= 1.5, or below 1.95 when every byte over 1.5 is verbatim loss text.
 {
   const bytes = (x) => Buffer.byteLength(x, "utf8");
   const costOk = ({ md, plain, lossText }) => md / plain <= 1.5 || (md / plain < 1.95 && (md - lossText) / plain <= 1.5);
   const bad = [];
-  const rendered = new Map();
-  for (const dir of ["usage", "usage/v2"]) {
-    for (const p of Object.values(JSON.parse(await readFile(join(ROOT, dir, "pages.json"), "utf8")))) {
-      const { doc, markdown } = await run({ url: p.finalUrl, html: await readFile(join(ROOT, dir, "pages", p.fixture), "utf8"), retrievedAt: FIXED });
-      const why = headerOk(markdown) ? oracle(doc, markdown) : ["header"];
-      if (why.length) bad.push(`${p.fixture} (${why.join("; ")})`);
-      if (dir === "usage/v2") rendered.set(p, { doc, markdown });
-    }
-  }
-  record("render", "real pages", `header, well-formed, every loss noted on step-6 + gate v2 pages${bad.length ? `: ${bad.join(", ")}` : ""}`, !bad.length);
-
   const rows = [];
-  for (const t of JSON.parse(await readFile(join(ROOT, "usage/v2/tasks.json"), "utf8"))) {
-    const [, { doc, markdown }] = [...rendered].find(([p]) => p.url === t.landing_url || p.finalUrl === t.landing_url);
+  const pages = JSON.parse(await readFile(join(ROOT, "test/pages.json"), "utf8"));
+  for (const [name, p] of Object.entries(pages)) {
+    const html = await readFile(join(ROOT, "test/pages", name), "utf8");
+    if (createHash("sha256").update(html).digest("hex") !== p.sha256) { bad.push(`${name} (sha256)`); continue; }
+    const { doc, markdown } = await run({ url: p.finalUrl, html, retrievedAt: FIXED });
+    const why = headerOk(markdown) ? oracle(doc, markdown) : ["header"];
+    if (why.length) bad.push(`${name} (${why.join("; ")})`);
+    if (!p.cost) continue;
     const lossText = doc.sections.flatMap((s) => s.losses).reduce((n, l) => n + bytes(l.text ?? ""), 0);
-    rows.push({ id: t.id, md: bytes(markdown), plain: bytes(await readFile(join(ROOT, "usage/v2/runs", t.id, "plain.txt"), "utf8")), lossText });
+    rows.push({ id: name, md: bytes(markdown), plain:bytes(plainText(html)), lossText });
   }
+  record("render", "real pages", `header, well-formed, every loss noted on ${Object.keys(pages).length} real pages${bad.length ? `: ${bad.join(", ")}` : ""}`, !bad.length);
+
   const tight = rows.reduce((a, r) => (r.md / r.plain > a.md / a.plain ? r : a));
-  record("render", "cost", `R <= 1.5 (or loss text) on ${rows.length} gate v2 pages; max ${tight.id} ${(tight.md / tight.plain).toFixed(2)}${rows.filter((r) => !costOk(r)).map((r) => ` FAIL ${r.id}`).join("")}`,
+  record("render", "cost", `R <= 1.5 (or loss text) on ${rows.length} pages; max ${tight.id} ${(tight.md / tight.plain).toFixed(2)}${rows.filter((r) => !costOk(r)).map((r) => ` FAIL ${r.id}`).join("")}`,
     rows.length === 12 && rows.every(costOk));
   record("render", "cost", "the bar: 1.5 passes, over fails, the band passes only on loss text",
     costOk({ md: 1500, plain: 1000, lossText: 0 }) && !costOk({ md: 1501, plain: 1000, lossText: 0 }) &&

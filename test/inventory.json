@@ -638,5 +638,30 @@
     "known_fp": [],
     "known_miss": [],
     "known_nav_miss": ["prev", "next"]
+  },
+  "uv-github": {
+    "fixture": "uv-github.html",
+    "url": "https://docs.astral.sh/uv/guides/integration/github/",
+    "sha256": "b84c79921161095b6dd911a57c74ef691ab0ae213d15e96d354e8268a59ac299",
+    "nav": { "prev": "https://docs.astral.sh/uv/guides/integration/marimo/", "next": "https://docs.astral.sh/uv/guides/integration/gitlab/" },
+    "flattened": false,
+    "labels": {},
+    "known_fp": [],
+    "known_miss": []
+  },
+  "rust-book-env-vars": {
+    "fixture": "rust-book-env-vars.html",
+    "url": "https://doc.rust-lang.org/book/ch12-05-working-with-environment-variables.html",
+    "sha256": "f25f798cba2f34bae74bd75ceb7681aa6e9cd5db6a06ddf137d22ee31e91d5eb",
+    "nav": { "prev": "https://doc.rust-lang.org/book/ch12-04-testing-the-librarys-functionality.html", "next": "https://doc.rust-lang.org/book/ch12-06-writing-to-stderr-instead-of-stdout.html" },
+    "flattened": false,
+    "labels": {
+      "chrome": [
+        { "kind": "heading", "key": "Keyboard shortcuts" },
+        { "kind": "heading", "key": "The Rust Programming Language" }
+      ]
+    },
+    "known_fp": [],
+    "known_miss": []
   }
 }
