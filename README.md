@@ -19,9 +19,9 @@ model's paraphrase: short, and silent about what it left out. mdflow gives it th
 header saying where the page came from and a note for anything it could not keep.
 
 Measured on 5 pre-registered questions about features released July to September 2026, on docs
-pages frozen before the run (record in `usage/seed/`, the frozen pages and mdflow's outputs at
-commit d3917fd): one agent answered from WebFetch, another from mdflow, and a blind grader scored
-both. mdflow's answer was better on 3 (one a borderline call), tied on 2, worse on none. For
+pages frozen before the run (`usage/seed/`; the pages and mdflow's outputs are at commit
+d3917fd): one agent answered from WebFetch, another from mdflow, and a blind grader scored both.
+mdflow's answer was better on 3 (one a borderline call), tied on 2, worse on none. For
 `deno add --unscoped`, WebFetch returned 457 bytes ending in its own gloss ("This flag strips the
 scope prefix, allowing you to import the package using only its base name"); the answer built on
 it could not say what the docs' last sentence does. mdflow (excerpt):

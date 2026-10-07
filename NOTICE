@@ -2,9 +2,9 @@ Third-party content
 
 The files below hold content from public web pages: snapshots of each page, frozen for
 regression testing of the extraction pipeline (test/), and the seed eval's WebFetch output for
-its five pages (usage/seed/runs/*/W.md). Each remains its publisher's, under the publisher's
-terms; none is covered by this project's MIT license. To have a page removed, open an issue in
-this repository.
+its five pages (usage/seed/runs/*/W.md). Each belongs to its publisher, on the publisher's terms;
+this project's MIT license does not cover it. To have a page removed, open an issue in this
+repository.
 
 test/fixtures/caniuse-grid.html
   https://caniuse.com/css-grid
