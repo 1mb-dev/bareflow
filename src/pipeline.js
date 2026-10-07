@@ -1,6 +1,5 @@
-// The Node pipeline: fetch -> convert. Deterministic for a fixed snapshot AND pinned
-// retrievedAt: same html + same version + same retrievedAt -> same document. Live fetch bakes in
-// the retrieval time, so live runs differ.
+// The Node pipeline: fetch, then convert. A live fetch bakes in the retrieval time, so live runs
+// differ; html and retrievedAt given (verify's frozen pages) make it deterministic.
 import { fetchSnapshot } from "./fetch.js";
 import { convert } from "./convert.js";
 import { httpUrl } from "./fetch-policy.js";
