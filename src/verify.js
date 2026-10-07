@@ -25,6 +25,7 @@ import { extractNav } from "./compose.js";
 import { parseHtml } from "./html.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
+import { sha256 } from "./sha256.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const inventory = JSON.parse(await readFile(join(ROOT, "test/inventory.json"), "utf8"));
@@ -650,6 +651,16 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   const defuddle = JSON.parse(await readFile(join(ROOT, "node_modules/defuddle/package.json"), "utf8"));
   record("version", "pinned", `src/version.js is ${VERSION}, defuddle ${EXTRACTOR_VERSION}; package.json ${pkg.version}, defuddle pinned ${pkg.dependencies.defuddle}, installed ${defuddle.version}`,
     VERSION === pkg.version && EXTRACTOR_VERSION === defuddle.version && pkg.dependencies.defuddle === defuddle.version);
+}
+
+// The pure-JS sha256 equals node:crypto: padding boundaries, multi-byte UTF-8, raw bytes, and
+// every frozen page.
+{
+  const node = (x) => createHash("sha256").update(x).digest("hex");
+  const edges = ["", "a".repeat(55), "a".repeat(56), "a".repeat(63), "a".repeat(64), "a".repeat(65), "\u00e9\u2192\u{1f600} caf\u00e9", new Uint8Array([0xff, 0xfe, 0, 0x80])];
+  const pagesHtml = await Promise.all([...Object.values(inventory).map((s) => join(ROOT, "test/fixtures", s.fixture)), ...Object.keys(realPages).map((f) => join(ROOT, "test/pages", f))].map((f) => readFile(f, "utf8")));
+  const off = [...edges, ...pagesHtml].filter((x) => sha256(x) !== node(x));
+  record("sha256", "node:crypto", `equal on ${edges.length} edge inputs and ${pagesHtml.length} frozen pages${off.length ? `; ${off.length} differ` : ""}`, !off.length);
 }
 
 // SSRF denylist: the shared policy blocks the full non-public range and rejects nothing public.

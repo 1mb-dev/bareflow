@@ -8,12 +8,11 @@ import { request as httpsRequest } from "node:https";
 import { lookup } from "node:dns";
 import { isIP } from "node:net";
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
-import { createHash } from "node:crypto";
+import { sha256 } from "./sha256.js";
 import { isPrivateIp } from "./ssrf.js";
 
 export const MAX_BYTES = 5 * 1024 * 1024;
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
-const sha = (b) => createHash("sha256").update(b).digest("hex").slice(0, 16);
 
 // Decompress a capped body, streaming so the decompressed output is also capped at MAX_BYTES:
 // the decompressor is destroyed at the cap, so a bomb costs at most MAX_BYTES of output and the
@@ -134,7 +133,7 @@ export async function fetchSnapshot(url, opts = {}) {
     contentType,
     bytes: body.length,
     html,
-    fingerprint: sha(body.subarray(0, maxBytes)),
+    fingerprint: sha256(body.subarray(0, maxBytes)).slice(0, 16),
     retrievedAt: new Date().toISOString(),
   };
 }

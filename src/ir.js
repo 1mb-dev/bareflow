@@ -4,7 +4,7 @@
 // Loss markers are section-level findings (section.losses), not content blocks. Inline
 // formatting inside prose is retained as Markdown for v1; a full inline node tree is a later
 // schema revision, not a v1 requirement.
-import { createHash } from "node:crypto";
+import { sha256 } from "./sha256.js";
 
 export const SCHEMA = "mdflow/ir/v2";
 
@@ -13,7 +13,7 @@ export const BLOCK_TYPES = new Set([
 ]);
 
 export function stableId(str) {
-  return createHash("sha256").update(String(str)).digest("hex").slice(0, 16);
+  return sha256(String(str)).slice(0, 16);
 }
 
 export function heading(text, level, anchor) {
