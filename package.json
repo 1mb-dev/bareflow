@@ -8,8 +8,7 @@
   },
   "scripts": {
     "mdflow": "node bin/mdflow.js",
-    "verify": "node src/verify.js",
-    "bar": "node usage/dogfood/bar.js"
+    "verify": "node src/verify.js"
   },
   "dependencies": {
     "defuddle": "0.19.4",

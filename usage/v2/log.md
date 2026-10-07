@@ -98,3 +98,6 @@ C3 pending: owner spot-checks the grading of 3 tasks (suggested T4, T6, T12).
 
 Scripts (`arms.js`, `freeze.js`, `score.js`, and `../plain.js`) removed in 0.3.0 with the sibling
 path; run them from commit 873121e. Frozen pages, inputs, answers, and grades stay.
+
+Removed in 0.5.0: frozen pages and arm inputs (third-party page text), answers, selection;
+grades, scores, prereg and tasks stay. The full record is at commit 2ffc9d4.

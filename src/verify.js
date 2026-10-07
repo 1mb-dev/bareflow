@@ -21,7 +21,6 @@ import { renderMarkdown, NOTE_SOURCES, REASON_IS_MDFLOW } from "./render.js";
 import { marked } from "marked";
 import { parseHTML } from "linkedom";
 import { useEntry, USE_KEYS, ERROR_KEYS } from "./uselog.js";
-import { bar, noteEntry, parseLines, checkUse, checkNote } from "../usage/dogfood/bar.js";
 import { main, USAGE } from "./cli.js";
 import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
@@ -755,42 +754,6 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
     JSON.stringify(Object.keys(ok)) === JSON.stringify(USE_KEYS) && ok.day === "2026-01-01" && ok.host === "example.com" && ok.bytes === Buffer.byteLength(markdown) &&
     JSON.stringify(Object.keys(err)) === JSON.stringify(ERROR_KEYS) && lines.length === 1 && JSON.stringify(Object.keys(lines[0])) === JSON.stringify(ERROR_KEYS) && lines[0].error.startsWith("blocked address"));
   await rm(dir, { recursive: true });
-}
-
-// The MLP bar (usage/dogfood/bar.js) reads the use log the CLI writes and the dogfood notes.
-{
-  const ok = useEntry({ url: "https://example.com/u", format: "markdown", output: "x", doc: { sections: [{ losses: [] }] }, at: new Date(FIXED) });
-  const err = useEntry({ url: "http://127.0.0.1/", error: new Error("blocked"), at: new Date(FIXED) });
-  record("bar", "schema", "the use log's use and error lines pass the bar's line check", checkUse(ok) === null && checkUse(err) === null);
-  const d = (i) => `2026-10-${String(i + 1).padStart(2, "0")}`;
-  const uses = Array.from({ length: 20 }, (_, i) => ({ day: d(i % 10), url: `https://h${i % 8}.dev/p`, host: `h${i % 8}.dev`, losses: 0 }));
-  const notes = [
-    ...Array.from({ length: 5 }, (_, i) => ({ day: d(i), url: `https://h${i}.dev/p`, outcome: "answered", webfetch_enough: false })),
-    { day: d(2), url: "https://h1.dev/p", outcome: "wrong" }, { day: d(3), url: "https://h1.dev/p", outcome: "resolved", fix: "abc" },
-    { day: d(9), url: "https://x.dev/", outcome: "fallback" },
-  ];
-  const at = { goldenDay: "2026-10-01", today: "2026-10-12" };
-  const full = bar({ uses, notes, ...at });
-  const open = bar({ uses, notes: notes.filter((n) => n.outcome !== "resolved"), ...at });
-  const fell = bar({ uses, notes: [...notes, ...Array.from({ length: 4 }, () => ({ day: d(9), url: "https://x.dev/", outcome: "fallback" }))], ...at });
-  const empty = bar({ uses: [], notes: [], goldenDay: "", today: "2026-10-12" });
-  record("bar", "criteria", "the plan's bar holds on a log meeting it; an unresolved wrong, 20% fallback, or an empty log does not",
-    full.holds && !open.holds && open.criteria.find((c) => c.name === "unresolved wrong").value === 1 &&
-    !fell.holds && fell.criteria.find((c) => c.name === "fallback share").value === "5/25" &&
-    !empty.holds && empty.adoption.verdict === "pending" && empty.criteria.find((c) => c.name === "fallback share").value === "0/0");
-  const adopt = (u, f) => bar({ uses: u.map((day) => ({ day, url: "https://a.dev/", host: "a.dev", losses: 0 })), notes: f.map((day) => ({ day, url: "https://a.dev/", outcome: "fallback" })), ...at }).adoption;
-  const [pass, mcp, range] = [adopt([d(0), d(0), d(0), d(0)], [d(1)]), adopt([d(0), d(1)], [d(0), d(2), d(3)]), adopt([d(0), d(0), d(0), d(1)], [d(1), d(1)])];
-  record("bar", "adoption", "first 5 docs fetches by day: 4 mdflow passes, 2 builds MCP, a mixed day at the cut is a range",
-    pass.verdict === "pass" && mcp.verdict === "build MCP" && range.mdflow === "3-4" && range.verdict.startsWith("undecided"));
-  const throws = (f) => { try { f(); return ""; } catch (e) { return e.message; } };
-  const n = noteEntry(["https://a.dev/", "wrong", "webfetch-enough=n", "loss-changed=y", "silent"], new Date(FIXED));
-  record("bar", "note", "note arguments become one checked line; a bad outcome, flag, or resolved without fix is refused",
-    JSON.stringify(n) === JSON.stringify({ day: "2026-01-01", url: "https://a.dev/", outcome: "wrong", webfetch_enough: false, loss_changed: true, silent: true }) &&
-    throws(() => noteEntry(["https://a.dev/", "fine"])).startsWith("outcome is one of") && throws(() => noteEntry(["https://a.dev/", "answered", "webfetch-enough=maybe"])).startsWith("unknown note argument") &&
-    throws(() => noteEntry(["https://a.dev/", "resolved"])) === "resolved needs fix=<sha>" && throws(() => noteEntry(["a.dev", "answered"])) === "not a URL: a.dev");
-  record("bar", "parse", "a malformed log line stops the count with its file and line",
-    throws(() => parseLines(`${JSON.stringify(n)}\n{"day":"2026-01-01","url":"u","outcome":"meh"}\n`, "notes", checkNote)).startsWith("notes:2: outcome meh") &&
-    throws(() => parseLines("{not json", "uses", checkUse)) === "uses:1: not JSON" && parseLines("\n\n", "uses", checkUse).length === 0);
 }
 
 // The frozen surface (MLP v1): CLI usage and exit codes, the IR's shape, the header's fields, and

@@ -47,10 +47,10 @@ right, and the answering agent, distrusting it, substituted an API from memory.
 
 ## Status
 
-0.4.0, local only, wired as the agent's docs fetch for the MLP v1 dogfood. The pipeline (fetch ->
-extract -> IR -> Markdown/JSON) is implemented with structured loss markers, and `npm run verify`
-scores the loss audit and nav detection against hand-labelled frozen fixtures, lexes every render
-with a CommonMark parser, and pins the CLI and IR surface.
+0.4.0, local only. The pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented with
+structured loss markers, and `npm run verify` scores the loss audit and nav detection against
+hand-labelled frozen fixtures, lexes every render with a CommonMark parser, and pins the CLI and
+IR surface.
 Extraction is composed (Defuddle); mdflow's work is the IR, the loss audit, and the render.
 
 - Loss recall 0.97; loss precision 0.60 over 29 pages: 0.81 on the 27 docs pages, and 0 of 12
@@ -97,8 +97,6 @@ mdflow <url>                      # Markdown: header, page, loss notes
 mdflow <url> --json               # the typed IR (docs/ir.md)
 MDFLOW_LOG=~/mdflow-use.jsonl mdflow <url>   # also append one JSON line per use
 npm run verify                    # truth gate: loss + nav precision/recall per fixture
-npm run bar                       # the MLP bar: the use log + notes ($MDFLOW_NOTES, ~/mdflow-notes.jsonl)
-npm run bar -- note <url> <answered|wrong|fallback|resolved> [webfetch-enough=y|n] ...
 ```
 
 Exit 0 with the document on stdout; 2 on a usage error; 1 when the fetch or extraction fails,
