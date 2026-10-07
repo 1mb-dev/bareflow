@@ -5,7 +5,7 @@
 // failure.
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -627,6 +627,14 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   record("render", "cost", "the bar: 1.5 passes, over fails, the band passes only on loss text",
     costOk({ md: 1500, plain: 1000, lossText: 0 }) && !costOk({ md: 1501, plain: 1000, lossText: 0 }) &&
     costOk({ md: 1800, plain: 1000, lossText: 300 }) && !costOk({ md: 1800, plain: 1000, lossText: 299 }) && !costOk({ md: 1950, plain: 1000, lossText: 1950 }));
+}
+
+// Every frozen third-party page is named in NOTICE, with its source and the takedown route.
+{
+  const notice = new Set((await readFile(join(ROOT, "NOTICE"), "utf8")).split("\n"));
+  const unnamed = [];
+  for (const dir of ["test/fixtures", "test/pages"]) for (const f of await readdir(join(ROOT, dir))) if (!notice.has(`${dir}/${f}`)) unnamed.push(`${dir}/${f}`);
+  record("notice", "pages", `every frozen page is named in NOTICE${unnamed.length ? `: missing ${unnamed.join(", ")}` : ""}`, !unnamed.length);
 }
 
 // SSRF denylist: the shared policy blocks the full non-public range and rejects nothing public.

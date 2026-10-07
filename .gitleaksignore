@@ -1,0 +1,5 @@
+# test/fixtures/devto-event-loop.html is a frozen dev.to page (sha256 pinned in test/inventory.json).
+# Both values are public client-side keys dev.to ships in every page: a Honeybadger browser key
+# and an Algolia search-only key.
+test/fixtures/devto-event-loop.html:generic-api-key:310
+test/fixtures/devto-event-loop.html:algolia-api-key:317

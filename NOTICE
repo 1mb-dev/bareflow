@@ -1,0 +1,156 @@
+Third-party content
+
+The files below hold content from public web pages: snapshots of each page, frozen for
+regression testing of the extraction pipeline (test/), and the seed eval's WebFetch output for
+its five pages (usage/seed/runs/*/W.md). Each remains its publisher's, under the publisher's
+terms; none is covered by this project's MIT license. To have a page removed, open an issue in
+this repository.
+
+test/fixtures/caniuse-grid.html
+  https://caniuse.com/css-grid
+test/fixtures/devto-event-loop.html
+  https://dev.to/lydiahallie/javascript-visualized-event-loop-3dif
+test/fixtures/django-views.html
+  https://docs.djangoproject.com/en/6.1/topics/http/views/
+test/fixtures/docusaurus-blog-release.html
+  https://docusaurus.io/blog/releases/3.5
+test/fixtures/docusaurus-jest-mock.html
+  https://jestjs.io/docs/mock-functions
+test/fixtures/docusaurus-markdown-features.html
+  https://docusaurus.io/docs/markdown-features
+test/fixtures/github-blog-rust.html
+  https://github.blog/ai-and-ml/generative-ai/migrating-the-github-copilot-runtime-to-rust-using-copilot/
+test/fixtures/golang-faq.html
+  https://go.dev/doc/faq
+test/fixtures/k8s-pods.html
+  https://kubernetes.io/docs/concepts/workloads/pods/
+test/fixtures/k8s-probes.html
+  https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+test/fixtures/mdn-array-filter.html
+  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter
+test/fixtures/nodejs-path.html
+  https://nodejs.org/api/path.html
+test/fixtures/playwright-configuration.html
+  https://playwright.dev/docs/test-configuration
+test/fixtures/python-tutorial-controlflow.html
+  https://docs.python.org/3/tutorial/controlflow.html
+test/fixtures/python-tutorial-datastructures.html
+  https://docs.python.org/3/tutorial/datastructures.html
+test/fixtures/python-tutorial-intro.html
+  https://docs.python.org/3/tutorial/introduction.html
+test/fixtures/python-tutorial-modules.html
+  https://docs.python.org/3/tutorial/modules.html
+test/fixtures/react-state-memory.html
+  https://react.dev/learn/state-a-components-memory
+test/fixtures/rust-book-env-vars.html
+  https://doc.rust-lang.org/book/ch12-05-working-with-environment-variables.html
+test/fixtures/rust-book-ownership.html
+  https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html
+test/fixtures/rust-book-references.html
+  https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html
+test/fixtures/sqlalchemy-orm-related.html
+  https://docs.sqlalchemy.org/en/20/tutorial/orm_related_objects.html
+test/fixtures/tailwind-install.html
+  https://tailwindcss.com/docs/installation
+test/fixtures/uv-github.html
+  https://docs.astral.sh/uv/guides/integration/github/
+test/fixtures/vite-guide-features.html
+  https://vite.dev/guide/features
+test/fixtures/vite-guide.html
+  https://vitejs.dev/guide/
+test/fixtures/vitepress-pinia-state.html
+  https://pinia.vuejs.org/core-concepts/state.html
+test/fixtures/vitepress-vitest-mocking.html
+  https://vitest.dev/guide/mocking
+test/fixtures/vitepress-vue-computed.html
+  https://vuejs.org/guide/essentials/computed.html
+test/pages/biomejs_dev_analyzer_suppressions.html
+  https://biomejs.dev/analyzer/suppressions/
+test/pages/biomejs_dev_formatter_option_philosophy.html
+  https://biomejs.dev/formatter/option-philosophy
+test/pages/biomejs_dev_linter.html
+  https://biomejs.dev/linter
+test/pages/doc_rust_lang_org_book_ch12_04_testing_the_librarys_functionality_html.html
+  https://doc.rust-lang.org/book/ch12-04-testing-the-librarys-functionality.html
+test/pages/doc_rust_lang_org_book_ch12_06_writing_to_stderr_instead_of_stdout_html.html
+  https://doc.rust-lang.org/book/ch12-06-writing-to-stderr-instead-of-stdout.html
+test/pages/doc_rust_lang_org_nightly_cargo_commands_cargo_help_html.html
+  https://doc.rust-lang.org/nightly/cargo/commands/cargo-help.html
+test/pages/doc_rust_lang_org_nightly_cargo_commands_cargo_html.html
+  https://doc.rust-lang.org/nightly/cargo/commands/cargo.html#common-options
+test/pages/doc_rust_lang_org_nightly_cargo_commands_general_commands_html.html
+  https://doc.rust-lang.org/nightly/cargo/commands/general-commands.html
+test/pages/docs_astral_sh_ruff_editors.html
+  https://docs.astral.sh/ruff/editors/
+test/pages/docs_astral_sh_ruff_formatter.html
+  https://docs.astral.sh/ruff/formatter/#preview-style
+test/pages/docs_astral_sh_ruff_linter.html
+  https://docs.astral.sh/ruff/linter/
+test/pages/docs_astral_sh_uv_guides_integration_gitlab.html
+  https://docs.astral.sh/uv/guides/integration/gitlab/
+test/pages/docs_astral_sh_uv_guides_integration_marimo.html
+  https://docs.astral.sh/uv/guides/integration/marimo/
+test/pages/docs_pydantic_dev_latest_concepts_validators.html
+  https://docs.pydantic.dev/latest/concepts/validators/
+test/pages/docs_sqlalchemy_org_en_20_tutorial_further_reading_html.html
+  https://docs.sqlalchemy.org/en/20/tutorial/further_reading.html
+test/pages/docs_sqlalchemy_org_en_20_tutorial_orm_data_manipulation_html.html
+  https://docs.sqlalchemy.org/en/20/tutorial/orm_data_manipulation.html
+test/pages/docusaurus_io_docs_api_plugin_methods.html
+  https://docusaurus.io/docs/api/plugin-methods
+test/pages/docusaurus_io_docs_api_plugin_methods_extend_infrastructure.html
+  https://docusaurus.io/docs/api/plugin-methods/extend-infrastructure
+test/pages/docusaurus_io_docs_api_plugin_methods_lifecycle_apis.html
+  https://docusaurus.io/docs/api/plugin-methods/lifecycle-apis
+test/pages/fastapi_tiangolo_com_tutorial_background_tasks.html
+  https://fastapi.tiangolo.com/tutorial/background-tasks/
+test/pages/fastapi_tiangolo_com_tutorial_metadata.html
+  https://fastapi.tiangolo.com/tutorial/metadata/
+test/pages/fastapi_tiangolo_com_tutorial_server_sent_events.html
+  https://fastapi.tiangolo.com/tutorial/server-sent-events/
+test/pages/hono_dev_docs_helpers_conninfo.html
+  https://hono.dev/docs/helpers/conninfo
+test/pages/hono_dev_docs_helpers_cookie.html
+  https://hono.dev/docs/helpers/cookie
+test/pages/hono_dev_docs_helpers_css.html
+  https://hono.dev/docs/helpers/css
+test/pages/playwright_dev_docs_test_cli.html
+  https://playwright.dev/docs/test-cli
+test/pages/playwright_dev_docs_test_use_options.html
+  https://playwright.dev/docs/test-use-options
+test/pages/pydantic_dev_docs_validation_latest_concepts_dataclasses.html
+  https://pydantic.dev/docs/validation/latest/concepts/dataclasses/
+test/pages/pydantic_dev_docs_validation_latest_concepts_serialization.html
+  https://pydantic.dev/docs/validation/latest/concepts/serialization/
+test/pages/tailwindcss_com_docs_list_style_image.html
+  https://tailwindcss.com/docs/list-style-image
+test/pages/vite_dev_config_build_options.html
+  https://vite.dev/config/build-options
+test/pages/vite_dev_config_server_options_html.html
+  https://vite.dev/config/server-options.html
+test/pages/vite_dev_config_shared_options.html
+  https://vite.dev/config/shared-options
+test/pages/vitest_dev_guide_browser.html
+  https://vitest.dev/guide/browser/
+test/pages/vitest_dev_guide_browser_multiple_setups.html
+  https://vitest.dev/guide/browser/multiple-setups
+test/pages/vitest_dev_guide_browser_why.html
+  https://vitest.dev/guide/browser/why
+test/pages/www_prisma_io_docs_orm_prisma_migrate_workflows_baselining.html
+  https://www.prisma.io/docs/orm/prisma-migrate/workflows/baselining
+test/pages/www_sphinx_doc_org_en_master_usage_restructuredtext_directives_html.html
+  https://www.sphinx-doc.org/en/master/usage/restructuredtext/directives.html
+test/pages/www_sphinx_doc_org_en_master_usage_restructuredtext_field_lists_html.html
+  https://www.sphinx-doc.org/en/master/usage/restructuredtext/field-lists.html
+test/pages/www_sphinx_doc_org_en_master_usage_restructuredtext_roles_html.html
+  https://www.sphinx-doc.org/en/master/usage/restructuredtext/roles.html
+usage/seed/runs/S1/W.md
+  https://docs.deno.com/runtime/reference/cli/add/
+usage/seed/runs/S2/W.md
+  https://docs.astro.build/en/reference/container-reference/
+usage/seed/runs/S3/W.md
+  https://eslint.org/docs/latest/rules/object-shorthand
+usage/seed/runs/S4/W.md
+  https://rolldown.rs/reference/Interface.PluginContext
+usage/seed/runs/S5/W.md
+  https://oxc.rs/docs/guide/usage/linter/rules/react/only-export-components.html
