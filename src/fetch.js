@@ -82,7 +82,7 @@ const nodeTransport = (resolver) => (url, { host, headers, deadline, budget }) =
       let body;
       try { body = await decompress(Buffer.concat(chunks).subarray(0, MAX_BYTES), (res.headers["content-encoding"] || "").toLowerCase(), { truncated: size >= MAX_BYTES }); }
       catch (e) { return reject(new Error(`${e.message}: ${url}`)); }
-      resolve({ status: res.statusCode, contentType: res.headers["content-type"] || "", body });
+      resolve({ status: res.statusCode, body });
     };
     res.on("data", (c) => {
       chunks.push(c);

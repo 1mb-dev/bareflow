@@ -37,9 +37,10 @@ export function checkTarget(url) {
   return { host };
 }
 
-// transport(url, { host, headers, deadline, budget }) resolves one response:
-// { status, location, contentType, body } where body is the decoded bytes (Uint8Array), read to
-// at most MAX_BYTES, and is absent on a redirect. It rejects with noAnswer at the deadline.
+// transport(url, { host, headers, deadline, budget }) resolves one response: { status, location,
+// body } where body is the decoded bytes (Uint8Array), read to at most MAX_BYTES; absent on a
+// redirect, and a response without one (204, 304) is an empty page. It rejects with noAnswer at
+// the deadline.
 export async function fetchPage(url, transport, { timeout = 30000 } = {}) {
   const deadline = Date.now() + timeout;
   let at = url;
@@ -54,12 +55,9 @@ export async function fetchPage(url, transport, { timeout = 30000 } = {}) {
       continue;
     }
     if (res.status >= 400) throw new Error(`HTTP ${res.status} from ${at}; check the URL (mdflow does not retry)`);
-    const body = res.body.subarray(0, MAX_BYTES);
+    const body = (res.body ?? new Uint8Array()).subarray(0, MAX_BYTES);
     return {
-      url,
       finalUrl: at,
-      status: res.status,
-      contentType: res.contentType,
       bytes: body.length,
       // ignoreBOM keeps a leading BOM in the text, as the page has it.
       html: new TextDecoder("utf-8", { ignoreBOM: true }).decode(body),

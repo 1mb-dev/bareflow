@@ -726,18 +726,19 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
 {
   const asked = [];
   const script = (routes) => async (u) => { asked.push(u); return routes[u] ?? { status: 404 }; };
-  const page = (text) => ({ status: 200, contentType: "text/html", body: new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(text)]) });
+  const page = (text) => ({ status: 200, body: new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(text)]) });
   const outcome = (url, routes) => fetchPage(url, script(routes)).then((s) => s, (e) => e.message);
   const ok = await outcome("https://a.example/x", { "https://a.example/x": { status: 301, location: "/y" }, "https://a.example/y": page("<p>Y</p>") });
   const hops = Object.fromEntries(Array.from({ length: 7 }, (_, i) => [`https://a.example/${i}`, { status: 302, location: `/${i + 1}` }]));
-  const [tooMany, priv, scheme, missing] = await Promise.all([
+  const [tooMany, priv, scheme, missing, noBody] = await Promise.all([
     outcome("https://a.example/0", hops),
     outcome("https://a.example/p", { "https://a.example/p": { status: 307, location: "http://127.0.0.1/admin" } }),
     outcome("https://a.example/f", { "https://a.example/f": { status: 302, location: "ftp://a.example/" } }),
     outcome("https://10.example.com/", {}),
+    outcome("https://a.example/n", { "https://a.example/n": { status: 204 } }),
   ]);
-  record("fetch", "policy", "relative redirect, hop budget, private literal before any request, scheme, a range-like name, BOM kept",
-    ok.finalUrl === "https://a.example/y" && ok.url === "https://a.example/x" && ok.html === "\ufeff<p>Y</p>" && ok.fingerprint === sha256(page("<p>Y</p>").body).slice(0, 16) &&
+  record("fetch", "policy", "relative redirect, hop budget, private literal before any request, scheme, a range-like name, BOM kept, no body is an empty page",
+    noBody.html === "" && noBody.bytes === 0 && ok.finalUrl === "https://a.example/y" && ok.html === "\ufeff<p>Y</p>" && ok.fingerprint === sha256(page("<p>Y</p>").body).slice(0, 16) &&
     tooMany === "more than 5 redirects from https://a.example/6" && priv === "blocked address for 127.0.0.1: mdflow fetches public addresses only" && !asked.includes("http://127.0.0.1/admin") &&
     scheme.startsWith("unsupported protocol ftp:") && missing.startsWith("HTTP 404 from https://10.example.com/") && asked.includes("https://10.example.com/"));
 }
