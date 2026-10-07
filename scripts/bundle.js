@@ -3,6 +3,7 @@
 // checked. `npm run bundle` writes dist/mdflow.js.
 import { build } from "esbuild";
 import { writeFile, mkdir } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,7 +18,7 @@ export async function bundle() {
   return out.outputFiles[0].text;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const code = await bundle();
   await mkdir(join(ROOT, "dist"), { recursive: true });
   await writeFile(join(ROOT, "dist/mdflow.js"), code);
