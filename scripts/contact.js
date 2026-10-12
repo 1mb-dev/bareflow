@@ -31,14 +31,13 @@ for (const p of pages) {
 await site(OUT, "contact-sheet");
 await mkdir(join(OUT, "cases"));
 const entry = `
-import { showView, summary, mode } from "./site/view.js";
+import { origin, showView, mode } from "./site/view.js";
 const q = new URLSearchParams(location.search);
 const c = await (await fetch("/cases/" + Number(q.get("i")) + ".json")).json();
 document.getElementById("pointer").hidden = true;
 document.getElementById("landing").hidden = true;
 document.getElementById("result").hidden = false;
-document.getElementById("banner").textContent = "Content from " + new URL(c.url).hostname + ", not 1mb.dev.";
-document.getElementById("status").textContent = summary(c);
+origin(c.url);
 document.getElementById("note").hidden = false;
 document.getElementById("original").href = c.url;
 showView(c, c.url);

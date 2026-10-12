@@ -1,7 +1,7 @@
 // The page: route the share URL, get the bytes from /_fetch behind Turnstile, convert in the
 // worker, show the result (view.js). Page content reaches the DOM through textContent only.
 import { parseShare } from "./url.js";
-import { showView, summary } from "./view.js";
+import { origin, showView } from "./view.js";
 
 const $ = (id) => document.getElementById(id);
 const ORIGIN = location.origin;
@@ -38,8 +38,8 @@ const convertIn = (msg, transfer) => new Promise((resolve) => {
 
 function showResult(r, url) {
   if (r.error && !r.markdown) return fail(r.error, r.message);
-  if (r.error) fail(r.error, r.message); else status(summary(r));
   showView(r, url);
+  if (r.error) fail(r.error, r.message);
 }
 
 // One Turnstile token per fetch; tokens are single-use.
@@ -63,7 +63,7 @@ function token() {
 
 async function fetchAndConvert(url) {
   const host = new URL(url).hostname;
-  $("banner").textContent = `Content from ${host}, not 1mb.dev.`;
+  origin(url);
   $("original").href = url;
   $("note").hidden = false;
   status("Checking you are not a bot...");
@@ -87,7 +87,7 @@ async function convertPasted(url, html) {
   const p = parseShare(`${ORIGIN}/${url}`, ORIGIN);
   if (p.kind !== "target" && p.kind !== "redirect") return alertIn("paste-url", p.message || ASK);
   show("result");
-  $("banner").textContent = `Pasted page, asserted as ${new URL(p.url).hostname}. Nothing was fetched.`;
+  origin(p.url, true);
   $("original").href = p.url;
   status("Converting the pasted page...");
   showResult(await convertIn({ input: "paste", url: p.url, html }), p.url);

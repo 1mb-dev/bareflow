@@ -1217,6 +1217,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
       if (!TAGS.has(e.tagName)) domBad.push(`${where}: <${e.tagName}>`);
       for (const { name, value } of e.attributes) {
         const ok = name === "class" ? value.split(" ").every((c) => CLASSES.has(c))
+          : name === "id" ? /^H[1-6]$/.test(e.tagName) && /^bf-\S+$/.test(value)
           : name === "href" ? e.tagName === "A" && offSite(value) : name === "rel" ? e.tagName === "A" && value === "noopener noreferrer nofollow ugc" : false;
         if (!ok) domBad.push(`${where}: <${e.tagName} ${name}="${value.slice(0, 60)}">`);
       }
@@ -1227,6 +1228,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     const where = name ?? doc.source.url;
     const article = renderDoc(doc, document), rail = renderLosses(doc, document);
     check(article, where); check(rail, where);
+    const ids = [...article.querySelectorAll("[id]")].map((e) => e.id);
+    if (new Set(ids).size !== ids.length) domBad.push(`${where}: duplicate heading id`);
     const losses = doc.sections.flatMap((s) => s.losses);
     const notes = [...markdown.matchAll(/^L(\d+) ([a-z-]+): /gm)].map((m) => `L${m[1]} ${m[2]}`);
     const shown = [...rail.querySelectorAll(".loss-n")].map((e, i) => `${e.textContent} ${losses[i]?.source}`);
@@ -1240,6 +1243,40 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("view", "dom", `the view builds only its own tags and attributes on ${runs.length} pages; links http(s) or mailto, never 1mb.dev${domBad.length ? `: ${domBad.slice(0, 5).join(" | ")}` : ""}`, !domBad.length);
   record("view", "outline", `the view's heading levels are the Markdown's on ${runs.length} pages${levels.length ? `: ${levels.slice(0, 3).join(" | ")}` : ""}`, !levels.length);
   record("view", "losses", `L<n> in the view is L<n> in the Markdown notes on ${lossy} pages with losses${numbering.length ? `: ${numbering.slice(0, 3).join(" | ")}` : ""}`, lossy >= 9 && !numbering.length);
+
+  // The tape, through the real view.js on the shell's own markup: #result's first child, before the
+  // page, outside any details; the host said whole; the count once, as the chip; contents from 4 h2s.
+  const shell = parseHTML(await readFile(join(ROOT, "site/index.html"), "utf8")).document;
+  const page = globalThis.document;
+  globalThis.document = shell;
+  const view = await import("../site/view.js");
+  const $ = (id) => shell.getElementById(id);
+  const all = [...shell.querySelectorAll("*")];
+  const tapeBad = [];
+  if ($("result").firstElementChild !== $("tape") || all.indexOf($("tape")) > all.indexOf($("frame")) || $("tape").closest("details")) tapeBad.push("tape placement");
+  let withContents = 0;
+  for (const { doc, markdown, name } of runs) {
+    const where = name ?? doc.source.url, url = doc.source.url, host = new URL(url).hostname;
+    const head = markdown.slice(0, markdown.indexOf("\n---\n"));
+    const losses = Number(head.match(/^losses: (\d+)$/m)[1]), flattened = /^warning: /m.test(head);
+    view.origin(url);
+    const from = $("origin").textContent;
+    view.origin(url, true);
+    const pasted = $("origin").textContent;
+    view.showView({ markdown, doc, losses, flattened }, url);
+    const chip = $("status").querySelector(".chip");
+    const said = losses ? chip?.textContent === `${losses} loss${losses === 1 ? "" : "es"}` && chip.getAttribute("href") === "#rail" && $("status").textContent === chip.textContent
+      : !chip && $("status").textContent === (flattened ? "structure unreliable" : "no losses marked");
+    const h2 = [...$("frame").querySelectorAll("h2")], items = [...$("contents-list").querySelectorAll("a")];
+    const listed = items.length === h2.length && items.every((a, i) => a.getAttribute("href") === `#${h2[i].id}` && a.textContent === h2[i].textContent);
+    if (h2.length >= 4) withContents++;
+    if (from !== `from ${host}, not 1mb.dev` || pasted !== `pasted, asserted as ${host}, not 1mb.dev` || !said || !listed ||
+      $("contents").hidden !== (h2.length < 4) || $("rail").querySelectorAll(".loss-n").length !== losses) tapeBad.push(where);
+  }
+  globalThis.document = page;
+  const tapeRules = [...(await readFile(join(ROOT, "site/style.css"), "utf8")).matchAll(/(\.tape|#origin)\s*\{([^}]*)\}/g)].map((m) => m[2]).join(";");
+  record("view", "tape", `the tape is #result's first child, before the page, outside details; on ${runs.length} pages it names the host whole, says the count once (the chip) or that none is marked, and lists contents from 4 h2s (${withContents}); sticky, and nothing cuts the host${tapeBad.length ? `: ${tapeBad.slice(0, 5).join(" | ")}` : ""}`,
+    !tapeBad.length && withContents >= 20 && /position:\s*sticky/.test(tapeRules) && /top:\s*0/.test(tapeRules) && !/nowrap|text-overflow|overflow(-[xy])?:\s*(hidden|clip|auto|scroll)/.test(tapeRules));
 
   // Hostile prose, as the IR could carry it: each link either refused or resolved off 1mb.dev.
   const base = "https://docs.example.com/guide/page";
