@@ -8,15 +8,12 @@ const REPO = "https://github.com/1mb-dev/bareflow";
 const ASK = "Give a page address, like https://docs.example.com/guide/install.";
 const UNAVAILABLE = "Fetch is unavailable right now: paste the page's HTML on the home page, or run npx bareflow <url>.";
 
-// The names the app gives each failure: /_fetch codes, worker codes, and the page's own.
+// For failures that arrive without a message of their own.
 const NAMED = {
   token: "The bot check failed or expired. Reload the page to try again.",
   limited: "Too many requests from here. Wait a minute and reload.",
-  unavailable: UNAVAILABLE,
-  "not-html": "Not an HTML page.",
-  "over-cap": "Too large.",
-  empty: "Nothing readable came back.",
 };
+const sentence = (m) => m && `${m[0].toUpperCase()}${m.slice(1)}${/[.?!]$/.test(m) ? "" : "."}`;
 
 function show(section) {
   $("landing").hidden = section !== "landing";
@@ -26,8 +23,8 @@ function show(section) {
 function status(text) { $("status").textContent = text; }
 
 function fail(code, message) {
-  const named = NAMED[code];
-  status(named && message && named !== message ? `${named} ${message}` : named || message);
+  const said = sentence(message);
+  status(code === "unavailable" ? [said, UNAVAILABLE].filter(Boolean).join(" ") : said || NAMED[code]);
   $("result").classList.add("failed");
 }
 
@@ -84,7 +81,7 @@ async function fetchAndConvert(url) {
   $("banner").textContent = `Content from ${host}, not 1mb.dev.`;
   $("original").href = url;
   $("note").hidden = false;
-  status(`Checking you are not a bot, then fetching ${host}...`);
+  status("Checking you are not a bot...");
   let t;
   try { t = await token(); } catch (e) { return fail(e.message === "token" ? "token" : "unavailable"); }
   status(`Fetching ${host}...`);
