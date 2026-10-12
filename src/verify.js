@@ -1300,7 +1300,13 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     view.showView({ markdown, doc, losses, flattened }, url);
     const chip = $("status").querySelector(".chip");
     const shut = !$("colophon").hasAttribute("open");
-    if (chip) { chip.onclick(click); if (!$("colophon").hasAttribute("open")) tapeBad.push(`${where}: chip leaves the colophon shut`); view.showView({ markdown, doc, losses, flattened }, url); }
+    if (chip) {
+      chip.onclick(click);
+      if (!$("colophon").hasAttribute("open")) tapeBad.push(`${where}: chip leaves the colophon shut`);
+      view.mode(true); // the chip stays on the tape in markdown mode, so its target must stay shown
+      if ($("rail").hidden) tapeBad.push(`${where}: losses hidden in markdown mode`);
+      view.showView({ markdown, doc, losses, flattened }, url);
+    }
     const said = losses ? chip?.textContent === `${losses} loss${losses === 1 ? "" : "es"}` && chip.getAttribute("href") === "#rail" && $("status").textContent === chip.textContent
       : !chip && $("status").textContent === (flattened ? "structure unreliable" : "no losses marked");
     const h2 = [...$("frame").querySelectorAll("h2")], items = [...$("contents-list").querySelectorAll("a")], toc = [...$("toc-list").querySelectorAll("a")];

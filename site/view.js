@@ -65,12 +65,14 @@ function reachable() {
     }
   }
 }
-globalThis.addEventListener?.("resize", reachable);
+// A resize can flip a block's overflow and cross the margin list's breakpoint.
+globalThis.addEventListener?.("resize", () => { reachable(); current(); });
 
 // The page's h2s as a list, from four up: in the tape on a phone, in the left margin from 56rem
 // (CSS shows one or the other).
+let heads = []; // the page's h2s, kept for current() on every scroll
 function contents() {
-  const heads = [...$("frame").querySelectorAll("h2")];
+  heads = [...$("frame").querySelectorAll("h2")];
   for (const id of ["contents-list", "toc-list"]) {
     $(id).replaceChildren(...heads.map((h) => {
       const li = document.createElement("li"), a = document.createElement("a");
@@ -92,7 +94,6 @@ let marked = -2;
 function current() {
   if ($("toc").hidden || !$("toc").offsetParent) return;
   const line = $("tape").getBoundingClientRect().bottom + 16;
-  const heads = [...$("frame").querySelectorAll("h2")];
   let at = -1;
   for (let i = 0; i < heads.length && heads[i].getBoundingClientRect().top <= line; i++) at = i;
   if (at === marked) return;
@@ -107,6 +108,7 @@ globalThis.addEventListener?.("scroll", current, { passive: true });
 // fragment there becomes part of the target's (and the Markdown's source line).
 function jump(event, el) {
   event.preventDefault();
+  measure(); // the tape may have just changed height (a list closed); the observer reports late
   if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
   el.scrollIntoView();
   el.focus({ preventScroll: true });
@@ -118,7 +120,7 @@ const unfold = (event, el) => { $("colophon").setAttribute("open", ""); jump(eve
 export function mode(source) {
   $("frame").hidden = source;
   $("contents").hidden = $("toc").hidden = source || $("contents").dataset.shown !== "true";
-  $("rail").hidden = source || !$("rail").querySelector("li");
+  $("rail").hidden = !$("rail").querySelector("li"); // in the folded colophon, so in both modes
   $("output").hidden = !source;
   $("mode").setAttribute("aria-pressed", String(source));
   reachable();
@@ -149,6 +151,7 @@ export function showView(r, url) {
   $("fold").onclick = () => fold($("tape-more").hidden, true);
   $("view").hidden = false;
   mode(false);
+  document.fonts?.ready.then(reachable); // a web font arriving can change what overflows
   $("mode").onclick = () => mode($("mode").getAttribute("aria-pressed") !== "true");
   $("about").onclick = (e) => unfold(e, $("colophon").querySelector("summary"));
   $("copy").onclick = () => navigator.clipboard.writeText(r.markdown).then(() => said($("copy"), "copied"), () => said($("copy"), "copy failed: use markdown, select all"));
