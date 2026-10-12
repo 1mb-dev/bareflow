@@ -2,7 +2,7 @@
 // it at the repo root). The worker is the verified bundle (scripts/bundle.js) plus site/worker.js.
 // TURNSTILE_SITEKEY sets the widget's key; unset, it is Cloudflare's always-pass test key.
 import { build } from "esbuild";
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,7 @@ export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.
     writeFile(join(out, "_app/app.js"), app.outputFiles[0].text),
     writeFile(join(out, "_app/worker.js"), `${await bundle()}\n${await readFile(join(ROOT, "site/worker.js"), "utf8")}`),
     writeFile(join(out, "_app/style.css"), (await Promise.all(["site/tokens.css", "site/style.css"].map((f) => readFile(join(ROOT, f), "utf8")))).join("\n")),
+    cp(join(ROOT, "site/fonts"), join(out, "_app/fonts"), { recursive: true }),
     copyFile(join(ROOT, "site/_headers"), join(out, "_headers")),
     copyFile(join(ROOT, "site/_routes.json"), join(out, "_routes.json")),
   ]);

@@ -40,8 +40,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const inventory = JSON.parse(await readFile(join(ROOT, "test/inventory.json"), "utf8"));
 const realPages = JSON.parse(await readFile(join(ROOT, "test/pages.json"), "utf8"));
 const FIXED = "2026-01-01T00:00:00.000Z";
-// The page's CSP, as phase-4 and Turnstile's CSP reference give it.
-const CSP = "default-src 'none'; script-src 'self' https://challenges.cloudflare.com; worker-src 'self'; connect-src 'self'; style-src 'self'; frame-src https://challenges.cloudflare.com; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+// The page's CSP, as phase-4 and Turnstile's CSP reference give it, and font-src for site/fonts.
+const CSP = "default-src 'none'; script-src 'self' https://challenges.cloudflare.com; worker-src 'self'; connect-src 'self'; style-src 'self'; font-src 'self'; frame-src https://challenges.cloudflare.com; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 // HTML sinks by name, so any form of use (`+=`, brackets, a call) matches; app code writes the DOM
 // through createElement and textContent only.
 const SINKS = /\b(?:innerHTML|outerHTML|insertAdjacentHTML|setHTMLUnsafe|setHTML|parseHTMLUnsafe|DOMParser|createContextualFragment|srcdoc)\b|\bdocument\.write/;
@@ -1127,7 +1127,21 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const [tokens, style, builtStyle] = await Promise.all([join(ROOT, "site/tokens.css"), join(ROOT, "site/style.css"), join(out, "_app/style.css")].map((f) => readFile(f, "utf8")));
   const scripts = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1]);
   const visible = parseHTML(html).document.getElementById("pointer")?.textContent;
+  // Fonts: what SOURCE names, byte for byte, under the cap, with their license beside them.
+  const FONT_CAP = 200 * 1024;
+  const fontDir = join(out, "_app/fonts");
+  const fontFiles = (await readdir(fontDir)).filter((f) => f.endsWith(".woff2"));
+  const fontBytes = await Promise.all(fontFiles.map((f) => readFile(join(fontDir, f))));
+  const fontTotal = fontBytes.reduce((s, b) => s + b.length, 0);
+  const sourced = Object.fromEntries([...(await readFile(join(ROOT, "site/fonts/SOURCE"), "utf8")).matchAll(/^(\S+\.woff2) \S+ sha256 ([0-9a-f]{64})$/gm)].map((m) => [m[1], m[2]]));
+  const unsourced = fontFiles.filter((f, i) => sourced[f] !== createHash("sha256").update(fontBytes[i]).digest("hex"));
+  const linked = [...builtStyle.matchAll(/url\((\/[^)]+)\)/g), ...html.matchAll(/<link rel="preload" href="([^"]+)"/g)].map((m) => m[1]);
+  const unlinked = (await Promise.all(linked.map((u) => readFile(join(out, u)).then(() => [], () => [u])))).flat();
+  const ofl = await readFile(join(fontDir, "OFL.txt"), "utf8").catch(() => "");
   await rm(out, { recursive: true, force: true });
+  record("web", "fonts", `${fontFiles.length} fonts, ${fontTotal} bytes (cap ${FONT_CAP}), each equal to its SOURCE sha256; every url() and preload resolves; OFL.txt ships${[...unsourced, ...unlinked].length ? `: ${[...unsourced, ...unlinked].join(", ")}` : ""}`,
+    fontFiles.length === 3 && fontTotal <= FONT_CAP && Object.keys(sourced).length === fontFiles.length && !unsourced.length &&
+    linked.length >= 5 && !unlinked.length && (ofl.match(/SIL OPEN FONT LICENSE Version 1\.1/g) ?? []).length === 2);
   record("web", "shell", "the shell's text for curl and agents names no command that does not exist yet; sitekey set; scripts from self and challenges.cloudflare.com only",
     visible === "bareflow converts this page in your browser. The CLI and MCP server ship on npm with 0.5.0. Source: github.com/1mb-dev/bareflow." && html.includes('data-sitekey="test-sitekey"') &&
     scripts.length === 2 && scripts.every((s) => s.startsWith("/_app/") || s.startsWith("https://challenges.cloudflare.com/")));

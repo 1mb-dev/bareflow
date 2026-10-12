@@ -5,12 +5,25 @@
    verify enforces: no color literal outside this file; no box-shadow, gradient, or text-shadow;
    no border-radius over 2px; --ink, --ink-2, and --mark at 4.5:1 or more on --paper and on their
    washes, in both themes. --rule is decoration; a control's edge uses --ink-2 (3:1 non-text).
-   No web fonts: the stacks are system faces, so the CSP needs no font-src. */
+   Fonts are self-hosted from /_app/fonts (site/fonts: SOURCE, OFL.txt). Each has a local fallback
+   face whose overrides come from scripts/font-metrics.js, so the swap does not move the text. */
+@font-face { font-family: "Literata"; font-style: normal; font-weight: 200 900; font-display: swap;
+  src: url(/_app/fonts/literata-latin-wght-normal.woff2) format("woff2"); }
+@font-face { font-family: "Literata"; font-style: italic; font-weight: 200 900; font-display: swap;
+  src: url(/_app/fonts/literata-latin-wght-italic.woff2) format("woff2"); }
+@font-face { font-family: "Atkinson Hyperlegible Mono"; font-style: normal; font-weight: 200 800; font-display: swap;
+  src: url(/_app/fonts/atkinson-hyperlegible-mono-latin-wght-normal.woff2) format("woff2"); }
+@font-face { font-family: "Literata Fallback"; font-style: normal; src: local("Georgia");
+  size-adjust: 108.31%; ascent-override: 108.67%; descent-override: 28.44%; line-gap-override: 0%; }
+@font-face { font-family: "Literata Fallback"; font-style: italic; src: local("Georgia Italic");
+  size-adjust: 99.41%; ascent-override: 118.40%; descent-override: 30.98%; line-gap-override: 0%; }
+@font-face { font-family: "Mono Fallback"; src: local("Menlo Regular"), local("Menlo-Regular"), local("DejaVu Sans Mono");
+  size-adjust: 104.97%; ascent-override: 93.74%; descent-override: 30.10%; line-gap-override: 0%; }
 :root {
   --paper: #fbfaf6; --ink: #1b1a17; --ink-2: #5c5a54; --rule: #d8d5cc;
   --mark: #b8361b; --mark-wash: #f8e9e3; --code-wash: #f1efe8; --focus: #1b1a17;
-  --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Sitka Text", Cambria, Georgia, serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --serif: "Literata", "Literata Fallback", Georgia, serif;
+  --mono: "Atkinson Hyperlegible Mono", "Mono Fallback", ui-monospace, Menlo, Consolas, monospace;
   --t-small: 0.8125rem; --t-body: 1.0625rem; --t-head: 1.25rem; --t-title: 1.625rem;
   --s-1: 0.25rem; --s-2: 0.5rem; --s-3: 1rem; --s-4: 2rem;
   --measure: 40rem; --radius: 2px;

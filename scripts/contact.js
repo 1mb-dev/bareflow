@@ -85,7 +85,7 @@ await Promise.all([
   writeFile(join(OUT, "sheet.html"), sheet),
 ]);
 
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".json": "application/json", ".css": "text/css" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".json": "application/json", ".css": "text/css", ".woff2": "font/woff2" };
 createServer(async (req, res) => {
   const path = normalize(new URL(req.url, "http://localhost").pathname.replace(/^\/$/, "/sheet.html"));
   const file = join(OUT, path);

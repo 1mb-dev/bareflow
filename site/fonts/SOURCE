@@ -1,0 +1,4 @@
+Fonts: fontsource builds of the Google Fonts sources, from npm; license in OFL.txt (OFL-1.1).
+literata-latin-wght-normal.woff2 @fontsource-variable/literata@5.3.0 sha256 9adbeac5b167fe5ad6c49d9e29aa0c76e2f1bb3b46bf4ebf12a9eca7d3525384
+literata-latin-wght-italic.woff2 @fontsource-variable/literata@5.3.0 sha256 ab198d6616c7cc966f26a4a5b28a3977dc47439640f09d9b3361226bd465c404
+atkinson-hyperlegible-mono-latin-wght-normal.woff2 @fontsource-variable/atkinson-hyperlegible-mono@5.3.0 sha256 2706b1ee4f452e744ea91f7e4908cbde9c5d35521bf5ffffc71a382a2de89613
