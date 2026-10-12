@@ -67,20 +67,35 @@ function reachable() {
 }
 globalThis.addEventListener?.("resize", reachable);
 
-// The page's h2s as a list in the tape, from four up.
+// The page's h2s as a list, from four up: in the tape on a phone, in the left margin from 56rem
+// (CSS shows one or the other).
 function contents() {
-  const list = $("contents-list"), heads = [...$("frame").querySelectorAll("h2")];
-  list.replaceChildren();
-  for (const h of heads) {
-    const li = document.createElement("li"), a = document.createElement("a");
-    a.href = `#${h.id}`;
-    a.textContent = h.textContent;
-    a.onclick = (e) => { $("contents").removeAttribute("open"); jump(e, h); };
-    li.append(a);
-    list.append(li);
+  const heads = [...$("frame").querySelectorAll("h2")];
+  for (const id of ["contents-list", "toc-list"]) {
+    $(id).replaceChildren(...heads.map((h) => {
+      const li = document.createElement("li"), a = document.createElement("a");
+      a.href = `#${h.id}`;
+      a.textContent = h.textContent;
+      a.onclick = (e) => { $("contents").removeAttribute("open"); jump(e, h); };
+      li.append(a);
+      return li;
+    }));
   }
   $("contents").dataset.shown = String(heads.length >= 4);
 }
+
+// The margin list marks the section being read: the last h2 at or above the tape's lower edge.
+function current() {
+  if ($("toc").hidden) return;
+  const line = $("tape").getBoundingClientRect().bottom + 16;
+  const heads = [...$("frame").querySelectorAll("h2")];
+  let at = -1;
+  for (let i = 0; i < heads.length && heads[i].getBoundingClientRect().top <= line; i++) at = i;
+  $("toc-list").querySelectorAll("a").forEach((a, i) => {
+    if (i === at) a.setAttribute("aria-current", "location"); else a.removeAttribute("aria-current");
+  });
+}
+globalThis.addEventListener?.("scroll", current, { passive: true });
 
 // In-page links move the view and focus, never the address: the address is the share URL, and a
 // fragment there becomes part of the target's (and the Markdown's source line).
@@ -96,11 +111,12 @@ const unfold = (event, el) => { $("colophon").setAttribute("open", ""); jump(eve
 
 export function mode(source) {
   $("frame").hidden = source;
-  $("contents").hidden = source || $("contents").dataset.shown !== "true";
+  $("contents").hidden = $("toc").hidden = source || $("contents").dataset.shown !== "true";
   $("rail").hidden = source || !$("rail").querySelector("li");
   $("output").hidden = !source;
   $("mode").setAttribute("aria-pressed", String(source));
   reachable();
+  current();
 }
 
 // A button says what it did for two seconds; the status line keeps the result's own message.

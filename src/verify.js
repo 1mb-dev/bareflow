@@ -1281,18 +1281,21 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     if (chip) { chip.onclick(click); if (!$("colophon").hasAttribute("open")) tapeBad.push(`${where}: chip leaves the colophon shut`); view.showView({ markdown, doc, losses, flattened }, url); }
     const said = losses ? chip?.textContent === `${losses} loss${losses === 1 ? "" : "es"}` && chip.getAttribute("href") === "#rail" && $("status").textContent === chip.textContent
       : !chip && $("status").textContent === (flattened ? "structure unreliable" : "no losses marked");
-    const h2 = [...$("frame").querySelectorAll("h2")], items = [...$("contents-list").querySelectorAll("a")];
-    const listed = items.length === h2.length && items.every((a, i) => a.getAttribute("href") === `#${h2[i].id}` && a.textContent === h2[i].textContent);
+    const h2 = [...$("frame").querySelectorAll("h2")], items = [...$("contents-list").querySelectorAll("a")], toc = [...$("toc-list").querySelectorAll("a")];
+    const listed = items.length === h2.length && items.every((a, i) => a.getAttribute("href") === `#${h2[i].id}` && a.textContent === h2[i].textContent) &&
+      toc.length === items.length && toc.every((a, i) => a.getAttribute("href") === items[i].getAttribute("href") && a.textContent === items[i].textContent) && $("toc").hidden === $("contents").hidden;
     if (h2.length >= 4) withContents++;
     if (from !== `from ${host}, not 1mb.dev` || hostOnly !== host || pasted !== `pasted, asserted as ${host}, not 1mb.dev` || $("from").hidden || !said || !listed ||
       $("contents").hidden !== (h2.length < 4) || $("rail").querySelectorAll(".loss-n").length !== losses || $("fold").hidden || !folded() || !shut) tapeBad.push(where);
   }
   // The colophon: a details after the page, holding the losses; the tape's link opens it.
   if ($("colophon").tagName !== "DETAILS" || !$("colophon").contains($("rail")) || all.indexOf($("colophon")) < all.indexOf($("frame"))) tapeBad.push("colophon placement");
-  const entry = $("contents-list").querySelector("a");
+  const entry = $("contents-list").querySelector("a"), margin = $("toc-list").querySelector("a");
   entry?.onclick(click);
+  margin?.onclick(click);
   $("about").onclick(click);
-  const clicks = lossy + 1 + (entry ? 1 : 0);
+  const clicks = lossy + 1 + (entry ? 1 : 0) + (margin ? 1 : 0);
+  if ($("toc").parentElement !== $("view") || $("toc").nextElementSibling !== $("frame")) tapeBad.push("margin contents placement");
   if (kept !== clicks) tapeBad.push(`in-page links moved the address (${kept} of ${clicks} kept it)`);
   if (!$("colophon").hasAttribute("open")) tapeBad.push("about this copy leaves the colophon shut");
   const before = $("tape-more").hidden;
@@ -1301,7 +1304,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   globalThis.document = page;
   const tapeCss = [...(await readFile(join(ROOT, "site/style.css"), "utf8")).replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]*(?:\.tape|#origin)[^{}]*)\{([^}]*)\}/g)];
   const tapeRules = tapeCss.map((m) => m[2]).join(";"), originRule = tapeCss.filter((m) => m[1].includes("#origin")).map((m) => m[2]).join(";");
-  record("view", "tape", `the tape is #result's first child, before the page, outside details; on ${runs.length} pages line 2 says from <host>, not 1mb.dev, only the host scrolling, says the count once (the chip) or that none is marked, and lists contents from 4 h2s (${withContents}); rolled keeps wordmark, origin, and count, and more/less toggles; the colophon, after the page, is shut until the chip or about this copy opens it; sticky; the host scrolls in place, never truncated${tapeBad.length ? `: ${tapeBad.slice(0, 5).join(" | ")}` : ""}`,
+  record("view", "tape", `the tape is #result's first child, before the page, outside details; on ${runs.length} pages line 2 says from <host>, not 1mb.dev, only the host scrolling, says the count once (the chip) or that none is marked, and lists contents from 4 h2s (${withContents}), the same list in the margin; rolled keeps wordmark, origin, and count, and more/less toggles; the colophon, after the page, is shut until the chip or about this copy opens it; sticky; the host scrolls in place, never truncated${tapeBad.length ? `: ${tapeBad.slice(0, 5).join(" | ")}` : ""}`,
     !tapeBad.length && withContents >= 20 && /position:\s*sticky/.test(tapeRules) && /top:\s*0/.test(tapeRules) && !/text-overflow|overflow(-[xy])?:\s*(hidden|clip)/.test(tapeRules) && /overflow-x:\s*auto/.test(originRule));
 
   // Hostile prose, as the IR could carry it: each link either refused or resolved off 1mb.dev.
