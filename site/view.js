@@ -53,6 +53,15 @@ function fold(full, keep) {
   measure();
 }
 
+// A code block or table that scrolls sideways takes keyboard focus; one that fits does not.
+function reachable() {
+  for (const e of $("frame").querySelectorAll("pre, .table-scroll")) {
+    if (e.scrollWidth > e.clientWidth) e.setAttribute("tabindex", "0");
+    else e.removeAttribute("tabindex");
+  }
+}
+globalThis.addEventListener?.("resize", reachable);
+
 // The page's h2s as a list in the tape, from four up.
 function contents() {
   const list = $("contents-list"), heads = [...$("frame").querySelectorAll("h2")];
@@ -112,6 +121,7 @@ export function showView(r, url) {
   $("fold").onclick = () => fold($("tape-more").hidden, true);
   $("view").hidden = false;
   mode(false);
+  reachable();
   $("mode").onclick = () => mode($("mode").getAttribute("aria-pressed") !== "true");
   $("about").onclick = (e) => unfold(e, $("colophon").querySelector("summary"));
   $("copy").onclick = () => navigator.clipboard.writeText(r.markdown).then(() => said($("copy"), "copied"), () => said($("copy"), "copy failed: use markdown, select all"));

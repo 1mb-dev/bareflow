@@ -1208,8 +1208,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("view", "inline", `the view's inline reader equals marked on ${fields} prose fields of ${runs.length} frozen pages and corpus inputs${differ.length ? `: ${differ.length} differ, ${differ.filter(Boolean).join(" | ")}` : ""}`, fields > 1000 && !differ.length);
 
   const { document } = parseHTML("<!doctype html><html><body></body></html>");
-  const TAGS = new Set(["ARTICLE", "H1", "H2", "H3", "H4", "H5", "H6", "P", "UL", "OL", "LI", "BLOCKQUOTE", "FIGURE", "FIGCAPTION", "PRE", "CODE", "TABLE", "THEAD", "TBODY", "TR", "TH", "TD", "A", "STRONG", "EM", "BR", "SPAN", "DETAILS", "SUMMARY"]);
-  const CLASSES = new Set(["page", "code", "image", "image-alt", "image-src", "link-refused", "losses", "loss-n"]);
+  const TAGS = new Set(["ARTICLE", "H1", "H2", "H3", "H4", "H5", "H6", "P", "UL", "OL", "LI", "BLOCKQUOTE", "FIGURE", "FIGCAPTION", "PRE", "CODE", "TABLE", "THEAD", "TBODY", "TR", "TH", "TD", "A", "STRONG", "EM", "BR", "SPAN", "DETAILS", "SUMMARY", "DIV"]);
+  const CLASSES = new Set(["page", "code", "image", "image-alt", "image-src", "link-refused", "losses", "loss-n", "table-scroll"]);
   const offSite = (h) => { try { const u = new URL(h); return /^(https?|mailto):$/.test(u.protocol) && !/(^|\.)1mb\.dev\.?$/i.test(u.hostname); } catch { return false; } };
   const domBad = [];
   const check = (root, where) => {
@@ -1218,6 +1218,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
       for (const { name, value } of e.attributes) {
         const ok = name === "class" ? value.split(" ").every((c) => CLASSES.has(c))
           : name === "id" ? /^H[1-6]$/.test(e.tagName) && /^bf-\S+$/.test(value)
+          : name === "role" || name === "aria-label" ? e.tagName === "DIV" && e.className === "table-scroll" && value === (name === "role" ? "region" : "table")
           : name === "href" ? e.tagName === "A" && offSite(value) : name === "rel" ? e.tagName === "A" && value === "noopener noreferrer nofollow ugc" : false;
         if (!ok) domBad.push(`${where}: <${e.tagName} ${name}="${value.slice(0, 60)}">`);
       }

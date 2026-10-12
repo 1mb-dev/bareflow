@@ -54,14 +54,29 @@ html { scroll-padding-top: calc(var(--tape-h, 0px) + var(--s-2)); }
 .page h3 { font-size: var(--t-h3); margin: var(--s-3) 0 var(--s-2); }
 .page h4, .page h5, .page h6 { font-size: var(--t-h4); margin: var(--s-3) 0 var(--s-2); }
 .page :is(h1, h2, h3, h4, h5, h6) { font-weight: 600; }
-.page blockquote { margin: var(--s-3) 0; padding-left: var(--s-3); border-left: 2px solid var(--rule); color: var(--ink-2); }
+.page blockquote { margin: var(--s-3) 0 var(--s-3) var(--s-4); }
+.page li::marker { color: var(--ink-2); }
 .page figure { margin: var(--s-3) 0; }
 .page figcaption { font: var(--t-small) var(--mono); color: var(--ink-2); }
 pre { background: var(--code-wash); padding: var(--s-3); border-radius: var(--radius); overflow-x: auto; font-size: var(--t-small); line-height: 1.5; }
 pre code { background: none; padding: 0; font-size: inherit; }
+/* Code is never soft-wrapped: it scrolls in its block. */
+.page pre { margin: 0; font-size: 0.875em; }
 .source { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: var(--s-4); }
-.page table { border-collapse: collapse; display: block; overflow-x: auto; font-size: var(--t-small); }
-.page th, .page td { border: 1px solid var(--rule); padding: var(--s-1) var(--s-2); text-align: left; vertical-align: top; }
+.table-scroll { margin: var(--s-3) 0; overflow-x: auto; }
+.page table { border-collapse: collapse; font-size: var(--t-small); font-variant-numeric: tabular-nums; }
+.page th, .page td { padding: var(--s-1) var(--s-2); text-align: left; vertical-align: top; border-bottom: 1px solid var(--rule); }
+.page th { border-bottom-color: var(--ink-2); }
+/* Phone: code and tables bleed to the screen's edges; inline code breaks anywhere. */
+@media (max-width: 39.99rem) {
+  .page pre, .table-scroll { margin-inline: calc(-1 * var(--s-3)); border-radius: 0; }
+  .table-scroll { padding-inline: var(--s-3); }
+  .page :not(pre) > code { overflow-wrap: anywhere; }
+}
+/* Wide: a wide code block or table breaks out to the right, up to 56rem; the text keeps its measure. */
+@media (min-width: 76rem) {
+  .page pre, .table-scroll { width: max-content; min-width: 100%; max-width: 56rem; }
+}
 .image { display: inline-flex; flex-direction: column; border: 1px dashed var(--ink-2); padding: var(--s-1) var(--s-2); font: var(--t-small)/1.4 var(--mono); color: var(--ink-2); max-width: 100%; }
 .image-src { overflow-wrap: anywhere; }
 
