@@ -41,6 +41,12 @@ const realPages = JSON.parse(await readFile(join(ROOT, "test/pages.json"), "utf8
 const FIXED = "2026-01-01T00:00:00.000Z";
 // The page's CSP, as phase-4 and Turnstile's CSP reference give it.
 const CSP = "default-src 'none'; script-src 'self' https://challenges.cloudflare.com; worker-src 'self'; connect-src 'self'; style-src 'self'; frame-src https://challenges.cloudflare.com; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+// HTML sinks by name, so any form of use (`+=`, brackets, a call) matches; app code writes the DOM
+// through createElement and textContent only.
+const SINKS = /\b(?:innerHTML|outerHTML|insertAdjacentHTML|setHTMLUnsafe|setHTML|parseHTMLUnsafe|DOMParser|createContextualFragment|srcdoc)\b|\bdocument\.write/;
+const SINK_FORMS = ["el.innerHTML = x", "el.innerHTML += x", 'el["innerHTML"] = x', "el.outerHTML = x", "el.insertAdjacentHTML(\"beforeend\", x)",
+  "document.write(x)", "document.writeln(x)", "el.setHTMLUnsafe(x)", "el.setHTML(x)", "Document.parseHTMLUnsafe(x)", "new DOMParser()",
+  "range.createContextualFragment(x)", "frame.srcdoc = x"];
 
 const blocks = (doc) => [...walk(doc)].map(({ block }) => block);
 const results = [];
@@ -1097,18 +1103,24 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
 {
   const out = siteOut;
   const html = await readFile(join(out, "index.html"), "utf8");
-  const appSrc = (await Promise.all(["site/app.js", "site/url.js", "site/worker.js"].map((f) => readFile(join(ROOT, f), "utf8")))).join("\n");
-  const appBuilt = await readFile(join(out, "_app/app.js"), "utf8");
+  // Every site script, source and built. Not _app/worker.js: it is the bundle, whose linkedom uses
+  // these names on its own DOM inside a Worker; its page-side source is site/worker.js, scanned.
+  const scanned = [
+    ...(await readdir(join(ROOT, "site"), { recursive: true })).filter((f) => f.endsWith(".js")).map((f) => join(ROOT, "site", f)),
+    ...(await readdir(out, { recursive: true })).filter((f) => f.endsWith(".js") && f !== join("_app", "worker.js")).map((f) => join(out, f)),
+  ];
+  const sunk = (await Promise.all(scanned.map(async (f) => (SINKS.test(await readFile(f, "utf8")) ? [f] : [])))).flat();
   const headers = await readFile(join(out, "_headers"), "utf8");
   const routes = JSON.parse(await readFile(join(out, "_routes.json"), "utf8"));
-  const sinks = /\.innerHTML\s*=|insertAdjacentHTML|\.outerHTML\s*=|document\.write/;
   const scripts = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1]);
   const visible = parseHTML(html).document.getElementById("pointer")?.textContent;
   await rm(out, { recursive: true, force: true });
   record("web", "shell", "the shell's text points curl and agents at npx bareflow; sitekey set; scripts from self and challenges.cloudflare.com only",
     visible === "bareflow converts this page in your browser. For agents and curl: npx bareflow <url>." && html.includes('data-sitekey="test-sitekey"') &&
     scripts.length === 2 && scripts.every((s) => s.startsWith("/_app/") || s.startsWith("https://challenges.cloudflare.com/")));
-  record("web", "sinks", "no innerHTML, insertAdjacentHTML, outerHTML, or document.write in app code, source or built", !sinks.test(appSrc) && !sinks.test(appBuilt));
+  const missed = SINK_FORMS.filter((s) => !SINKS.test(s));
+  record("web", "sinks", `no HTML sink in any site script, source or built (${scanned.length} files); the pattern catches each sink form${sunk.length || missed.length ? `: ${[...sunk, ...missed].join(", ")}` : ""}`,
+    !sunk.length && !missed.length && scanned.some((f) => f.endsWith(join("_app", "app.js"))) && !SINKS.test("el.textContent = x; el.setAttribute(\"href\", u)"));
   record("web", "headers", "_headers: the CSP (Turnstile's script-src and frame-src only), nosniff, no-referrer; the Function routed at /_fetch only",
     headers.includes(`  Content-Security-Policy: ${CSP}\n`) && headers.includes("  X-Content-Type-Options: nosniff\n") && headers.includes("  Referrer-Policy: no-referrer\n") &&
     JSON.stringify(routes) === JSON.stringify({ version: 1, include: ["/_fetch"], exclude: [] }));
