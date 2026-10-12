@@ -18,7 +18,8 @@
   "scripts": {
     "bareflow": "node bin/bareflow.js",
     "verify": "node src/verify.js",
-    "bundle": "node scripts/bundle.js"
+    "bundle": "node scripts/bundle.js",
+    "site": "node scripts/site.js"
   },
   "dependencies": {
     "defuddle": "0.19.4",

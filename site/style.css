@@ -1,0 +1,26 @@
+:root { --bg: #fbfbfa; --fg: #1d1d1b; --muted: #5f5f5a; --line: #d9d9d4; --accent: #2a5db0; --warn: #8a3b12; --code: #f2f2ef; }
+@media (prefers-color-scheme: dark) { :root { --bg: #161615; --fg: #e8e8e4; --muted: #a3a39d; --line: #3a3a37; --accent: #8fb3ef; --warn: #f0a77d; --code: #1f1f1d; } }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; } /* rules that set display would otherwise show hidden elements */
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header, main { max-width: 52rem; margin: 0 auto; padding: 1rem; }
+header { border-bottom: 1px solid var(--line); }
+a { color: var(--accent); }
+.name { font-weight: 600; text-decoration: none; color: var(--fg); }
+h1 { font-size: 1.6rem; line-height: 1.25; margin: 1.5rem 0 0.75rem; }
+code, pre, input, textarea { font: 0.92rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+code { background: var(--code); padding: 0 0.25em; border-radius: 3px; }
+label { display: block; margin: 0.75rem 0 0.25rem; color: var(--muted); font-size: 0.9rem; }
+input, textarea { width: 100%; padding: 0.5rem; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); }
+.row { display: flex; gap: 0.5rem; }
+button { padding: 0.5rem 0.9rem; border: 1px solid var(--line); border-radius: 4px; background: var(--code); color: var(--fg); font: inherit; cursor: pointer; }
+.row button, #paste-form button { margin-top: 0; }
+#paste-form button { margin-top: 0.75rem; }
+.bookmarklet { padding: 0.1rem 0.5rem; border: 1px dashed var(--line); border-radius: 4px; }
+details { margin: 1rem 0; }
+summary { cursor: pointer; }
+.banner { color: var(--muted); border-left: 3px solid var(--line); padding-left: 0.75rem; }
+.failed #status { color: var(--warn); }
+.note { color: var(--muted); font-size: 0.9rem; }
+#actions { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; margin: 0.75rem 0; }
+pre { background: var(--code); border: 1px solid var(--line); border-radius: 4px; padding: 1rem; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -5,7 +5,8 @@
 // failure.
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { createServer } from "node:http";
 import vm from "node:vm";
 import { join, dirname } from "node:path";
@@ -16,7 +17,7 @@ import { convert } from "./convert.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
 import { decompress, fetchSnapshot } from "./fetch.js";
-import { fetchPage, MAX_BYTES } from "./fetch-policy.js";
+import { fetchPage, MAX_BYTES, snapshot } from "./fetch-policy.js";
 import { edgeTransport, handler, SITEVERIFY } from "./edge.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
@@ -31,11 +32,15 @@ import { scoreLoss, scoreNav } from "./truth.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
 import { sha256 } from "./sha256.js";
 import { bundle } from "../scripts/bundle.js";
+import { site } from "../scripts/site.js";
+import { parseShare } from "../site/url.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const inventory = JSON.parse(await readFile(join(ROOT, "test/inventory.json"), "utf8"));
 const realPages = JSON.parse(await readFile(join(ROOT, "test/pages.json"), "utf8"));
 const FIXED = "2026-01-01T00:00:00.000Z";
+// The page's CSP, as phase-4 and Turnstile's CSP reference give it.
+const CSP = "default-src 'none'; script-src 'self' https://challenges.cloudflare.com; worker-src 'self'; connect-src 'self'; style-src 'self'; frame-src https://challenges.cloudflare.com; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
 const blocks = (doc) => [...walk(doc)].map(({ block }) => block);
 const results = [];
@@ -835,6 +840,54 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   record("fetch", "cap", "an endless body is read to the byte cap and the connection closed, inside the budget", endless === MAX_BYTES);
 }
 
+// The share URL grammar (site/url.js): the browser's collapsed slash, an encoded target, query
+// and fragment kept, a bare host sent on as https, and every other scheme refused.
+{
+  const o = "https://bareflow.1mb.dev";
+  const cases = [
+    ["", "landing"], ["/#top", "landing"],
+    ["/https://a.example/x?q=1#f", "target https://a.example/x?q=1#f"],
+    ["/https:/a.example/x", "target https://a.example/x"],
+    ["/https%3A%2F%2Fa.example%2Fx%3Fq%3D1", "target https://a.example/x?q=1"],
+    ["/HTTP://A.example/x", "target http://a.example/x"],
+    ["/a.example/docs?v=2", "redirect https://a.example/docs?v=2"],
+    ["/a.example:8443/x", "redirect https://a.example:8443/x"],
+    ["/javascript:alert(1)", "error"], ["/data:text/html,x", "error"], ["/ftp://a.example/", "error"],
+    ["/localhost", "error"], ["/https%3A%2F%2F%E0%A4%A", "error"],
+  ];
+  const got = (p) => { const r = parseShare(o + p, o); return r.kind === "target" || r.kind === "redirect" ? `${r.kind} ${r.url}` : r.kind; };
+  const bad = cases.filter(([p, want]) => got(p) !== want).map(([p, want]) => `${p || "(empty)"}: ${got(p)}, want ${want}`);
+  record("web", "url", `share URL grammar on ${cases.length} cases${bad.length ? `: ${bad.join("; ")}` : ""}`, !bad.length);
+}
+
+// The page's worker is the bundle plus site/worker.js, run here as the browser runs it: bytes from
+// /_fetch become the same document as the CLI's snapshot of those bytes; a paste is input
+// "paste"; binary, empty, and oversized inputs come back named.
+{
+  const code = `${await bundle()}\n${await readFile(join(ROOT, "site/worker.js"), "utf8")}`;
+  const ask = (msg) => new Promise((resolve) => {
+    const self = { postMessage: resolve };
+    vm.runInContext(code, vm.createContext({ self, URL, TextEncoder, TextDecoder, console, setTimeout, clearTimeout, queueMicrotask, structuredClone, atob, btoa }));
+    self.onmessage({ data: msg });
+  });
+  const off = [];
+  const noTime = (md) => md.replace(/^retrieved: .*$/m, "retrieved: -");
+  for (const r of cliRuns.slice(0, 3)) {
+    const body = new TextEncoder().encode(r.html);
+    const finalUrl = `${r.url}${r.url.includes("?") ? "&" : "?"}moved`;
+    const w = await ask({ input: "edge", url: r.url, finalUrl, bytes: body.buffer });
+    const s = snapshot({ finalUrl, body });
+    const c = await convert({ url: r.url, finalUrl, html: s.html, retrievedAt: s.retrievedAt, fingerprint: s.fingerprint, input: "edge" });
+    if (w.error || noTime(w.markdown) !== noTime(c.markdown) || !w.markdown.includes(`\nfingerprint: ${sha256(body).slice(0, 16)}\n`)) off.push(`${r.name} edge${w.error ? ` (${w.message})` : ""}`);
+  }
+  const paste = await ask({ input: "paste", url: "https://p.example/doc", html: "<html><body><main><h1>Doc</h1><p>Pasted body text, long enough to be content.</p></main></body></html>" });
+  const binary = await ask({ input: "edge", url: "https://p.example/f.pdf", finalUrl: "https://p.example/f.pdf", bytes: new Uint8Array([37, 80, 68, 70, 0, 1]).buffer });
+  const empty = await ask({ input: "edge", url: "https://p.example/app", finalUrl: "https://p.example/app", bytes: new TextEncoder().encode('<html><body><div id="root"></div><script src="/app.js"></script></body></html>').buffer });
+  const big = await ask({ input: "paste", url: "https://p.example/big", html: "a".repeat(MAX_BYTES + 1) });
+  record("web", "worker", `site worker = bundle + glue: CLI-equal documents from /_fetch bytes; paste, binary, empty, oversized named${off.length ? `; differ: ${off.join(", ")}` : ""}`,
+    !off.length && paste.markdown?.includes("\ninput: paste\n") && binary.error === "not-html" && empty.error === "empty" && typeof empty.markdown === "string" && big.error === "over-cap");
+}
+
 // One fetch policy, two transports: the CLI's node:http and the Function's WHATWG fetch (here
 // undici, its requests sent to a local server) give the same outcome on every transport case;
 // limits come from the policy, so a transport with its own cap or hop count turns this red.
@@ -924,6 +977,28 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
     ok.status === 200 && new TextDecoder().decode(ok.body) === "<p>page</p>" && h.get("content-type") === "application/octet-stream" && h.get("x-content-type-options") === "nosniff" &&
     h.get("content-disposition") === "attachment" && h.get("content-security-policy") === "sandbox; default-src 'none'" && h.get("x-final-url") === "https://a.example/page" &&
     !h.has("set-cookie") && !h.has("x-upstream") && missing.status === 502 && missing.code === "upstream" && noUrl.status === 400 && post.status === 405);
+}
+
+// The built site (scripts/site.js): the shell tells curl and agents where the CLI is, scripts load
+// from self and Turnstile only, app code writes no HTML, and _headers carries the CSP.
+{
+  const out = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test-sitekey");
+  const html = await readFile(join(out, "index.html"), "utf8");
+  const appSrc = (await Promise.all(["site/app.js", "site/url.js", "site/worker.js"].map((f) => readFile(join(ROOT, f), "utf8")))).join("\n");
+  const appBuilt = await readFile(join(out, "_app/app.js"), "utf8");
+  const headers = await readFile(join(out, "_headers"), "utf8");
+  const routes = JSON.parse(await readFile(join(out, "_routes.json"), "utf8"));
+  const sinks = /\.innerHTML\s*=|insertAdjacentHTML|\.outerHTML\s*=|document\.write/;
+  const scripts = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1]);
+  const visible = parseHTML(html).document.getElementById("pointer")?.textContent;
+  await rm(out, { recursive: true, force: true });
+  record("web", "shell", "the shell's text points curl and agents at npx bareflow; sitekey set; scripts from self and challenges.cloudflare.com only",
+    visible === "bareflow converts this page in your browser. For agents and curl: npx bareflow <url>." && html.includes('data-sitekey="test-sitekey"') &&
+    scripts.length === 2 && scripts.every((s) => s.startsWith("/_app/") || s.startsWith("https://challenges.cloudflare.com/")));
+  record("web", "sinks", "no innerHTML, insertAdjacentHTML, outerHTML, or document.write in app code, source or built", !sinks.test(appSrc) && !sinks.test(appBuilt));
+  record("web", "headers", "_headers: the CSP (Turnstile's script-src and frame-src only), nosniff, no-referrer; the Function routed at /_fetch only",
+    headers.includes(`  Content-Security-Policy: ${CSP}\n`) && headers.includes("  X-Content-Type-Options: nosniff\n") && headers.includes("  Referrer-Policy: no-referrer\n") &&
+    JSON.stringify(routes) === JSON.stringify({ version: 1, include: ["/_fetch"], exclude: [] }));
 }
 
 // The frozen surface (MLP v1): CLI usage and exit codes, the IR's shape, the header's fields, and

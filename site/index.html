@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bareflow</title>
+<meta name="description" content="Remove the website. Preserve the document. A docs page in, faithful Markdown out, every loss marked.">
+<meta property="og:title" content="bareflow">
+<meta property="og:description" content="Remove the website. Preserve the document.">
+<link rel="stylesheet" href="/_app/style.css">
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+<script type="module" src="/_app/app.js"></script>
+</head>
+<body data-sitekey="__SITEKEY__">
+<header><a class="name" href="/">bareflow</a></header>
+<main>
+<p id="pointer">bareflow converts this page in your browser. For agents and curl: <code>npx bareflow &lt;url&gt;</code>.</p>
+
+<section id="landing">
+  <h1>Remove the website. Preserve the document.</h1>
+  <p>Put a docs page address after <code>bareflow.1mb.dev/</code> and get the page as Markdown: deterministic, nothing paraphrased, every loss marked.</p>
+  <form id="go">
+    <label for="target">Page address</label>
+    <div class="row"><input id="target" name="target" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://docs.example.com/guide/install" required><button type="submit">Convert</button></div>
+  </form>
+  <p>Example: <a id="example" href="/https://docs.deno.com/runtime/reference/cli/add/">deno add, from the Deno docs</a></p>
+  <p>Bookmarklet, drag to your bookmarks bar: <a class="bookmarklet" href="javascript:location='https://bareflow.1mb.dev/'+location.href">bareflow this page</a></p>
+  <details id="paste">
+    <summary>Paste or drop a page's HTML</summary>
+    <form id="paste-form">
+      <label for="paste-url">The page's address (you assert it; nothing is fetched)</label>
+      <input id="paste-url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://docs.example.com/guide/install" required>
+      <label for="paste-html">HTML (or drop an .html file here)</label>
+      <textarea id="paste-html" rows="8" spellcheck="false" required></textarea>
+      <button type="submit">Convert pasted page</button>
+    </form>
+  </details>
+  <p class="for-agents" hidden>For agents: CLI and MCP, <code>npx bareflow &lt;url&gt;</code>.</p>
+  <p><a href="https://github.com/1mb-dev/bareflow">Source on GitHub</a>. MIT.</p>
+</section>
+
+<section id="result" hidden>
+  <p id="banner" class="banner"></p>
+  <p id="status" role="status"></p>
+  <div id="challenge"></div>
+  <div id="actions" hidden>
+    <button id="copy" type="button">Copy</button>
+    <button id="download" type="button">Download .md</button>
+    <a id="original" rel="noopener noreferrer">Open original</a>
+    <a id="report" rel="noopener noreferrer">Wrong output? Report</a>
+  </div>
+  <p id="note" class="note" hidden>A shared link fetches the page again; it does not keep this copy.</p>
+  <pre id="output" hidden></pre>
+</section>
+</main>
+</body>
+</html>
