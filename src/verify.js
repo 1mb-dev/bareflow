@@ -34,6 +34,7 @@ import { sha256 } from "./sha256.js";
 import { bundle } from "../scripts/bundle.js";
 import { site } from "../scripts/site.js";
 import { parseShare } from "../site/url.js";
+import { parseInline, renderDoc, renderLosses } from "../site/render.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const inventory = JSON.parse(await readFile(join(ROOT, "test/inventory.json"), "utf8"));
@@ -121,6 +122,8 @@ const truth = [];
 const fixtureDocs = new Map();
 // Every CLI conversion of a fixture or corpus page, for the bundle parity check.
 const cliRuns = [];
+// The IR of every real frozen page, for the result view's checks.
+const realDocs = [];
 const pr = (n, d) => (d ? (n / d).toFixed(2) : "-");
 for (const [id, spec] of Object.entries(inventory)) {
   const html = await readFile(join(ROOT, "test/fixtures", spec.fixture), "utf8");
@@ -641,6 +644,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
     const html = await readFile(join(ROOT, "test/pages", name), "utf8");
     if (createHash("sha256").update(html).digest("hex") !== p.sha256) { bad.push(`${name} (sha256)`); continue; }
     const { doc, markdown } = await run({ url: p.finalUrl, html, retrievedAt: FIXED });
+    realDocs.push({ doc, markdown });
     const why = headerOk(markdown) ? oracle(doc, markdown) : ["header"];
     if (why.length) bad.push(`${name} (${why.join("; ")})`);
     if (!p.cost) continue;
@@ -1124,6 +1128,86 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("web", "headers", "_headers: the CSP (Turnstile's script-src and frame-src only), nosniff, no-referrer; the Function routed at /_fetch only",
     headers.includes(`  Content-Security-Policy: ${CSP}\n`) && headers.includes("  X-Content-Type-Options: nosniff\n") && headers.includes("  Referrer-Policy: no-referrer\n") &&
     JSON.stringify(routes) === JSON.stringify({ version: 1, include: ["/_fetch"], exclude: [] }));
+}
+
+// The result view (site/render.js). Its inline reader agrees with marked on every prose field of
+// every frozen page and corpus input, so the view shows what the copied Markdown means; the DOM
+// holds only the view's own tags and attributes, links only to http(s) or mailto off 1mb.dev;
+// L<n> in the view is L<n> in the Markdown notes; hostile input stays linear.
+{
+  const flat = (ks) => (ks ?? []).map((k) => k.tokens ? flat(k.tokens) : k.text).join("");
+  const norm = (ks) => {
+    const out = [];
+    const text = (v) => { if (v) { if (out.at(-1)?.t === "text") out.at(-1).v += v; else out.push({ t: "text", v }); } };
+    for (const k of ks) {
+      if (k.type === "text" || k.type === "escape") text(k.text);
+      else if (k.type === "codespan") out.push({ t: "code", v: k.text });
+      else if (k.type === "strong" || k.type === "em") out.push({ t: k.type, c: norm(k.tokens) });
+      else if (k.type === "link") out.push({ t: "link", href: k.href, c: norm(k.tokens) });
+      else if (k.type === "image") out.push({ t: "image", src: k.href, alt: flat(k.tokens) });
+      else if (k.type === "html" && k.text === "<br>") out.push({ t: "br" });
+      else out.push({ t: `unexpected ${k.type}`, v: k.raw });
+    }
+    return out;
+  };
+  const prose = (b) => b.type === "list" ? b.items : b.type === "table" ? [...b.headers, ...b.rows.flat()] : typeof b.text === "string" ? [b.text] : [];
+  const runs = [...cliRuns, ...realDocs];
+  let fields = 0;
+  const differ = [];
+  for (const { doc } of runs) for (const { block } of walk(doc)) for (const t of prose(block)) {
+    fields++;
+    const mine = JSON.stringify(parseInline(t)), theirs = JSON.stringify(norm(marked.Lexer.lexInline(t.replace(/\n/g, "<br>"), { gfm: false })));
+    if (mine !== theirs && differ.length < 3) differ.push(`${JSON.stringify(t.slice(0, 80))}: ${mine.slice(0, 120)} vs ${theirs.slice(0, 120)}`);
+    else if (mine !== theirs) differ.push("");
+  }
+  record("view", "inline", `the view's inline reader equals marked on ${fields} prose fields of ${runs.length} frozen pages and corpus inputs${differ.length ? `: ${differ.length} differ, ${differ.filter(Boolean).join(" | ")}` : ""}`, fields > 1000 && !differ.length);
+
+  const { document } = parseHTML("<!doctype html><html><body></body></html>");
+  const TAGS = new Set(["ARTICLE", "H1", "H2", "H3", "H4", "H5", "H6", "P", "UL", "OL", "LI", "BLOCKQUOTE", "FIGURE", "FIGCAPTION", "PRE", "CODE", "TABLE", "THEAD", "TBODY", "TR", "TH", "TD", "A", "STRONG", "EM", "BR", "SPAN", "DETAILS", "SUMMARY"]);
+  const CLASSES = new Set(["page", "code", "image", "image-alt", "image-src", "link-refused", "losses", "loss-n"]);
+  const offSite = (h) => { try { const u = new URL(h); return /^(https?|mailto):$/.test(u.protocol) && !/(^|\.)1mb\.dev\.?$/i.test(u.hostname); } catch { return false; } };
+  const domBad = [];
+  const check = (root, where) => {
+    for (const e of [root, ...root.querySelectorAll("*")]) {
+      if (!TAGS.has(e.tagName)) domBad.push(`${where}: <${e.tagName}>`);
+      for (const { name, value } of e.attributes) {
+        const ok = name === "class" ? value.split(" ").every((c) => CLASSES.has(c))
+          : name === "href" ? e.tagName === "A" && offSite(value) : name === "rel" ? e.tagName === "A" && value === "noopener noreferrer nofollow ugc" : false;
+        if (!ok) domBad.push(`${where}: <${e.tagName} ${name}="${value.slice(0, 60)}">`);
+      }
+    }
+  };
+  const numbering = [];
+  for (const { doc, markdown, name } of runs) {
+    const where = name ?? doc.source.url;
+    const article = renderDoc(doc, document), rail = renderLosses(doc, document);
+    check(article, where); check(rail, where);
+    const losses = doc.sections.flatMap((s) => s.losses);
+    const notes = [...markdown.matchAll(/^L(\d+) ([a-z-]+): /gm)].map((m) => `L${m[1]} ${m[2]}`);
+    const shown = [...rail.querySelectorAll(".loss-n")].map((e, i) => `${e.textContent} ${losses[i]?.source}`);
+    if (JSON.stringify(shown) !== JSON.stringify(notes) || shown.length !== losses.length) numbering.push(`${where}: ${shown.join(",")} vs ${notes.join(",")}`);
+  }
+  const lossy = runs.filter(({ doc }) => doc.sections.some((s) => s.losses.length)).length;
+  record("view", "dom", `the view builds only its own tags and attributes on ${runs.length} pages; links http(s) or mailto, never 1mb.dev${domBad.length ? `: ${domBad.slice(0, 5).join(" | ")}` : ""}`, !domBad.length);
+  record("view", "losses", `L<n> in the view is L<n> in the Markdown notes on ${lossy} pages with losses${numbering.length ? `: ${numbering.slice(0, 3).join(" | ")}` : ""}`, lossy >= 9 && !numbering.length);
+
+  // Hostile prose, as the IR could carry it: each link either refused or resolved off 1mb.dev.
+  const base = "https://docs.example.com/guide/page";
+  const hrefOf = (t) => {
+    const a = renderDoc({ source: { url: base, finalUrl: base }, sections: [{ title: "T", blocks: [{ type: "paragraph", text: t }], losses: [], children: [] }] }, document).querySelector("a");
+    return a ? a.getAttribute("href") : null;
+  };
+  const links = [
+    ["[x](javascript:alert(1))", null], ["[x](JavaScript:alert\\(1\\))", null], ["[x](data:text/html,x)", null], ["[x](vbscript:x)", null],
+    ["[x](https://a.1mb.dev/p)", null], ["[x](//evil.1mb.dev/)", null], ["[x](HTTPS://WWW.1MB.DEV./)", null], ["[x](https://1mb.dev)", null],
+    ["\\[x\\](https://e.com)", null], ["[x](/rel?q=1)", "https://docs.example.com/rel?q=1"], ["[x](#frag)", "https://docs.example.com/guide/page#frag"],
+    ["[x](mailto:a@b.c)", "mailto:a@b.c"], ["[x](https://not1mb.dev/)", "https://not1mb.dev/"], ["![i](https://e.com/i.png)", null],
+  ];
+  const wrongLinks = links.filter(([t, want]) => hrefOf(t) !== want).map(([t]) => t);
+  record("view", "links", `hostile links: script, data, and 1mb.dev refused, relative resolved against the page, images never loaded (${links.length})${wrongLinks.length ? `: ${wrongLinks.join(" ")}` : ""}`, !wrongLinks.length);
+  const t0 = Date.now();
+  for (const t of ["[".repeat(1e5), "![".repeat(5e4), "*".repeat(1e5) + "a", "*a ".repeat(5e4), "**a* ".repeat(3e4), "[a".repeat(3e4) + "](u)".repeat(3e4), "`".repeat(1e5), "` ``".repeat(3e4), "\\".repeat(1e5)]) parseInline(t);
+  record("view", "linear", `hostile inline runs (100k brackets, stars, backticks) read in ${Date.now() - t0} ms (< 3000)`, Date.now() - t0 < 3000);
 }
 
 // The frozen surface (MLP v1): CLI usage and exit codes, the IR's shape, the header's fields, and
