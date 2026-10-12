@@ -1,0 +1,8 @@
+# The default rules, less one false positive: css-select's minified `compileToken=compileUnsafe=compile`
+# in the browser bundle reads as a generic API key.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "css-select identifiers in the esbuild bundle"
+regexes = ['''^\w+\._?compileUnsafe=\w+\._?compile=void$''']
