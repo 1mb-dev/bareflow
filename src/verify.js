@@ -1168,7 +1168,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   // system's media query and once for data-theme="dark".
   const colors = (sel) => { const at = tokens.indexOf(`${sel} {`); return at < 0 ? {} : Object.fromEntries([...tokens.slice(at, tokens.indexOf("}", at)).matchAll(/--([a-z0-9-]+):\s*(#[0-9a-f]{6})\b/gi)].map((m) => [m[1], m[2]])); };
   const light = colors(":root"), dark = colors(':root:not([data-theme="light"])'), darkSet = colors(':root[data-theme="dark"]');
-  const pairs = [["ink", "paper"], ["ink-2", "paper"], ["ink", "code-wash"], ["ink-2", "code-wash"], ["tape-ink", "tape"], ["mark-ink", "mark"], ["focus", "paper"]];
+  const pairs = [["ink", "paper"], ["ink-2", "paper"], ["ink", "code-wash"], ["ink-2", "code-wash"], ["tape-ink", "tape"], ["tape-ink-2", "tape"], ["mark-ink", "mark"], ["focus", "paper"]];
   const low = [["light", light], ["dark", dark]].flatMap(([name, t]) => pairs.map(([f, b]) => [name, f, b, t[f] && t[b] ? ratio(t[f], t[b]) : 0]).filter((p) => p[3] < 4.5));
   record("web", "contrast", `every text pair at 4.5:1 or more, light and dark (${pairs.length * 2} pairs); dark sets every light color, the same under the media query and data-theme${low.length ? `: ${low.map((p) => `${p[0]} ${p[1]}/${p[2]} ${p[3].toFixed(2)}`).join(", ")}` : ""}`,
     Object.keys(light).length >= 10 && Object.keys(light).every((k) => k in dark) && JSON.stringify(dark) === JSON.stringify(darkSet) &&
@@ -1254,15 +1254,22 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const all = [...shell.querySelectorAll("*")];
   const tapeBad = [];
   if ($("result").firstElementChild !== $("tape") || all.indexOf($("tape")) > all.indexOf($("frame")) || $("tape").closest("details")) tapeBad.push("tape placement");
+  // Rolled keeps the wordmark, the origin, and the count on line 1, outside what folds; more/less
+  // sits beside the count, and what it shows is the line below.
+  const line = $("tape").querySelector(".tape-line");
+  if (!line || line !== $("tape").firstElementChild || ![line.querySelector(".name"), $("status"), $("fold")].every((e, i) => line.children[i] === e) ||
+    line.nextElementSibling !== $("from") || ![$("origin-pre"), $("origin"), $("origin-post")].every((e, i) => $("from").children[i] === e) ||
+    $("from").nextElementSibling !== $("tape-more")) tapeBad.push("tape lines");
+  const folded = () => $("tape-more").hidden === ($("fold").getAttribute("aria-expanded") === "false") && $("fold").textContent === ($("tape-more").hidden ? "more" : "less");
   let withContents = 0;
   for (const { doc, markdown, name } of runs) {
     const where = name ?? doc.source.url, url = doc.source.url, host = new URL(url).hostname;
     const head = markdown.slice(0, markdown.indexOf("\n---\n"));
     const losses = Number(head.match(/^losses: (\d+)$/m)[1]), flattened = /^warning: /m.test(head);
     view.origin(url);
-    const from = $("origin").textContent;
+    const from = $("from").textContent, hostOnly = $("origin").textContent;
     view.origin(url, true);
-    const pasted = $("origin").textContent;
+    const pasted = $("from").textContent;
     view.showView({ markdown, doc, losses, flattened }, url);
     const chip = $("status").querySelector(".chip");
     const said = losses ? chip?.textContent === `${losses} loss${losses === 1 ? "" : "es"}` && chip.getAttribute("href") === "#rail" && $("status").textContent === chip.textContent
@@ -1270,13 +1277,17 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     const h2 = [...$("frame").querySelectorAll("h2")], items = [...$("contents-list").querySelectorAll("a")];
     const listed = items.length === h2.length && items.every((a, i) => a.getAttribute("href") === `#${h2[i].id}` && a.textContent === h2[i].textContent);
     if (h2.length >= 4) withContents++;
-    if (from !== `from ${host}, not 1mb.dev` || pasted !== `pasted, asserted as ${host}, not 1mb.dev` || !said || !listed ||
-      $("contents").hidden !== (h2.length < 4) || $("rail").querySelectorAll(".loss-n").length !== losses) tapeBad.push(where);
+    if (from !== `from ${host}, not 1mb.dev` || hostOnly !== host || pasted !== `pasted, asserted as ${host}, not 1mb.dev` || $("from").hidden || !said || !listed ||
+      $("contents").hidden !== (h2.length < 4) || $("rail").querySelectorAll(".loss-n").length !== losses || $("fold").hidden || !folded()) tapeBad.push(where);
   }
+  const before = $("tape-more").hidden;
+  $("fold").onclick();
+  if ($("tape-more").hidden === before || !folded()) tapeBad.push("more/less does not toggle");
   globalThis.document = page;
-  const tapeRules = [...(await readFile(join(ROOT, "site/style.css"), "utf8")).matchAll(/(\.tape|#origin)\s*\{([^}]*)\}/g)].map((m) => m[2]).join(";");
-  record("view", "tape", `the tape is #result's first child, before the page, outside details; on ${runs.length} pages it names the host whole, says the count once (the chip) or that none is marked, and lists contents from 4 h2s (${withContents}); sticky, and nothing cuts the host${tapeBad.length ? `: ${tapeBad.slice(0, 5).join(" | ")}` : ""}`,
-    !tapeBad.length && withContents >= 20 && /position:\s*sticky/.test(tapeRules) && /top:\s*0/.test(tapeRules) && !/nowrap|text-overflow|overflow(-[xy])?:\s*(hidden|clip|auto|scroll)/.test(tapeRules));
+  const tapeCss = [...(await readFile(join(ROOT, "site/style.css"), "utf8")).replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]*(?:\.tape|#origin)[^{}]*)\{([^}]*)\}/g)];
+  const tapeRules = tapeCss.map((m) => m[2]).join(";"), originRule = tapeCss.filter((m) => m[1].includes("#origin")).map((m) => m[2]).join(";");
+  record("view", "tape", `the tape is #result's first child, before the page, outside details; on ${runs.length} pages line 2 says from <host>, not 1mb.dev, only the host scrolling, says the count once (the chip) or that none is marked, and lists contents from 4 h2s (${withContents}); rolled keeps wordmark, origin, and count, and more/less toggles; sticky; the host scrolls in place, never truncated${tapeBad.length ? `: ${tapeBad.slice(0, 5).join(" | ")}` : ""}`,
+    !tapeBad.length && withContents >= 20 && /position:\s*sticky/.test(tapeRules) && /top:\s*0/.test(tapeRules) && !/text-overflow|overflow(-[xy])?:\s*(hidden|clip)/.test(tapeRules) && /overflow-x:\s*auto/.test(originRule));
 
   // Hostile prose, as the IR could carry it: each link either refused or resolved off 1mb.dev.
   const base = "https://docs.example.com/guide/page";

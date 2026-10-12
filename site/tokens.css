@@ -22,7 +22,7 @@
   size-adjust: 104.97%; ascent-override: 93.74%; descent-override: 30.10%; line-gap-override: 0%; }
 :root {
   --paper: #ffffff; --ink: #15171a; --ink-2: #5b6067; --rule: #e3e5e8; --code-wash: #f3f4f6;
-  --tape: #15171a; --tape-ink: #f4f5f6; --tape-edge: #15171a; --mark: #ffe14d; --mark-ink: #15171a;
+  --tape: #15171a; --tape-ink: #f4f5f6; --tape-ink-2: #9aa0a6; --tape-edge: #15171a; --mark: #ffe14d; --mark-ink: #15171a;
   --focus: #15171a; --w-text: 400;
   --serif: "Literata", "Literata Fallback", Georgia, serif;
   --mono: "Atkinson Hyperlegible Mono", "Mono Fallback", ui-monospace, Menlo, Consolas, monospace;
@@ -38,13 +38,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --paper: #111315; --ink: #e6e7e9; --ink-2: #9aa0a6; --rule: #2a2d31; --code-wash: #1a1c1f;
-    --tape: #2b2e33; --tape-ink: #f1f2f3; --tape-edge: #3a3e44; --mark: #e8c547; --mark-ink: #111315;
+    --tape: #2b2e33; --tape-ink: #f1f2f3; --tape-ink-2: #a9aeb4; --tape-edge: #3a3e44; --mark: #e8c547; --mark-ink: #111315;
     --focus: #e6e7e9; --w-text: 380;
   }
 }
 :root[data-theme="dark"] {
   --paper: #111315; --ink: #e6e7e9; --ink-2: #9aa0a6; --rule: #2a2d31; --code-wash: #1a1c1f;
-  --tape: #2b2e33; --tape-ink: #f1f2f3; --tape-edge: #3a3e44; --mark: #e8c547; --mark-ink: #111315;
+  --tape: #2b2e33; --tape-ink: #f1f2f3; --tape-ink-2: #a9aeb4; --tape-edge: #3a3e44; --mark: #e8c547; --mark-ink: #111315;
   --focus: #e6e7e9; --w-text: 380;
   color-scheme: dark;
 }

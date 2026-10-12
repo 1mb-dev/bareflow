@@ -6,12 +6,26 @@ import { renderDoc, renderLosses } from "./render.js";
 
 const $ = (id) => document.getElementById(id);
 const REPO = "https://github.com/1mb-dev/bareflow";
+const FOLD = "bareflow.tape"; // localStorage: "full" or "rolled", the reader's own choice
 
-// Where the page came from, before anything is fetched. The host is never cut: a cut host can read
-// as ours.
+// The page scrolls focus and anchors clear of the sticky tape, at whatever height it has: measured
+// on each change of the tape's own, and by the observer when the width rewraps it (an observer
+// alone does not run in a hidden tab).
+function measure() {
+  document.documentElement.style.setProperty("--tape-h", `${$("tape").getBoundingClientRect().height}px`);
+  $("origin").scrollLeft = $("origin").scrollWidth;
+}
+if (globalThis.ResizeObserver) new ResizeObserver(measure).observe($("tape"));
+
+// Where the page came from, before anything is fetched, on the tape's line 2. Only the host
+// scrolls, and it shows its end: the registrable domain is the rightmost part (a lookalike
+// `docs.python.org.evil.example` must not read as `docs.python.org`).
 export function origin(url, pasted) {
-  const host = new URL(url).hostname;
-  $("origin").textContent = pasted ? `pasted, asserted as ${host}, not 1mb.dev` : `from ${host}, not 1mb.dev`;
+  $("origin-pre").textContent = pasted ? "pasted, asserted as " : "from ";
+  $("origin").textContent = new URL(url).hostname;
+  $("origin-post").textContent = ", not 1mb.dev";
+  $("from").hidden = false;
+  measure();
 }
 
 // The tape's word on the result: the loss count (the only hue), or that none is marked.
@@ -27,6 +41,15 @@ function tally(r) {
   }
   if (r.flattened) s.append(`${r.losses ? " " : ""}structure unreliable`);
   if (!r.losses && !r.flattened) s.append("no losses marked");
+}
+
+// Rolled, the tape keeps the wordmark, the origin, and the count; it never hides them.
+function fold(full, keep) {
+  $("tape-more").hidden = !full;
+  $("fold").textContent = full ? "less" : "more";
+  $("fold").setAttribute("aria-expanded", String(full));
+  if (keep) try { localStorage.setItem(FOLD, full ? "full" : "rolled"); } catch { /* the choice lasts this page */ }
+  measure();
 }
 
 // The page's h2s as a list in the tape, from four up.
@@ -83,7 +106,11 @@ export function showView(r, url) {
   $("rail").querySelector("ol")?.remove();
   if (r.losses) $("rail").append(renderLosses(r.doc, document));
   $("output").textContent = r.markdown;
-  $("copy").hidden = $("about").hidden = false;
+  $("copy").hidden = $("about").hidden = $("fold").hidden = false;
+  let kept = null;
+  try { kept = localStorage.getItem(FOLD); } catch { /* no storage: the default */ }
+  fold(kept ? kept === "full" : Boolean(globalThis.matchMedia?.("(min-width: 40rem)").matches));
+  $("fold").onclick = () => fold($("tape-more").hidden, true);
   $("view").hidden = false;
   mode(false);
   $("mode-rendered").onclick = () => mode(false);

@@ -42,12 +42,17 @@
 
 <section id="result" hidden>
   <div id="tape" class="tape">
-    <a class="name" href="/">bareflow</a>
-    <span id="origin"></span>
-    <span id="status" role="status"></span>
-    <button id="copy" type="button" hidden>copy markdown</button>
-    <a id="about" href="#colophon" hidden>about this copy</a>
-    <details id="contents" hidden><summary>contents</summary><ol id="contents-list"></ol></details>
+    <div class="tape-line">
+      <a class="name" href="/">bareflow</a>
+      <span id="status" role="status"></span>
+      <button id="fold" type="button" aria-controls="tape-more" aria-expanded="false" hidden>more</button>
+    </div>
+    <p id="from" class="tape-from" hidden><span id="origin-pre"></span><span id="origin"></span><span id="origin-post"></span></p>
+    <span id="tape-more" class="tape-more" hidden>
+      <button id="copy" type="button" hidden>copy markdown</button>
+      <a id="about" href="#colophon" hidden>about this copy</a>
+      <details id="contents" hidden><summary>contents</summary><ol id="contents-list"></ol></details>
+    </span>
   </div>
   <div id="challenge"></div>
   <div id="view" hidden>

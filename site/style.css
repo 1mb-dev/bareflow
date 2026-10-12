@@ -21,22 +21,28 @@ details { margin: var(--s-3) 0; }
 summary { cursor: pointer; font-size: var(--t-small); color: var(--ink-2); }
 #pointer, .note { font: var(--t-small)/1.5 var(--mono); color: var(--ink-2); }
 
-/* The tape: the one line where bareflow speaks, at every scroll position. It wraps; the host is
-   never cut, so no overflow, ellipsis, or nowrap on it. */
-.tape { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-1) var(--s-3);
-  padding: var(--s-2) var(--s-3); background: var(--tape); color: var(--tape-ink); border-bottom: 1px solid var(--tape-edge); font: var(--t-small)/1.5 var(--mono); }
+/* The tape: where bareflow speaks, at every scroll position, the same at every width. Line 1: the
+   wordmark, the count (or a message), more/less beside it. Line 2: the origin; only the host
+   scrolls, and it shows its end (no ellipsis, no hidden overflow). more/less shows or hides line 3. */
+.tape { position: sticky; top: 0; z-index: 1; padding: var(--s-2) var(--s-3); background: var(--tape); color: var(--tape-ink);
+  border-bottom: 1px solid var(--tape-edge); font: var(--t-small)/1.5 var(--mono); }
+.tape-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-1) var(--s-3); }
+#status { min-width: 0; color: var(--tape-ink-2); }
+.tape .chip, #fold { white-space: nowrap; }
+.tape-from { display: flex; margin: 0; color: var(--tape-ink-2); white-space: pre; }
+.tape-from > #origin { min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .tape a, .tape summary, .tape button { color: var(--tape-ink); font: inherit; }
 .tape :focus-visible { outline-color: var(--tape-ink); }
 .tape .name { font-weight: 600; }
 .tape button { padding: 0; border: 0; background: none; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.15em; }
 .tape button:hover { background: none; }
-#origin { overflow-wrap: anywhere; }
 .tape .chip { padding: 0 var(--s-1); border: 1px solid transparent; border-radius: var(--radius); background: var(--mark); color: var(--mark-ink); font-weight: 600; text-decoration: none; }
 .failed #status { color: var(--tape-ink); }
 #contents { margin: 0; }
 #contents[open] { flex-basis: 100%; }
 #contents ol { margin: var(--s-1) 0 var(--s-1); padding-left: 2.5em; max-height: 60vh; overflow: auto; }
-.page :is(h1, h2, h3, h4, h5, h6), #colophon, #rail { scroll-margin-top: 5rem; }
+.tape-more { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-1) var(--s-3); margin-top: var(--s-1); }
+html { scroll-padding-top: calc(var(--tape-h, 0px) + var(--s-2)); }
 
 /* The page's voice: its words in the page face and ink, never colored; links underlined in ink. */
 /* One column for page and colophon; the measure is in the page face's ch, so it sits on #view. */
