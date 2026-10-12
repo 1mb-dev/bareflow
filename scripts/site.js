@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundle } from "./bundle.js";
 import { exampleHtml } from "./example.js";
+import { VERSION } from "../src/version.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const TEST_SITEKEY = "1x00000000000000000000AA";
@@ -22,7 +23,7 @@ export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.
   await rm(out, { recursive: true, force: true });
   await mkdir(join(out, "_app"), { recursive: true });
   const app = await build({ entryPoints: [join(ROOT, "site/app.js")], bundle: true, format: "esm", platform: "browser", minify: true, write: false, logLevel: "silent" });
-  const html = (await readFile(join(ROOT, "site/index.html"), "utf8")).replace("__SITEKEY__", () => sitekey);
+  const html = (await readFile(join(ROOT, "site/index.html"), "utf8")).replace("__SITEKEY__", () => sitekey).replace("__VERSION__", () => VERSION);
   if (html.split(MARK).length !== 2) throw new Error(`site/index.html: needs ${JSON.stringify(MARK)} exactly once`);
   await Promise.all([
     writeFile(join(out, "index.html"), splice(html, "")),

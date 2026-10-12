@@ -7,7 +7,8 @@ this project's MIT license does not cover it. To have a page removed, open an is
 repository.
 
 The web app's home page shows an excerpt of test/fixtures/vitepress-vue-computed.html (vuejs.org,
-CC BY 4.0), with its attribution.
+CC BY 4.0), with its attribution, and quotes one sentence of
+https://docs.deno.com/runtime/reference/cli/add/ (MIT) and the last of usage/seed/runs/S1/W.md.
 
 test/fixtures/caniuse-grid.html
   https://caniuse.com/css-grid

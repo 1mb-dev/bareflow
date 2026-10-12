@@ -1260,6 +1260,19 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
       }
     }
   }
+  // The home's words: the door, the why pair quoted from its records, and a footer that says only
+  // what exists (no privacy page yet, nothing "soon"), with this build's version.
+  const wordsBad = [];
+  const say = (sel) => homeDoc.querySelector(sel)?.textContent.replace(/\s+/g, " ").trim();
+  const wBytes = await readFile(join(ROOT, "usage/seed/runs/S1/W.md")), w = wBytes.toString("utf8").trim(), readme = await readFile(join(ROOT, "README.md"), "utf8");
+  const why = [...homeDoc.querySelectorAll(".why p")].map((p) => p.textContent);
+  const quoted = (p) => p?.match(/"([^"]+)"$/)?.[1];
+  if (say("label[for=target]") !== "Docs page address" || say("#go button") !== "Convert" || say("#landing > h1") !== "Remove the website. Preserve the document.") wordsBad.push("door");
+  if (!w.endsWith(quoted(why[1]) ?? "\0") || !why[1].includes(`(${wBytes.length} bytes)`) || !readme.includes(quoted(why[2]) ?? "\0") || !readme.includes("\n## Why\n")) wordsBad.push("why pair");
+  const foot = [...homeDoc.querySelector(".foot").children].map((e) => e.textContent);
+  if (JSON.stringify(foot) !== JSON.stringify(["source on GitHub", "code: MIT", `v${VERSION}`, "theme: auto"]) || JSON.stringify([...shellDoc.querySelector(".foot").children].map((e) => e.textContent)) !== JSON.stringify(foot)) wordsBad.push(`footer: ${foot.join(" | ")}`);
+  if (/\b(privacy|soon)\b/i.test(homeDoc.body.textContent)) wordsBad.push("privacy or soon");
+  record("web", "words", `the home's door, its why pair quoted from usage/ and the README, a footer of only what exists with v${VERSION}${wordsBad.length ? `: ${wordsBad.join(" | ")}` : ""}`, !wordsBad.length);
   const hostile = "$&$'$`$$</script><script>x</script>";
   if (splice(`a${MARK}b`, hostile) !== `a${hostile}b`) exBad.push("the splice reads the example as a pattern");
   const notice = await readFile(join(ROOT, "NOTICE"), "utf8");

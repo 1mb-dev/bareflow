@@ -15,12 +15,23 @@ input, textarea { width: 100%; padding: var(--s-2); border: 1px solid var(--ink-
 button { padding: var(--s-1) var(--s-2); border: 1px solid var(--ink-2); border-radius: var(--radius); background: var(--paper); color: var(--ink); font-size: var(--t-small); cursor: pointer; }
 button:hover { background: var(--code-wash); }
 .row { display: flex; gap: var(--s-2); }
+/* The home: the claim, the door, the example, then why and how, in bareflow's voice (Mono) where it
+   speaks about itself. */
+.lede { max-width: var(--measure); }
+.try { margin: var(--s-2) 0 0; font: var(--t-small)/1.5 var(--mono); color: var(--ink-2); }
+.try a { color: var(--ink); }
+.why, .use { max-width: var(--measure); }
+.why h2, .use h2 { font: 600 var(--t-small)/1.5 var(--mono); color: var(--ink-2); margin: var(--s-4) 0 var(--s-2); }
+.use-where { font: 600 var(--t-small) var(--mono); }
+@media (max-width: 39.99rem) { .desktop { display: none; } }
 #paste-form button { margin-top: var(--s-3); }
 .bookmarklet { padding: 0 var(--s-2); border: 1px dashed var(--ink-2); border-radius: var(--radius); font-family: var(--mono); font-size: var(--t-small); }
 details { margin: var(--s-3) 0; }
 summary { cursor: pointer; font-size: var(--t-small); color: var(--ink-2); }
 #pointer, .note { font: var(--t-small)/1.5 var(--mono); color: var(--ink-2); }
-.foot { max-width: 64rem; margin: 0 auto; padding: var(--s-4) var(--s-3); font: var(--t-small)/1.5 var(--mono); color: var(--ink-2); }
+.foot { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-3); max-width: 64rem; margin: 0 auto; padding: var(--s-4) var(--s-3); font: var(--t-small)/1.5 var(--mono); color: var(--ink-2); }
+.foot a { color: var(--ink-2); }
+.foot a:hover { color: var(--ink); }
 .foot button { padding: 0; border: 0; background: none; color: var(--ink-2); font: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.15em; }
 .foot button:hover { background: none; color: var(--ink); }
 
