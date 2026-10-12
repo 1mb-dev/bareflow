@@ -16,9 +16,9 @@ import { run } from "./pipeline.js";
 import { convert } from "./convert.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
-import { decompress, fetchSnapshot } from "./fetch.js";
-import { fetchPage, MAX_BYTES, snapshot } from "./fetch-policy.js";
-import { edgeTransport, handler, SITEVERIFY } from "./edge.js";
+import { decompress, fetchSnapshot, nodeTransport } from "./fetch.js";
+import { fetchBody, fetchPage, MAX_BYTES, snapshot } from "./fetch-policy.js";
+import { edgeTransport, handler, SITEVERIFY, WEB_MAX_BYTES } from "./edge.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
 import { renderMarkdown, NOTE_SOURCES, REASON_IS_OWN } from "./render.js";
@@ -898,6 +898,11 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
 // limits come from the policy, so a transport with its own cap or hop count turns this red.
 {
   const bomb = gzipSync(Buffer.alloc(MAX_BYTES * 2, 65));
+  // Incompressible: gzip makes it longer, so the wire is over the web cap while the page is not.
+  // Declared, both refuse; chunked, the edge sees only decoded bytes (it fits) and node only the
+  // cut wire (over): each reports what it read.
+  let x = 2463534242;
+  const gzcut = gzipSync(Buffer.from(Array.from({ length: WEB_MAX_BYTES }, () => ((x ^= x << 13, x ^= x >>> 17, x ^= x << 5) >>> 0) & 255)));
   const server = createServer((req, res) => {
     const hop = Number(req.url.match(/^\/c(\d)$/)?.[1]);
     if (!Number.isNaN(hop)) { res.writeHead(302, { location: `/c${hop + 1}` }); return res.end(); }
@@ -911,6 +916,8 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     if (req.url === "/priv") { res.writeHead(307, { location: "http://10.0.0.1/admin" }); return res.end(); }
     if (req.url === "/drip") { res.writeHead(200, { "content-type": "text/html" }); const t = setInterval(() => res.write(" "), 50); res.on("close", () => clearInterval(t)); return; }
     if (req.url === "/empty") { res.writeHead(204); return res.end(); }
+    if (req.url === "/gzcut") { res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip", "content-length": gzcut.length }); return res.end(gzcut); }
+    if (req.url === "/exact" || req.url === "/exact1" || req.url === "/declared") { const n = WEB_MAX_BYTES + (req.url === "/exact" ? 0 : 1); res.writeHead(200, { "content-type": "text/html", ...(req.url === "/declared" ? { "content-length": n } : {}) }); return res.end(Buffer.alloc(n, 97)); }
     res.writeHead(404); res.end();
   });
   await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
@@ -925,14 +932,29 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     const [a, b] = await Promise.all([outcome(fetchSnapshot(u, { timeout, lookup })), outcome(fetchPage(u, edgeTransport(toLocal), { timeout }))]);
     if (a !== b) off.push(`${p}: node "${a.slice(0, 90)}" edge "${b.slice(0, 90)}"`);
   }
+  // At the web's cap, through fetchBody: over, and the bytes kept unless the edge refused unread.
+  const capped = (p) => p.then(({ finalUrl, body, over }) => `${finalUrl} ${over} ${over ? "" : body.length}`, (e) => e.message.replace(/\(.*?\)/, "(...)"));
+  const webPaths = ["/endless", "/bomb", "/exact", "/exact1", "/declared", "/gzcut", "/page"];
+  for (const p of webPaths) {
+    const u = `http://site.test:${port}${p}`;
+    const [a, b] = await Promise.all([capped(fetchBody(u, nodeTransport(lookup), { maxBytes: WEB_MAX_BYTES })), capped(fetchBody(u, edgeTransport(toLocal), { maxBytes: WEB_MAX_BYTES }))]);
+    const over = !["/exact", "/page"].includes(p);
+    if (a !== b || !a.startsWith(`${u} ${over} `)) off.push(`${p} at the web cap: node "${a.slice(0, 90)}" edge "${b.slice(0, 90)}"`);
+  }
   server.close();
   // Equal output does not show the edge stopped reading: the policy trims the body either way.
   let pulled = 0;
   const chunk = new Uint8Array(64 * 1024);
   const endless = async () => new Response(new ReadableStream({ pull(c) { pulled += chunk.length; c.enqueue(chunk); } }), { status: 200 });
   await fetchPage("https://a.example/", edgeTransport(endless));
-  record("fetch", "transports", `node and edge transports agree on ${paths.length} cases (redirects, 6 hops, cap, gzip bomb, bad gzip, no location, private hop, drip, 204, 404); the edge reads ${pulled - MAX_BYTES} bytes past the cap${off.length ? `: ${off.join("; ")}` : ""}`,
-    !off.length && pulled - MAX_BYTES <= 2 * chunk.length);
+  const pastCap = pulled - MAX_BYTES;
+  pulled = 0;
+  const web = await fetchBody("https://a.example/", edgeTransport(endless), { maxBytes: WEB_MAX_BYTES });
+  const pastWeb = pulled - WEB_MAX_BYTES;
+  pulled = 0;
+  const declared = await fetchBody("https://a.example/", edgeTransport(async () => new Response(new ReadableStream({ pull(c) { pulled += chunk.length; c.enqueue(chunk); } }, { highWaterMark: 0 }), { status: 200, headers: { "content-length": String(WEB_MAX_BYTES + 1) } })), { maxBytes: WEB_MAX_BYTES });
+  record("fetch", "transports", `node and edge transports agree on ${paths.length} cases (redirects, 6 hops, cap, gzip bomb, bad gzip, no location, private hop, drip, 204, 404) and ${webPaths.length} at the web cap (endless, bomb, exactly the cap, one byte over, declared over, compressed over, a page); the edge reads ${pastCap} bytes past the cap, ${pastWeb} past the web cap, and none of a declared-over body${off.length ? `: ${off.join("; ")}` : ""}`,
+    !off.length && pastCap <= 2 * chunk.length && web.over && web.body.length === WEB_MAX_BYTES && pastWeb <= 2 * chunk.length && declared.over && pulled === 0);
 }
 
 // The /_fetch Function (src/edge.js via functions/_fetch.js): no token -> 403 before any request;
@@ -944,13 +966,16 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     if (req.url === "/%E6%97%A5") { res.writeHead(200, { "content-type": "text/html" }); return res.end("<p>ri</p>"); }
     if (req.url === "/to-own") { res.writeHead(302, { location: "https://bareflow.1mb.dev/" }); return res.end(); }
     if (req.url === "/to-port") { res.writeHead(302, { location: "http://b.example:8080/" }); return res.end(); }
+    if (req.url === "/big" || req.url === "/exact") { res.writeHead(200, { "content-type": "text/html" }); return res.end(Buffer.alloc(WEB_MAX_BYTES + (req.url === "/big" ? 1 : 0), 97)); }
     res.writeHead(404); res.end();
   });
   await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
   const port = server.address().port;
   let calls = [];
+  const encodings = new Set();
   const platform = async (url, init) => {
     calls.push(String(url));
+    if (url !== SITEVERIFY) encodings.add(new Headers(init.headers).get("accept-encoding"));
     if (url === SITEVERIFY) { const t = JSON.parse(init.body).response; if (t === "unreachable") throw new TypeError("fetch failed"); return t === "outage" ? Response.json({ success: false }, { status: 503 }) : Response.json({ success: t === "good" }); }
     const u = new URL(url); u.hostname = "127.0.0.1"; u.port = String(port); u.protocol = "http:";
     return fetch(u, init);
@@ -980,6 +1005,8 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   const toOwn = await ask("https://a.example/to-own");
   const toPort = await ask("https://a.example/to-port");
   const missing = await ask("https://a.example/missing");
+  const big = await ask("https://a.example/big");
+  const exact = await ask("https://a.example/exact");
   const wide = await ask("https://a.example/\u65e5");
   const noUrl = await ask(null);
   const post = await ask("https://a.example/page", { method: "POST" });
@@ -995,6 +1022,9 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     ok.status === 200 && new TextDecoder().decode(ok.body) === "<p>page</p>" && h.get("content-type") === "application/octet-stream" && h.get("x-content-type-options") === "nosniff" &&
     h.get("content-disposition") === "attachment" && h.get("content-security-policy") === "sandbox; default-src 'none'" && h.get("x-final-url") === "https://a.example/page" &&
     !h.has("set-cookie") && !h.has("x-upstream") && wide.status === 200 && wide.headers.get("x-final-url") === "https://a.example/%E6%97%A5" && missing.status === 502 && missing.code === "upstream" && noUrl.status === 400 && post.status === 405);
+  record("edge", "cap", "every page fetch asks for identity; one byte over the web cap: 502 over-cap naming the CLI; exactly the cap: 200 with every byte",
+    encodings.size === 1 && encodings.has("identity") && big.status === 502 && big.code === "over-cap" && /^the page is over 1 MB, the web's limit; npx bareflow reads up to 5 MB$/.test(new TextDecoder().decode(big.body)) &&
+    exact.status === 200 && exact.body.length === WEB_MAX_BYTES);
 }
 
 // The built site: the shell tells curl and agents where the CLI is, scripts load from self and

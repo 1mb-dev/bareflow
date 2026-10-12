@@ -37,11 +37,13 @@ export function checkTarget(url) {
   return { host, literal };
 }
 
-// transport(url, { host, headers, deadline, budget }) resolves one response: { status, location,
-// body } where body is the decoded bytes (Uint8Array), read to at most MAX_BYTES; absent on a
-// redirect, and a response without one (204, 304) is an empty page. It rejects with noAnswer at
-// the deadline. check(url) runs on every hop after checkTarget: the edge Function's own guards.
-export async function fetchBody(url, transport, { timeout = 30000, check } = {}) {
+// transport(url, { host, headers, deadline, budget, maxBytes }) resolves one response: { status,
+// location, body, over } where body is the decoded bytes (Uint8Array), read past maxBytes only far
+// enough to show the page is longer, or over: true when it refused a declared length unread; body
+// is absent on a redirect, and a response without one (204, 304) is an empty page. It rejects
+// with noAnswer at the deadline. check(url) runs on every hop after checkTarget: the edge
+// Function's own guards. over: the page did not fit maxBytes; body is at most its first maxBytes.
+export async function fetchBody(url, transport, { timeout = 30000, check, maxBytes = MAX_BYTES } = {}) {
   const deadline = Date.now() + timeout;
   // Serialized as the parser does, so finalUrl has one form with or without a redirect.
   let at = httpUrl(url).href;
@@ -50,14 +52,15 @@ export async function fetchBody(url, transport, { timeout = 30000, check } = {})
     const { host } = checkTarget(at);
     check?.(at);
     if (deadline - Date.now() <= 0) throw noAnswer(at, timeout);
-    const res = await transport(at, { host, headers: REQUEST_HEADERS, deadline, budget: timeout });
+    const res = await transport(at, { host, headers: REQUEST_HEADERS, deadline, budget: timeout, maxBytes });
     if (REDIRECT.has(res.status)) {
       if (!res.location) throw new Error(`redirect ${res.status} without a location from ${at}`);
       try { at = new URL(res.location, at).toString(); } catch { throw new Error(`redirect ${res.status} from ${at} to an invalid location`); }
       continue;
     }
     if (res.status >= 400) throw new Error(`HTTP ${res.status} from ${at}; check the URL (bareflow does not retry)`);
-    return { finalUrl: at, body: (res.body ?? new Uint8Array()).subarray(0, MAX_BYTES) };
+    const body = res.body ?? new Uint8Array();
+    return { finalUrl: at, body: body.subarray(0, maxBytes), over: !!res.over || body.length > maxBytes };
   }
 }
 

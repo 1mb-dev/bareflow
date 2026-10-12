@@ -10,11 +10,11 @@ import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
 import { isPrivateIp } from "./ssrf.js";
 import { blocked, fetchPage, MAX_BYTES, noAnswer, REDIRECT } from "./fetch-policy.js";
 
-// Decompress a capped body, streaming so the decompressed output is also capped at MAX_BYTES:
-// the decompressor is destroyed at the cap, so a bomb costs at most MAX_BYTES of output and the
+// Decompress a capped body, streaming so the decompressed output is also capped at limit:
+// the decompressor is destroyed at the cap, so a bomb costs at most limit bytes of output and the
 // CPU to make it, not the whole expansion. Corrupt data rejects, unless bareflow cut the body at
 // the cap (truncated): then what decoded so far is the page.
-export function decompress(body, enc, { truncated = false } = {}) {
+export function decompress(body, enc, { truncated = false, limit = MAX_BYTES } = {}) {
   const factory = enc.includes("gzip") ? createGunzip : enc.includes("deflate") ? createInflate : enc.includes("br") ? createBrotliDecompress : null;
   if (!factory || !body.length) return Promise.resolve(body); // an empty body is an empty page
   return new Promise((resolve, reject) => {
@@ -26,10 +26,10 @@ export function decompress(body, enc, { truncated = false } = {}) {
     dec.on("data", (c) => {
       chunks.push(c);
       size += c.length;
-      if (size >= MAX_BYTES) { finish(Buffer.concat(chunks).subarray(0, MAX_BYTES)); dec.destroy(); }
+      if (size >= limit) { finish(Buffer.concat(chunks).subarray(0, limit)); dec.destroy(); }
     });
-    dec.on("end", () => finish(Buffer.concat(chunks).subarray(0, MAX_BYTES)));
-    dec.on("error", (e) => (truncated ? finish(Buffer.concat(chunks).subarray(0, MAX_BYTES)) : fail(new Error(`body is not valid ${enc} (${e.message}); the server mislabels its encoding`))));
+    dec.on("end", () => finish(Buffer.concat(chunks).subarray(0, limit)));
+    dec.on("error", (e) => (truncated ? finish(Buffer.concat(chunks).subarray(0, limit)) : fail(new Error(`body is not valid ${enc} (${e.message}); the server mislabels its encoding`))));
     dec.end(body);
   });
 }
@@ -47,7 +47,7 @@ function validatingLookup(hostname, opts, cb) {
 
 // The request is destroyed at the policy's deadline, a hard one, not a socket idle timeout, so a
 // server that drips bytes cannot hold the caller.
-const nodeTransport = (resolver) => (url, { host, headers, deadline, budget }) => new Promise((resolve, reject) => {
+export const nodeTransport = (resolver) => (url, { host, headers, deadline, budget, maxBytes }) => new Promise((resolve, reject) => {
   const u = new URL(url);
   const isHttps = u.protocol === "https:";
   let timer;
@@ -73,21 +73,21 @@ const nodeTransport = (resolver) => (url, { host, headers, deadline, budget }) =
 
     const chunks = [];
     let size = 0, read = false;
-    // The body is read up to MAX_BYTES and the connection then closed; decompression is
-    // capped the same way.
+    // The body is read one byte past maxBytes (enough to show the page is longer) and the
+    // connection then closed; decompression is capped the same way.
     const finish = async () => {
       if (read) return;
       read = true;
       clearTimeout(timer); // the body is in; decompressing it is not the site's delay
       let body;
-      try { body = await decompress(Buffer.concat(chunks).subarray(0, MAX_BYTES), (res.headers["content-encoding"] || "").toLowerCase(), { truncated: size >= MAX_BYTES }); }
+      try { body = await decompress(Buffer.concat(chunks).subarray(0, maxBytes + 1), (res.headers["content-encoding"] || "").toLowerCase(), { truncated: size > maxBytes, limit: maxBytes + 1 }); }
       catch (e) { return reject(new Error(`${e.message}: ${url}`)); }
-      resolve({ status: res.statusCode, body });
+      resolve({ status: res.statusCode, body, over: size > maxBytes });
     };
     res.on("data", (c) => {
       chunks.push(c);
       size += c.length;
-      if (size >= MAX_BYTES) { res.off("error", reject).on("error", () => {}); r.off("error", reject).on("error", () => {}); finish(); res.destroy(); }
+      if (size > maxBytes) { res.off("error", reject).on("error", () => {}); r.off("error", reject).on("error", () => {}); finish(); res.destroy(); }
     });
     res.on("end", finish);
   });

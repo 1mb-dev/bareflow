@@ -7,6 +7,10 @@ import { checkTarget, fetchBody, MAX_BYTES, noAnswer, REDIRECT } from "./fetch-p
 
 export const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 export const OWN_ZONES = ["1mb.dev", "pages.dev"];
+// The web's byte cap, below the CLI's: every byte read costs Function CPU (Free: 10 ms per
+// request), so it is set by measurement on a preview deploy. Docs pages are far smaller
+// (fixtures: max 541 KB).
+export const WEB_MAX_BYTES = 1024 * 1024;
 // Cloudflare's published test secrets, refused off loopback: 1x passes every token.
 export const TEST_SECRETS = new Set(["1", "2", "3"].map((n) => `${n}x0000000000000000000000000000000AA`));
 const LOCAL = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -26,22 +30,22 @@ export function edgeCheck(url) {
 }
 const refused = (message) => Object.assign(new Error(message), { code: "url" });
 
-// Read a body stream to MAX_BYTES, then cancel it: a bomb or an endless body costs at most the
-// cap. fetch has already removed the content encoding.
-async function readCapped(stream) {
+// Read a body stream one byte past max, then cancel it: a bomb or an endless body costs at most
+// the cap. fetch has already removed the content encoding.
+async function readCapped(stream, max) {
   const chunks = [];
   let size = 0;
   if (stream) {
     const reader = stream.getReader();
-    while (size < MAX_BYTES) {
+    while (size <= max) {
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(value);
       size += value.length;
     }
-    if (size >= MAX_BYTES) reader.cancel().catch(() => {});
+    if (size > max) reader.cancel().catch(() => {});
   }
-  const out = new Uint8Array(Math.min(size, MAX_BYTES));
+  const out = new Uint8Array(Math.min(size, max + 1));
   let at = 0;
   for (const c of chunks) { if (at >= out.length) break; out.set(c.subarray(0, out.length - at), at); at += c.length; }
   return out;
@@ -49,16 +53,23 @@ async function readCapped(stream) {
 
 // The policy's transport over WHATWG fetch: one request, no redirect followed, aborted at the
 // policy's deadline whether headers or body are late.
-export const edgeTransport = (fetchImpl) => async (url, { headers, deadline, budget }) => {
+// Workers decompress in the Function's CPU time (10 ms on Free), so it asks for identity; a site
+// that compresses anyway is still decoded, and still capped.
+export const edgeTransport = (fetchImpl) => async (url, { headers, deadline, budget, maxBytes }) => {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), Math.max(0, deadline - Date.now()));
   try {
-    const res = await fetchImpl(url, { method: "GET", headers, redirect: "manual", signal: ctl.signal });
+    const res = await fetchImpl(url, { method: "GET", headers: { ...headers, "accept-encoding": "identity" }, redirect: "manual", signal: ctl.signal });
     if (REDIRECT.has(res.status) || res.status >= 400) {
       res.body?.cancel().catch(() => {});
       return { status: res.status, location: res.headers.get("location") ?? undefined };
     }
-    try { return { status: res.status, body: await readCapped(res.body) }; }
+    // A declared length over the cap is refused unread; an understated one is caught by the read.
+    if (Number(res.headers.get("content-length")) > maxBytes) {
+      res.body?.cancel().catch(() => {});
+      return { status: res.status, over: true };
+    }
+    try { return { status: res.status, body: await readCapped(res.body, maxBytes) }; }
     catch (e) {
       if (ctl.signal.aborted) throw e;
       const enc = res.headers.get("content-encoding");
@@ -76,7 +87,8 @@ export const edgeTransport = (fetchImpl) => async (url, { headers, deadline, bud
 const INERT = { "x-content-type-options": "nosniff", "content-security-policy": "sandbox; default-src 'none'", "cache-control": "no-store" };
 const fail = (status, code, message) => new Response(message, { status, headers: { ...INERT, "content-type": "text/plain; charset=utf-8", "x-bareflow-error": code } });
 
-// The code the app maps to a named error: token, unavailable, url, blocked, timeout, upstream.
+// The code the app maps to a named error: token, unavailable, url, blocked, timeout, upstream,
+// over-cap.
 function failure(e) {
   const m = String(e?.message || e);
   if (e?.code === "url" || m.startsWith("not a URL") || m.startsWith("unsupported protocol")) return fail(400, "url", m);
@@ -110,7 +122,8 @@ export const handler = (fetchImpl, { timeout = 30000 } = {}) => async ({ request
   if (verdict === "down") return fail(503, "unavailable", "the bot check service did not answer; try again later");
   if (verdict === "bad") return fail(403, "token", "the Turnstile check failed or expired; reload the page");
   try {
-    const { finalUrl, body } = await fetchBody(target, edgeTransport(fetchImpl), { timeout, check: edgeCheck });
+    const { finalUrl, body, over } = await fetchBody(target, edgeTransport(fetchImpl), { timeout, check: edgeCheck, maxBytes: WEB_MAX_BYTES });
+    if (over) return fail(502, "over-cap", `the page is over ${WEB_MAX_BYTES / 1048576} MB, the web's limit; npx bareflow reads up to ${MAX_BYTES / 1048576} MB`);
     return new Response(body, { status: 200, headers: { ...INERT, "content-type": "application/octet-stream", "content-disposition": "attachment", "x-final-url": finalUrl } });
   } catch (e) { return failure(e); }
 };
