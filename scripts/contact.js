@@ -1,6 +1,6 @@
 // Contact sheet: every frozen page (test/fixtures and test/pages) in the site's real result view,
 // for a person to review the design. `npm run contact` writes dist/contact/ and serves it on
-// localhost; the sheet takes ?w=375|1280, ?theme=light|dark, and ?page=<n> (6 per page), and each frame is view.html?i=<n>
+// localhost; the sheet takes ?w=375|1280, ?theme=light|dark|auto, and ?page=<n> (6 per page), and each frame is view.html?i=<n>
 // (add &mode=markdown for the raw view).
 import { build } from "esbuild";
 import { createServer } from "node:http";
@@ -46,12 +46,13 @@ if (q.get("mode") === "markdown") mode(true);
 const viewer = await build({ stdin: { contents: entry, resolveDir: ROOT, loader: "js" }, bundle: true, format: "esm", platform: "browser", write: false, logLevel: "silent" });
 const shell = (await readFile(join(OUT, "index.html"), "utf8"))
   .replace(/<script src="https:\/\/challenges[^>]*><\/script>\n/, "")
-  .replace('<script type="module" src="/_app/app.js"></script>', '<script>document.documentElement.dataset.theme = new URLSearchParams(location.search).get("theme") || "light";</script>\n<script type="module" src="/viewer.js"></script>');
+  .replace('<script src="/_app/theme.js"></script>\n', "") // the sheet sets the theme from ?theme=
+  .replace('<script type="module" src="/_app/app.js"></script>', '<script>{ const t = new URLSearchParams(location.search).get("theme") || "light"; if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }</script>\n<script type="module" src="/viewer.js"></script>');
 const sheet = `<!doctype html>
 <html><head><meta charset="utf-8"><title>bareflow contact sheet</title>
 <style>body { font: 14px/1.4 ui-monospace, monospace; margin: 16px; } nav a { margin-right: 12px; } #sheet { display: flex; flex-wrap: wrap; gap: 32px 24px; align-items: flex-start; } figure { margin: 0; }
 figcaption { margin: 0 0 4px; } iframe { border: 1px solid #888; display: block; }</style></head>
-<body><nav>${["375 light", "375 dark", "1280 light", "1280 dark"].map((v) => { const [w, t] = v.split(" "); return `<a href="?w=${w}&theme=${t}">${v}</a>`; }).join("")}</nav>
+<body><nav>${["375 light", "375 dark", "375 auto", "1280 light", "1280 dark", "1280 auto"].map((v) => { const [w, t] = v.split(" "); return `<a href="?w=${w}&theme=${t}">${v}</a>`; }).join("")}</nav>
 <main id="sheet"></main>
 <script>
 const q = new URLSearchParams(location.search), w = Number(q.get("w")) || 375, theme = q.get("theme") || "light";
@@ -88,4 +89,4 @@ createServer(async (req, res) => {
   if (!file.startsWith(OUT + "/") || !TYPES[extname(file)]) { res.writeHead(404); return res.end(); }
   try { const body = await readFile(file); res.writeHead(200, { "content-type": TYPES[extname(file)], "cache-control": "no-store" }); res.end(body); }
   catch { res.writeHead(404); res.end(); }
-}).listen(PORT, "127.0.0.1", () => console.log(`contact: ${cases.length} pages; open http://localhost:${PORT}/ (?w=375|1280&theme=light|dark; Ctrl-C to stop)`));
+}).listen(PORT, "127.0.0.1", () => console.log(`contact: ${cases.length} pages; open http://localhost:${PORT}/ (?w=375|1280&theme=light|dark|auto; Ctrl-C to stop)`));

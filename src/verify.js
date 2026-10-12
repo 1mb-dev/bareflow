@@ -1144,9 +1144,30 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     linked.length >= 5 && !unlinked.length && (ofl.match(/SIL OPEN FONT LICENSE Version 1\.1/g) ?? []).length === 2);
   record("web", "shell", "the shell's text for curl and agents names no command that does not exist yet; sitekey set; scripts from self and challenges.cloudflare.com only",
     visible === "bareflow converts this page in your browser. The CLI and MCP server ship on npm with 0.5.0. Source: github.com/1mb-dev/bareflow." && html.includes('data-sitekey="test-sitekey"') &&
-    scripts.length === 2 && scripts.every((s) => s.startsWith("/_app/") || s.startsWith("https://challenges.cloudflare.com/")));
+    scripts.length === 3 && scripts.every((s) => s.startsWith("/_app/") || s.startsWith("https://challenges.cloudflare.com/")));
   record("web", "claims", `no npx in site/, the built site, or the Function's messages (${served.length} files)${npx.length ? `: ${npx.join(", ")}` : ""}`,
     !npx.length && served.some((f) => f.endsWith(join("_app", "app.js"))) && served.some((f) => f.endsWith("index.html")));
+  // The theme: theme.js is a classic script in <head> before the stylesheet, so it sets data-theme
+  // before the first paint; run here against stand-ins for a stored choice, junk, and no storage.
+  const themeTag = html.match(/<script src="\/_app\/theme\.js"[^>]*>/)?.[0] ?? "";
+  const themeFirst = themeTag === '<script src="/_app/theme.js">' && html.indexOf(themeTag) < html.indexOf('<link rel="stylesheet"');
+  const themeCode = await readFile(join(ROOT, "site/theme.js"), "utf8");
+  const themeRun = (stored, throws) => {
+    const data = {}, button = { textContent: "" }, ready = [], saved = [];
+    const storage = { getItem: () => { if (throws) throw new Error("blocked"); return stored; }, setItem: (k, v) => { if (throws) throw new Error("blocked"); saved.push(v); } };
+    const doc = { documentElement: { dataset: data }, getElementById: () => button, addEventListener: (t, f) => ready.push(f) };
+    vm.runInNewContext(themeCode, { localStorage: storage, document: doc });
+    const first = data.theme ?? "auto";
+    ready.forEach((f) => f());
+    const seen = [button.textContent];
+    for (let k = 0; k < 3; k++) { button.onclick(); seen.push(`${data.theme ?? "auto"}/${button.textContent}`); }
+    return { first, seen, saved };
+  };
+  const stored = themeRun("dark"), junk = themeRun("purple"), none = themeRun(null, true);
+  const themeOk = themeFirst && stored.first === "dark" && junk.first === "auto" && none.first === "auto" &&
+    JSON.stringify(stored.seen) === JSON.stringify(["theme: dark", "auto/theme: auto", "light/theme: light", "dark/theme: dark"]) && JSON.stringify(stored.saved) === JSON.stringify(["auto", "light", "dark"]) &&
+    JSON.stringify(none.seen) === JSON.stringify(["theme: auto", "light/theme: light", "dark/theme: dark", "auto/theme: auto"]);
+  record("web", "theme", "theme.js loads in <head> before the stylesheet, sets a stored theme before the first paint, ignores junk, cycles auto, light, dark, and works with no storage", themeOk);
   const missed = SINK_FORMS.filter((s) => !SINKS.test(s));
   record("web", "sinks", `no HTML sink in any site script, source or built (${scanned.length} files); the pattern catches each sink form${sunk.length || missed.length ? `: ${[...sunk, ...missed].join(", ")}` : ""}`,
     !sunk.length && !missed.length && scanned.some((f) => f.endsWith(join("_app", "app.js"))) && !SINKS.test("el.textContent = x; el.setAttribute(\"href\", u)"));

@@ -20,6 +20,9 @@ button:hover { background: var(--code-wash); }
 details { margin: var(--s-3) 0; }
 summary { cursor: pointer; font-size: var(--t-small); color: var(--ink-2); }
 #pointer, .note { font: var(--t-small)/1.5 var(--mono); color: var(--ink-2); }
+.foot { max-width: 64rem; margin: 0 auto; padding: var(--s-4) var(--s-3); font: var(--t-small)/1.5 var(--mono); color: var(--ink-2); }
+.foot button { padding: 0; border: 0; background: none; color: var(--ink-2); font: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.15em; }
+.foot button:hover { background: none; color: var(--ink); }
 
 /* The tape: where bareflow speaks, at every scroll position, the same at every width. Line 1: the
    wordmark, the count (or a message), more/less beside it. Line 2: the origin; only the host
