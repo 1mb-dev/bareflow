@@ -1115,10 +1115,12 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     ...(await readdir(out, { recursive: true })).filter((f) => f.endsWith(".js") && f !== join("_app", "worker.js")).map((f) => join(out, f)),
   ];
   const sunk = (await Promise.all(scanned.map(async (f) => (SINKS.test(await readFile(f, "utf8")) ? [f] : [])))).flat();
-  // No `npx` in anything the web serves or says until the package is on npm (7.4).
+  // No `npx` in anything the web serves or says until the package is on npm (7.4). Text files
+  // only: a font's compressed bytes could spell anything.
+  const text = (e) => e.isFile() && !/\.(woff2|png|ico)$/.test(e.name);
   const served = [
-    ...(await readdir(join(ROOT, "site"), { recursive: true, withFileTypes: true })).filter((e) => e.isFile()).map((e) => join(e.parentPath, e.name)),
-    ...(await readdir(out, { recursive: true, withFileTypes: true })).filter((e) => e.isFile()).map((e) => join(e.parentPath, e.name)),
+    ...(await readdir(join(ROOT, "site"), { recursive: true, withFileTypes: true })).filter(text).map((e) => join(e.parentPath, e.name)),
+    ...(await readdir(out, { recursive: true, withFileTypes: true })).filter(text).map((e) => join(e.parentPath, e.name)),
     join(ROOT, "src/edge.js"), join(ROOT, "functions/_fetch.js"),
   ];
   const npx = (await Promise.all(served.map(async (f) => (/\bnpx\b/.test(await readFile(f, "utf8")) ? [f] : [])))).flat();
