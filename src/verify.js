@@ -840,6 +840,9 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   record("fetch", "cap", "an endless body is read to the byte cap and the connection closed, inside the budget", endless === MAX_BYTES);
 }
 
+// The built site (scripts/site.js), once: the worker and shell checks below read what it wrote.
+const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test-sitekey");
+
 // The share URL grammar (site/url.js): the browser's collapsed slash, an encoded target, query
 // and fragment kept, a bare host sent on as https, and every other scheme refused.
 {
@@ -860,11 +863,12 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   record("web", "url", `share URL grammar on ${cases.length} cases${bad.length ? `: ${bad.join("; ")}` : ""}`, !bad.length);
 }
 
-// The page's worker is the bundle plus site/worker.js, run here as the browser runs it: bytes from
+// The page's worker, the file the site build wrote (the bundle plus site/worker.js), run here as
+// the browser runs it: bytes from
 // /_fetch become the same document as the CLI's snapshot of those bytes; a paste is input
 // "paste"; binary, empty, and oversized inputs come back named.
 {
-  const code = `${await bundle()}\n${await readFile(join(ROOT, "site/worker.js"), "utf8")}`;
+  const code = await readFile(join(siteOut, "_app/worker.js"), "utf8");
   const ask = (msg) => new Promise((resolve) => {
     const self = { postMessage: resolve };
     vm.runInContext(code, vm.createContext({ self, URL, TextEncoder, TextDecoder, console, setTimeout, clearTimeout, queueMicrotask, structuredClone, atob, btoa }));
@@ -878,7 +882,8 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
     const w = await ask({ input: "edge", url: r.url, finalUrl, bytes: body.buffer });
     const s = snapshot({ finalUrl, body });
     const c = await convert({ url: r.url, finalUrl, html: s.html, retrievedAt: s.retrievedAt, fingerprint: s.fingerprint, input: "edge" });
-    if (w.error || noTime(w.markdown) !== noTime(c.markdown) || !w.markdown.includes(`\nfingerprint: ${sha256(body).slice(0, 16)}\n`)) off.push(`${r.name} edge${w.error ? ` (${w.message})` : ""}`);
+    if (w.error || noTime(w.markdown) !== noTime(c.markdown) || !w.markdown.includes(`\nfingerprint: ${sha256(body).slice(0, 16)}\n`) ||
+      w.losses !== c.doc.sections.reduce((n, x) => n + x.losses.length, 0)) off.push(`${r.name} edge${w.error ? ` (${w.message})` : ""}`);
   }
   const paste = await ask({ input: "paste", url: "https://p.example/doc", html: "<html><body><main><h1>Doc</h1><p>Pasted body text, long enough to be content.</p></main></body></html>" });
   const binary = await ask({ input: "edge", url: "https://p.example/f.pdf", finalUrl: "https://p.example/f.pdf", bytes: new Uint8Array([37, 80, 68, 70, 0, 1]).buffer });
@@ -985,10 +990,10 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
     !h.has("set-cookie") && !h.has("x-upstream") && wide.status === 200 && wide.headers.get("x-final-url") === "https://a.example/%E6%97%A5" && missing.status === 502 && missing.code === "upstream" && noUrl.status === 400 && post.status === 405);
 }
 
-// The built site (scripts/site.js): the shell tells curl and agents where the CLI is, scripts load
-// from self and Turnstile only, app code writes no HTML, and _headers carries the CSP.
+// The built site: the shell tells curl and agents where the CLI is, scripts load from self and
+// Turnstile only, app code writes no HTML, and _headers carries the CSP.
 {
-  const out = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test-sitekey");
+  const out = siteOut;
   const html = await readFile(join(out, "index.html"), "utf8");
   const appSrc = (await Promise.all(["site/app.js", "site/url.js", "site/worker.js"].map((f) => readFile(join(ROOT, f), "utf8")))).join("\n");
   const appBuilt = await readFile(join(out, "_app/app.js"), "utf8");

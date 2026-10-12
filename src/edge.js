@@ -8,14 +8,15 @@ import { checkTarget, fetchBody, MAX_BYTES, noAnswer, REDIRECT } from "./fetch-p
 export const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 export const OWN_ZONES = ["1mb.dev", "pages.dev"];
 
-// The Function's guards on top of the policy's checkTarget (scheme, private literals).
+// The policy's checkTarget (scheme, private literals), then the Function's own guards.
 export function edgeCheck(url) {
   const u = new URL(url);
+  const target = checkTarget(url);
   // "1mb.dev." is 1mb.dev: a trailing dot is the same name in DNS.
-  const host = u.hostname.replace(/^\[|\]$/g, "").replace(/\.+$/, "");
+  const host = target.host.replace(/\.+$/, "");
   if (u.username || u.password) throw refused(`credentials in ${url}: the web fetches no URL with a user or password`);
   if (u.port && u.port !== "80" && u.port !== "443") throw refused(`port ${u.port} in ${url}: the web fetches ports 80 and 443 only; run npx bareflow for others`);
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":")) throw refused(`IP address ${host}: the web fetches host names only; run npx bareflow for an address`);
+  if (target.literal) throw refused(`IP address ${host}: the web fetches host names only; run npx bareflow for an address`);
   if (OWN_ZONES.some((z) => host === z || host.endsWith(`.${z}`))) throw refused(`${host} is not fetched by the web`);
   // Cloudflare's network refuses these; a local dev server would not.
   if (!host.includes(".") || host === "localhost" || host.endsWith(".localhost")) throw refused(`${host} is not a public host name`);
@@ -99,7 +100,7 @@ export const handler = (fetchImpl, { timeout = 30000 } = {}) => async ({ request
   if (!token) return fail(403, "token", "no Turnstile token; reload the page");
   const target = new URL(request.url).searchParams.get("url");
   if (!target) return fail(400, "url", "no url parameter");
-  try { checkTarget(target); edgeCheck(target); } catch (e) { return failure(e); }
+  try { edgeCheck(target); } catch (e) { return failure(e); }
   const verdict = await checkToken(fetchImpl, env.TURNSTILE_SECRET, token, request.headers.get("cf-connecting-ip"));
   if (verdict === "down") return fail(503, "unavailable", "the bot check service did not answer; try again later");
   if (verdict === "bad") return fail(403, "token", "the Turnstile check failed or expired; reload the page");

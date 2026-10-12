@@ -28,5 +28,6 @@ export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+  if (!process.env.TURNSTILE_SITEKEY) console.error(`TURNSTILE_SITEKEY unset: built with Cloudflare's always-pass test key ${TEST_SITEKEY}; local use only, a deploy needs the real key`);
   console.log(await site());
 }

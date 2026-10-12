@@ -34,7 +34,7 @@ export function checkTarget(url) {
   const host = httpUrl(url).hostname.replace(/^\[|\]$/g, "");
   const literal = /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":");
   if (literal && isPrivateIp(host)) throw blocked(host);
-  return { host };
+  return { host, literal };
 }
 
 // transport(url, { host, headers, deadline, budget }) resolves one response: { status, location,

@@ -20,9 +20,10 @@ async function work(m) {
   }
   const { doc, markdown } = await bareflow.convert(args);
   const count = (s) => s.blocks.length + s.children.reduce((n, c) => n + count(c), 0);
-  const losses = (s) => s.losses.length + s.children.reduce((n, c) => n + losses(c), 0);
   if (!doc.sections.reduce((n, s) => n + count(s), 0)) return fail("empty", "the page has no readable content; sites that render with JavaScript come back empty", { markdown });
-  return { markdown, losses: doc.sections.reduce((n, s) => n + losses(s), 0), flattened: markdown.startsWith("---\nwarning:") };
+  // Loss count and flattening as the header states them (the golden surface pins its fields).
+  const header = markdown.slice(0, markdown.indexOf("\n---\n"));
+  return { markdown, losses: Number(header.match(/^losses: (\d+)$/m)[1]), flattened: /^warning: /m.test(header) };
 }
 
 self.onmessage = async ({ data }) => {
