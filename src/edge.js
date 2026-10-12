@@ -56,7 +56,7 @@ async function readCapped(stream, max) {
 // policy's deadline whether headers or body are late.
 // Workers decompress in the Function's CPU time (10 ms on Free), so it asks for identity; a site
 // that compresses anyway is still decoded, and still capped.
-export const edgeTransport = (fetchImpl, { stream = false } = {}) => async (url, { headers, deadline, budget, maxBytes }) => {
+export const edgeTransport = (fetchImpl, { limit } = {}) => async (url, { headers, deadline, budget, maxBytes }) => {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), Math.max(0, deadline - Date.now()));
   let streaming = false;
@@ -74,12 +74,13 @@ export const edgeTransport = (fetchImpl, { stream = false } = {}) => async (url,
       res.body?.cancel().catch(() => {});
       return { status: res.status, over: true };
     }
-    // A declared, uncompressed length within the cap is handed on unread, no byte of it in JS: the
-    // runtime frames it to that length, and the timer stays armed so the deadline still cuts it. A
-    // compressed body is never handed on: it could inflate past any cap outside JS.
-    if (stream && res.body && declared <= maxBytes && !res.headers.get("content-encoding")) {
+    // A declared, uncompressed length within the cap is handed on unread through limit(body, n),
+    // the platform's native stream that errors past n bytes: the declared length is enforced, not
+    // trusted. The timer stays armed so the deadline still cuts it. A compressed body is read: its
+    // declared length is not the page's.
+    if (limit && res.body && declared <= maxBytes && !res.headers.get("content-encoding")) {
       streaming = true;
-      return { status: res.status, stream: res.body };
+      return { status: res.status, stream: limit(res.body, declared) };
     }
     try { return { status: res.status, body: await readCapped(res.body, maxBytes) }; }
     catch (e) {
@@ -120,7 +121,7 @@ async function checkToken(fetchImpl, secret, token, ip) {
 
 // GET /_fetch?url=<target> with the Turnstile token in x-turnstile-token. The target and the
 // visitor are never logged.
-export const handler = (fetchImpl, { timeout = 30000 } = {}) => async ({ request, env }) => {
+export const handler = (fetchImpl, { timeout = 30000, limit } = {}) => async ({ request, env }) => {
   if (request.method !== "GET") return fail(405, "url", "GET only");
   if (!env?.TURNSTILE_SECRET) return fail(503, "unavailable", "the fetch is not configured (no TURNSTILE_SECRET)");
   const req = new URL(request.url);
@@ -134,7 +135,7 @@ export const handler = (fetchImpl, { timeout = 30000 } = {}) => async ({ request
   if (verdict === "down") return fail(503, "unavailable", "the bot check service did not answer; try again later");
   if (verdict === "bad") return fail(403, "token", "the Turnstile check failed or expired; reload the page");
   try {
-    const { finalUrl, body, stream, over } = await fetchBody(target, edgeTransport(fetchImpl, { stream: true }), { timeout, check: edgeCheck, maxBytes: WEB_MAX_BYTES });
+    const { finalUrl, body, stream, over } = await fetchBody(target, edgeTransport(fetchImpl, { limit }), { timeout, check: edgeCheck, maxBytes: WEB_MAX_BYTES });
     if (over) return fail(502, "over-cap", `the page is over ${WEB_MAX_BYTES / 1048576} MB, the web's limit; npx bareflow reads up to ${MAX_BYTES / 1048576} MB`);
     return new Response(stream ?? body, { status: 200, headers: { ...INERT, "content-type": "application/octet-stream", "content-disposition": "attachment", "x-final-url": finalUrl } });
   } catch (e) { return failure(e); }

@@ -1024,19 +1024,21 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     !h.has("set-cookie") && !h.has("x-upstream") && wide.status === 200 && wide.headers.get("x-final-url") === "https://a.example/%E6%97%A5" && missing.status === 502 && missing.code === "upstream" && noUrl.status === 400 && post.status === 405);
   // Pass-through: a declared, uncompressed length within the web cap reaches the response unread;
   // a compressed or undeclared body is read; the deadline still cuts a passed-through body.
-  let pulls = 0;
   const html = new TextEncoder().encode("<p>declared</p>");
+  // FixedLengthStream's contract (Workers only): the stream errors past, or short of, n bytes.
+  let piped = 0;
+  const limit = (body, n) => { piped++; let seen = 0; return body.pipeThrough(new TransformStream({ transform(c, out) { seen += c.length; if (seen > n) throw new Error("too many bytes"); out.enqueue(c); }, flush() { if (seen < n) throw new Error("too few bytes"); } })); };
   const through = async (headers, { endless = false, timeout = 3000 } = {}) => {
     const upstream = async (url, init) => {
       if (url === SITEVERIFY) return Response.json({ success: true });
       let ctl;
       init.signal.addEventListener("abort", () => { try { ctl.error(new Error("aborted")); } catch {} });
       // Each pull waits a tick, as a network does: a synchronous endless source starves the timers.
-      return new Response(new ReadableStream({ start(c) { ctl = c; }, async pull(c) { pulls++; await new Promise((ok) => setTimeout(ok, 5)); c.enqueue(html); if (!endless) c.close(); } }, { highWaterMark: 0 }), { status: 200, headers });
+      return new Response(new ReadableStream({ start(c) { ctl = c; }, async pull(c) { await new Promise((ok) => setTimeout(ok, 5)); c.enqueue(html); if (!endless) c.close(); } }, { highWaterMark: 0 }), { status: 200, headers });
     };
-    pulls = 0;
-    const res = await handler(upstream, { timeout })({ request: new Request("https://bareflow.1mb.dev/_fetch?url=https%3A%2F%2Fa.example%2F", { headers: { "x-turnstile-token": "good" } }), env: { TURNSTILE_SECRET: "secret" } });
-    const unread = pulls === 0;
+    piped = 0;
+    const res = await handler(upstream, { timeout, limit })({ request: new Request("https://bareflow.1mb.dev/_fetch?url=https%3A%2F%2Fa.example%2F", { headers: { "x-turnstile-token": "good" } }), env: { TURNSTILE_SECRET: "secret" } });
+    const unread = piped === 1;
     // Bounded and cancelled: a deadline that failed would otherwise read the endless body forever.
     const reader = res.body.getReader(), parts = [], stop = Date.now() + 2000;
     let text;
@@ -1054,10 +1056,11 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   const compressed = await through({ "content-length": String(html.length), "content-encoding": "gzip" });
   const undeclared = await through({});
   const malformed = await through({ "content-length": `${html.length}, 5000000` });
-  const late = await through({ "content-length": "1000" }, { endless: true, timeout: 200 });
-  record("edge", "pass-through", "a declared, uncompressed length within the web cap is handed on unread; compressed, undeclared, or malformed (15, 5000000) is read; the deadline cuts a passed-through body",
+  const understated = await through({ "content-length": "5" });
+  const late = await through({ "content-length": "1000000" }, { endless: true, timeout: 200 });
+  record("edge", "pass-through", "a declared, uncompressed length within the web cap is handed on unread; compressed, undeclared, or malformed (15, 5000000) is read; a body longer than declared is cut by the limiter; the deadline cuts a passed-through body",
     declared.status === 200 && declared.unread && declared.text === "<p>declared</p>" && !compressed.unread && compressed.text === "<p>declared</p>" &&
-    !undeclared.unread && undeclared.text === "<p>declared</p>" && !malformed.unread && malformed.text === "<p>declared</p>" && late.status === 200 && late.unread && late.text === "cut");
+    !undeclared.unread && undeclared.text === "<p>declared</p>" && !malformed.unread && malformed.text === "<p>declared</p>" && understated.unread && understated.text === "cut" && late.status === 200 && late.unread && late.text === "cut");
   record("edge", "cap", "every page fetch asks for identity; one byte over the web cap: 502 over-cap naming the CLI; exactly the cap: 200 with every byte",
     encodings.size === 1 && encodings.has("identity") && big.status === 502 && big.code === "over-cap" && /^the page is over 1 MB, the web's limit; npx bareflow reads up to 5 MB$/.test(new TextDecoder().decode(big.body)) &&
     exact.status === 200 && exact.body.length === WEB_MAX_BYTES);
