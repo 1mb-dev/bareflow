@@ -1,6 +1,7 @@
-// The browser bundle: convert() and its imports as one minified IIFE exposing `bareflow.convert`.
-// verify builds it with these same options and diffs it with the CLI, so what ships is what is
-// checked. `npm run bundle` writes dist/bareflow.js.
+// The browser bundle: convert(), the fetch policy's snapshot() and MAX_BYTES, as one minified IIFE
+// exposing `bareflow`. verify builds it with these same options and diffs it with the CLI, and the
+// web app's worker is this bundle plus site/worker.js, so what ships is what is checked.
+// `npm run bundle` writes dist/bareflow.js.
 import { build } from "esbuild";
 import { writeFile, mkdir } from "node:fs/promises";
 import { realpathSync } from "node:fs";
@@ -11,7 +12,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 export async function bundle() {
   const out = await build({
-    entryPoints: [join(ROOT, "src/convert.js")],
+    stdin: { contents: 'export { convert } from "./src/convert.js"; export { snapshot, MAX_BYTES } from "./src/fetch-policy.js";', resolveDir: ROOT },
     bundle: true, format: "iife", globalName: "bareflow", platform: "browser", minify: true,
     write: false, logLevel: "silent",
   });

@@ -40,13 +40,14 @@ export function checkTarget(url) {
 // transport(url, { host, headers, deadline, budget }) resolves one response: { status, location,
 // body } where body is the decoded bytes (Uint8Array), read to at most MAX_BYTES; absent on a
 // redirect, and a response without one (204, 304) is an empty page. It rejects with noAnswer at
-// the deadline.
-export async function fetchPage(url, transport, { timeout = 30000 } = {}) {
+// the deadline. check(url) runs on every hop after checkTarget: the edge Function's own guards.
+export async function fetchBody(url, transport, { timeout = 30000, check } = {}) {
   const deadline = Date.now() + timeout;
   let at = url;
   for (let hop = 0; ; hop++) {
     if (hop > MAX_HOPS) throw new Error(`more than ${MAX_HOPS} redirects from ${at}`);
     const { host } = checkTarget(at);
+    check?.(at);
     if (deadline - Date.now() <= 0) throw noAnswer(at, timeout);
     const res = await transport(at, { host, headers: REQUEST_HEADERS, deadline, budget: timeout });
     if (REDIRECT.has(res.status)) {
@@ -55,14 +56,20 @@ export async function fetchPage(url, transport, { timeout = 30000 } = {}) {
       continue;
     }
     if (res.status >= 400) throw new Error(`HTTP ${res.status} from ${at}; check the URL (bareflow does not retry)`);
-    const body = (res.body ?? new Uint8Array()).subarray(0, MAX_BYTES);
-    return {
-      finalUrl: at,
-      bytes: body.length,
-      // ignoreBOM keeps a leading BOM in the text, as the page has it.
-      html: new TextDecoder("utf-8", { ignoreBOM: true }).decode(body),
-      fingerprint: sha256(body).slice(0, 16),
-      retrievedAt: new Date().toISOString(),
-    };
+    return { finalUrl: at, body: (res.body ?? new Uint8Array()).subarray(0, MAX_BYTES) };
   }
 }
+
+// The fetched bytes as a page: the CLI makes it after fetchBody, the browser after /_fetch.
+export function snapshot({ finalUrl, body }) {
+  return {
+    finalUrl,
+    bytes: body.length,
+    // ignoreBOM keeps a leading BOM in the text, as the page has it.
+    html: new TextDecoder("utf-8", { ignoreBOM: true }).decode(body),
+    fingerprint: sha256(body).slice(0, 16),
+    retrievedAt: new Date().toISOString(),
+  };
+}
+
+export const fetchPage = async (url, transport, opts) => snapshot(await fetchBody(url, transport, opts));
