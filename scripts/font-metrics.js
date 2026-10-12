@@ -103,6 +103,12 @@ export function metrics(buf, sample = SAMPLE) {
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const [web, local, sample] = process.argv.slice(2);
   const w = metrics(readFileSync(web), sample), l = metrics(readFileSync(local), sample);
+  // The overrides use hhea; a web face that asks for typo metrics (and has different ones) would
+  // lay out differently per platform, so refuse it rather than guess.
+  if (w.typo.use && (w.typo.ascent !== w.ascent || w.typo.descent !== w.descent || w.typo.lineGap !== w.lineGap)) {
+    console.error(`${web}: USE_TYPO_METRICS with typo metrics unlike hhea; these overrides would not hold`);
+    process.exit(1);
+  }
   const size = w.avg / l.avg;
   const pct = (x) => `${(x * 100).toFixed(2)}%`;
   console.log(JSON.stringify({ web: w, local: l }, null, 1));
