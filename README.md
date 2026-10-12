@@ -48,7 +48,7 @@ right, and the answering agent, distrusting it, substituted an API from memory.
 
 ## Status
 
-0.4.0, local only. The pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented with
+0.5.0, local only. The pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented with
 structured loss markers, and `npm run verify` scores the loss audit and nav detection against
 hand-labelled frozen fixtures, lexes every render with a CommonMark parser, and pins the CLI and
 IR surface.
