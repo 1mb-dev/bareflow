@@ -82,15 +82,21 @@ function contents() {
     }));
   }
   $("contents").dataset.shown = String(heads.length >= 4);
+  marked = -2; // a new list carries no mark
 }
 
-// The margin list marks the section being read: the last h2 at or above the tape's lower edge.
+// The margin list marks the section being read: the last h2 whose top is no more than 16px below
+// the tape (more than the scroll-padding's 8px, so a heading a contents link scrolled to counts).
+// Runs on every scroll: nothing while the list is not displayed, and it writes only on a change.
+let marked = -2;
 function current() {
-  if ($("toc").hidden) return;
+  if ($("toc").hidden || !$("toc").offsetParent) return;
   const line = $("tape").getBoundingClientRect().bottom + 16;
   const heads = [...$("frame").querySelectorAll("h2")];
   let at = -1;
   for (let i = 0; i < heads.length && heads[i].getBoundingClientRect().top <= line; i++) at = i;
+  if (at === marked) return;
+  marked = at;
   $("toc-list").querySelectorAll("a").forEach((a, i) => {
     if (i === at) a.setAttribute("aria-current", "location"); else a.removeAttribute("aria-current");
   });
