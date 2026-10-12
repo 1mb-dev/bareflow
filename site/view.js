@@ -55,11 +55,11 @@ function fold(full, keep) {
 
 // A code block or table that scrolls sideways takes keyboard focus, and a scrolling table is a
 // labelled region; one that fits is neither. Measured only while the page shows: hidden, every
-// block measures 0 wide.
-function reachable() {
-  if ($("frame").hidden) return;
+// block measures 0 wide. The home's example calls it too.
+export function reachable(root = $("frame")) {
+  if (root.closest("[hidden]")) return;
   // Every read before any write: one layout per call, not one per block.
-  const blocks = [...$("frame").querySelectorAll("pre, .table-scroll")].map((e) => [e, e.scrollWidth > e.clientWidth]);
+  const blocks = [...root.querySelectorAll("pre, .table-scroll")].map((e) => [e, e.scrollWidth > e.clientWidth]);
   for (const [e, scrolls] of blocks) {
     const table = e.classList.contains("table-scroll");
     for (const [name, value] of [["tabindex", "0"], ...(table ? [["role", "region"], ["aria-label", "table"]] : [])]) {

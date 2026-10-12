@@ -133,6 +133,8 @@ pre code { background: none; padding: 0; font-size: inherit; }
 .exhibit .page h1 { margin-top: var(--s-2); }
 .exhibit > figcaption { margin-top: var(--s-3); padding: var(--s-3) var(--s-3) 0; border-top: 1px solid var(--rule); }
 @media (min-width: 76rem) {
-  .exhibit-part { display: grid; grid-template-columns: minmax(0, var(--measure)) minmax(0, 1fr); column-gap: var(--s-4); align-items: start; }
-  .exhibit-part > .caption { grid-column: 2; grid-row: 1; }
+  /* Each caption level with its part's first line: the space between parts is the row's, not theirs. */
+  .exhibit-part { display: grid; grid-template-columns: minmax(0, var(--measure)) minmax(0, 1fr); column-gap: var(--s-4); align-items: start; margin-top: var(--s-3); }
+  .exhibit-part > .caption { grid-column: 2; grid-row: 1; margin: 0; }
+  .exhibit .page > h1:first-child { margin-top: 0; }
 }

@@ -1,7 +1,7 @@
 // The page: route the share URL, get the bytes from /_fetch behind Turnstile, convert in the
 // worker, show the result (view.js). Page content reaches the DOM through textContent only.
 import { parseShare } from "./url.js";
-import { origin, showView } from "./view.js";
+import { origin, reachable, showView } from "./view.js";
 
 const $ = (id) => document.getElementById(id);
 const ORIGIN = location.origin;
@@ -113,6 +113,14 @@ function alertIn(id, message) {
 
 function landing() {
   show("landing");
+  // The example's code is pre-rendered; a block that scrolls at this width takes focus, as in the view.
+  const example = document.querySelector(".exhibit");
+  if (example) {
+    const check = () => reachable(example);
+    check();
+    globalThis.addEventListener?.("resize", check);
+    document.fonts?.ready.then(check);
+  }
   $("go").addEventListener("submit", (e) => {
     e.preventDefault();
     const typed = $("target").value.trim();

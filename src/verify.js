@@ -1155,8 +1155,10 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   // Turnstile's script loads only to fetch a page: the built app.js, run on the built shell, adds
   // exactly that script on a target route, and none on the home, a paste, or a refused address.
   const TURNSTILE = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-  const runApp = (path, act) => {
-    const w = parseHTML(html), did = [], timers = [];
+  const runApp = (path, act, page = html, wide = false) => {
+    const w = parseHTML(page), did = [], timers = [];
+    // linkedom lays nothing out; wide makes every block overflow, as code does on a phone.
+    if (wide) for (const [k, v] of [["scrollWidth", 400], ["clientWidth", 300]]) Object.defineProperty(w.HTMLElement.prototype, k, { get: () => v, configurable: true });
     const ctx = {
       document: w.document, location: { href: `https://bareflow.1mb.dev${path}`, origin: "https://bareflow.1mb.dev", assign: (u) => did.push(`assign ${u}`) },
       history: { replaceState() {}, pushState() {} }, fetch: (u) => { did.push(`fetch ${u}`); return new Promise(() => {}); },
@@ -1177,6 +1179,10 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     paste: runApp("/", submit("paste-form", { "paste-url": "https://docs.example.com/a", "paste-html": "<p>a</p>" })),
     refused: runApp("/javascript:alert(1)"), target: runApp("/https://docs.example.com/guide/"), bare: runApp("/docs.example.com/guide/"),
   };
+  // The home's pre-rendered example: a block that scrolls takes focus, as in the view.
+  const homeRun = runApp("/", null, home, true);
+  const focusable = [...homeRun.d.querySelectorAll(".exhibit pre")].map((e) => e.getAttribute("tabindex"));
+  record("web", "example-reach", `the home's example: every block that scrolls takes focus (${focusable.length} blocks)`, focusable.length === 4 && focusable.every((t) => t === "0") && String(homeRun) === "");
   const want = { home: "", query: "", go: "assign https://bareflow.1mb.dev/https://docs.example.com/a", paste: "worker", refused: "", target: TURNSTILE, bare: TURNSTILE };
   const wrong = Object.keys(want).filter((k) => String(loads[k]) !== want[k]);
   // A blocked script fails the fetch at the next check, not after the 10 s wait.
