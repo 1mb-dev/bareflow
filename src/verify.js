@@ -1099,7 +1099,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     understated.unread && understated.text === "cut" && resetMid.unread && resetMid.text === "cut" && late.status === 200 && late.unread && late.text === "cut" &&
     /past the 1048576-byte cap$/.test(pastCap) && /^fetchPage needs bytes/.test(pageOfStream));
   record("edge", "cap", "every page fetch asks for identity; one byte over the web cap: 502 over-cap naming the CLI; exactly the cap: 200 with every byte",
-    encodings.size === 1 && encodings.has("identity") && big.status === 502 && big.code === "over-cap" && /^the page is over 1 MB, the web's limit; npx bareflow reads up to 5 MB$/.test(new TextDecoder().decode(big.body)) &&
+    encodings.size === 1 && encodings.has("identity") && big.status === 502 && big.code === "over-cap" && /^the page is over 1 MB, the web's limit; the bareflow CLI reads up to 5 MB$/.test(new TextDecoder().decode(big.body)) &&
     exact.status === 200 && exact.body.length === WEB_MAX_BYTES);
 }
 
@@ -1115,15 +1115,24 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     ...(await readdir(out, { recursive: true })).filter((f) => f.endsWith(".js") && f !== join("_app", "worker.js")).map((f) => join(out, f)),
   ];
   const sunk = (await Promise.all(scanned.map(async (f) => (SINKS.test(await readFile(f, "utf8")) ? [f] : [])))).flat();
+  // No `npx` in anything the web serves or says until the package is on npm (7.4).
+  const served = [
+    ...(await readdir(join(ROOT, "site"), { recursive: true, withFileTypes: true })).filter((e) => e.isFile()).map((e) => join(e.parentPath, e.name)),
+    ...(await readdir(out, { recursive: true, withFileTypes: true })).filter((e) => e.isFile()).map((e) => join(e.parentPath, e.name)),
+    join(ROOT, "src/edge.js"), join(ROOT, "functions/_fetch.js"),
+  ];
+  const npx = (await Promise.all(served.map(async (f) => (/\bnpx\b/.test(await readFile(f, "utf8")) ? [f] : [])))).flat();
   const headers = await readFile(join(out, "_headers"), "utf8");
   const routes = JSON.parse(await readFile(join(out, "_routes.json"), "utf8"));
   const [tokens, style, builtStyle] = await Promise.all([join(ROOT, "site/tokens.css"), join(ROOT, "site/style.css"), join(out, "_app/style.css")].map((f) => readFile(f, "utf8")));
   const scripts = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1]);
   const visible = parseHTML(html).document.getElementById("pointer")?.textContent;
   await rm(out, { recursive: true, force: true });
-  record("web", "shell", "the shell's text points curl and agents at npx bareflow; sitekey set; scripts from self and challenges.cloudflare.com only",
-    visible === "bareflow converts this page in your browser. For agents and curl: npx bareflow <url>." && html.includes('data-sitekey="test-sitekey"') &&
+  record("web", "shell", "the shell's text for curl and agents names no command that does not exist yet; sitekey set; scripts from self and challenges.cloudflare.com only",
+    visible === "bareflow converts this page in your browser. The CLI and MCP server ship on npm with 0.5.0. Source: github.com/1mb-dev/bareflow." && html.includes('data-sitekey="test-sitekey"') &&
     scripts.length === 2 && scripts.every((s) => s.startsWith("/_app/") || s.startsWith("https://challenges.cloudflare.com/")));
+  record("web", "claims", `no npx in site/, the built site, or the Function's messages (${served.length} files)${npx.length ? `: ${npx.join(", ")}` : ""}`,
+    !npx.length && served.some((f) => f.endsWith(join("_app", "app.js"))) && served.some((f) => f.endsWith("index.html")));
   const missed = SINK_FORMS.filter((s) => !SINKS.test(s));
   record("web", "sinks", `no HTML sink in any site script, source or built (${scanned.length} files); the pattern catches each sink form${sunk.length || missed.length ? `: ${[...sunk, ...missed].join(", ")}` : ""}`,
     !sunk.length && !missed.length && scanned.some((f) => f.endsWith(join("_app", "app.js"))) && !SINKS.test("el.textContent = x; el.setAttribute(\"href\", u)"));

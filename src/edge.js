@@ -23,8 +23,8 @@ export function edgeCheck(url) {
   // "1mb.dev." is 1mb.dev: a trailing dot is the same name in DNS.
   const host = target.host.replace(/\.+$/, "");
   if (u.username || u.password) throw refused(`credentials in ${url}: the web fetches no URL with a user or password`);
-  if (u.port && u.port !== "80" && u.port !== "443") throw refused(`port ${u.port} in ${url}: the web fetches ports 80 and 443 only; run npx bareflow for others`);
-  if (target.literal) throw refused(`IP address ${host}: the web fetches host names only; run npx bareflow for an address`);
+  if (u.port && u.port !== "80" && u.port !== "443") throw refused(`port ${u.port} in ${url}: the web fetches ports 80 and 443 only; the bareflow CLI fetches others`);
+  if (target.literal) throw refused(`IP address ${host}: the web fetches host names only; the bareflow CLI fetches public addresses`);
   if (OWN_ZONES.some((z) => host === z || host.endsWith(`.${z}`))) throw refused(`${host} is not fetched by the web`);
   // Cloudflare's network refuses these; a local dev server would not.
   if (!host.includes(".") || host === "localhost" || host.endsWith(".localhost")) throw refused(`${host} is not a public host name`);
@@ -139,7 +139,7 @@ export const handler = (fetchImpl, { timeout = 30000, limit } = {}) => async ({ 
   if (verdict === "bad") return fail(403, "token", "the Turnstile check failed or expired; reload the page");
   try {
     const { finalUrl, body, stream, over } = await fetchBody(target, edgeTransport(fetchImpl, { limit }), { timeout, check: edgeCheck, maxBytes: WEB_MAX_BYTES });
-    if (over) return fail(502, "over-cap", `the page is over ${WEB_MAX_BYTES / 1048576} MB, the web's limit; npx bareflow reads up to ${MAX_BYTES / 1048576} MB`);
+    if (over) return fail(502, "over-cap", `the page is over ${WEB_MAX_BYTES / 1048576} MB, the web's limit; the bareflow CLI reads up to ${MAX_BYTES / 1048576} MB`);
     return new Response(stream ?? body, { status: 200, headers: { ...INERT, "content-type": "application/octet-stream", "content-disposition": "attachment", "x-final-url": finalUrl } });
   } catch (e) { return failure(e); }
 };
