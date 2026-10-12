@@ -950,15 +950,16 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
     return fetch(u, init);
   };
   const onRequestGet = handler(platform, { timeout: 3000 });
-  const ask = async (target, { token = "good", method = "GET" } = {}) => {
+  const ask = async (target, { token = "good", method = "GET", env = { TURNSTILE_SECRET: "secret" } } = {}) => {
     calls = [];
     const q = target == null ? "" : `?url=${encodeURIComponent(target)}`;
-    const res = await onRequestGet({ request: new Request(`https://bareflow.1mb.dev/_fetch${q}`, { method, headers: token ? { "x-turnstile-token": token } : {} }), env: { TURNSTILE_SECRET: "secret" } });
+    const res = await onRequestGet({ request: new Request(`https://bareflow.1mb.dev/_fetch${q}`, { method, headers: token ? { "x-turnstile-token": token } : {} }), env });
     return { status: res.status, code: res.headers.get("x-bareflow-error"), headers: res.headers, body: new Uint8Array(await res.arrayBuffer()), calls: [...calls] };
   };
   const refusedFirst = async (target) => { const r = await ask(target); return r.status === 400 && r.code === "url" && r.calls.length === 0; };
   const noToken = await ask("https://a.example/page", { token: null });
   const badToken = await ask("https://a.example/page", { token: "bad" });
+  const noSecret = await ask("https://a.example/page", { env: {} });
   const ok = await ask("https://a.example/page");
   const h = ok.headers;
   const guards = await Promise.all(["https://u:p@a.example/", "http://a.example:8080/", "https://8.8.8.8/", "https://[2606:4700::1111]/", "https://1mb.dev/", "https://bareflow.1mb.dev/x", "https://x.pages.dev/", "https://1mb.dev./", "https://bareflow.1mb.dev../x", "https://x.pages.dev./", "https://localhost/", "https://a.localhost/", "https://intranet/", "file:///etc/passwd", "javascript:alert(1)"].map(refusedFirst));
@@ -969,8 +970,9 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   const noUrl = await ask(null);
   const post = await ask("https://a.example/page", { method: "POST" });
   server.close();
-  record("edge", "token", "no token: 403 with no request made; a failed Turnstile check: 403 after siteverify only",
-    noToken.status === 403 && noToken.code === "token" && noToken.calls.length === 0 && badToken.status === 403 && badToken.calls.length === 1 && badToken.calls[0] === SITEVERIFY);
+  record("edge", "token", "no token: 403 with no request made; a failed Turnstile check: 403 after siteverify only; no secret configured: 503 unavailable",
+    noToken.status === 403 && noToken.code === "token" && noToken.calls.length === 0 && badToken.status === 403 && badToken.calls.length === 1 && badToken.calls[0] === SITEVERIFY &&
+    noSecret.status === 503 && noSecret.code === "unavailable" && noSecret.calls.length === 0);
   record("edge", "guards", "credentials, port 8080, IPv4 and IPv6 literals, 1mb.dev, *.1mb.dev, *.pages.dev (trailing dots too), localhost, single-label names, file:, javascript: refused before Turnstile; private literal 403; a redirect to our zone or another port refused",
     guards.every(Boolean) && priv.status === 403 && priv.code === "blocked" && priv.calls.length === 0 && toOwn.code === "url" && toPort.code === "url");
   record("edge", "response", "a page: inert octet-stream bytes, final URL, no upstream headers; 404 upstream, no url, POST named",

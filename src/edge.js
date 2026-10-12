@@ -72,7 +72,7 @@ export const edgeTransport = (fetchImpl) => async (url, { headers, deadline, bud
 const INERT = { "x-content-type-options": "nosniff", "content-security-policy": "sandbox; default-src 'none'", "cache-control": "no-store" };
 const fail = (status, code, message) => new Response(message, { status, headers: { ...INERT, "content-type": "text/plain; charset=utf-8", "x-bareflow-error": code } });
 
-// The code the app maps to a named error: token, url, blocked, timeout, upstream.
+// The code the app maps to a named error: token, unavailable, url, blocked, timeout, upstream.
 function failure(e) {
   const m = String(e?.message || e);
   if (e?.code === "url" || m.startsWith("not a URL") || m.startsWith("unsupported protocol")) return fail(400, "url", m);
@@ -83,7 +83,7 @@ function failure(e) {
 
 async function tokenOk(fetchImpl, secret, token, ip) {
   try {
-    const res = await fetchImpl(SITEVERIFY, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ secret, response: token, remoteip: ip ?? undefined }) });
+    const res = await fetchImpl(SITEVERIFY, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ secret, response: token, remoteip: ip ?? undefined }), signal: AbortSignal.timeout(10000) });
     return (await res.json())?.success === true;
   } catch { return false; }
 }
@@ -92,8 +92,9 @@ async function tokenOk(fetchImpl, secret, token, ip) {
 // visitor are never logged.
 export const handler = (fetchImpl, { timeout = 30000 } = {}) => async ({ request, env }) => {
   if (request.method !== "GET") return fail(405, "url", "GET only");
+  if (!env?.TURNSTILE_SECRET) return fail(503, "unavailable", "the fetch is not configured (no TURNSTILE_SECRET)");
   const token = request.headers.get("x-turnstile-token");
-  if (!token || !env?.TURNSTILE_SECRET) return fail(403, "token", "no Turnstile token; reload the page");
+  if (!token) return fail(403, "token", "no Turnstile token; reload the page");
   const target = new URL(request.url).searchParams.get("url");
   if (!target) return fail(400, "url", "no url parameter");
   try { checkTarget(target); edgeCheck(target); } catch (e) { return failure(e); }
