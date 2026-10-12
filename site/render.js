@@ -172,20 +172,21 @@ export function renderDoc(doc, d) {
     e.append(...parts);
     return e;
   };
-  // inLink: inside a link an image is words, not a second link (an <a> in an <a> takes the click).
+  // inLink: inside an <a> an image is words, not a second link (an <a> in an <a> takes the click);
+  // inside a refused link it keeps its own.
   function node(n, inLink) {
     switch (n.t) {
       case "text": return d.createTextNode(n.v);
       case "br": return el("br");
       case "code": return el("code", null, n.v);
       case "strong": case "em": { const e = el(n.t); for (const k of n.c) e.append(node(k, inLink)); return e; }
-      case "link": return anchor(safeHref(n.href, base), ...n.c.map((k) => node(k, true)));
+      case "link": { const href = safeHref(n.href, base); return anchor(href, ...n.c.map((k) => node(k, Boolean(href)))); }
       case "image": return picture(n.alt, n.src, false, inLink);
     }
   }
   // An image is never loaded: it is a link to the image on its host (http(s) only, by safeHref),
   // named by its alt. Block: a figure, `image, <host>` over the alt. Inline: the alt, then `(image)`.
-  // Unlinkable (data:, 1mb.dev, ...): the same words, not a link.
+  // Unlinkable (data:, 1mb.dev, ...), or inside a link: the same words, not a link.
   function picture(alt, src, block, inLink) {
     const href = safeHref(src, base), web = href && /^https?:/.test(href) ? href : null;
     if (block) {
@@ -201,7 +202,7 @@ export function renderDoc(doc, d) {
   // Headings get ids from their text, prefixed so no page id can take one of the view's own.
   const taken = new Set();
   const heading = (e) => {
-    const slug = `bf-${e.textContent.toLowerCase().normalize("NFKD").replace(/\p{M}/gu, "").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "") || "section"}`;
+    const slug = `bf-${e.textContent.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "") || "section"}`;
     let id = slug;
     for (let n = 2; taken.has(id); n++) id = `${slug}-${n}`;
     taken.add(id);
