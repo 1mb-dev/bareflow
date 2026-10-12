@@ -1246,7 +1246,12 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
 
   // The tape, through the real view.js on the shell's own markup: #result's first child, before the
   // page, outside any details; the host said whole; the count once, as the chip; contents from 4 h2s.
-  const shell = parseHTML(await readFile(join(ROOT, "site/index.html"), "utf8")).document;
+  const shellWindow = parseHTML(await readFile(join(ROOT, "site/index.html"), "utf8")), shell = shellWindow.document;
+  shellWindow.HTMLElement.prototype.scrollIntoView ??= function () {}; // layout-free stand-ins
+  shellWindow.HTMLElement.prototype.focus ??= function () {};
+  // In-page links must not move the address (the share URL): each handler prevents the default.
+  let kept = 0;
+  const click = { preventDefault() { kept++; } };
   const page = globalThis.document;
   globalThis.document = shell;
   const view = await import("../site/view.js");
@@ -1273,7 +1278,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     view.showView({ markdown, doc, losses, flattened }, url);
     const chip = $("status").querySelector(".chip");
     const shut = !$("colophon").hasAttribute("open");
-    if (chip) { chip.onclick(); if (!$("colophon").hasAttribute("open")) tapeBad.push(`${where}: chip leaves the colophon shut`); view.showView({ markdown, doc, losses, flattened }, url); }
+    if (chip) { chip.onclick(click); if (!$("colophon").hasAttribute("open")) tapeBad.push(`${where}: chip leaves the colophon shut`); view.showView({ markdown, doc, losses, flattened }, url); }
     const said = losses ? chip?.textContent === `${losses} loss${losses === 1 ? "" : "es"}` && chip.getAttribute("href") === "#rail" && $("status").textContent === chip.textContent
       : !chip && $("status").textContent === (flattened ? "structure unreliable" : "no losses marked");
     const h2 = [...$("frame").querySelectorAll("h2")], items = [...$("contents-list").querySelectorAll("a")];
@@ -1284,7 +1289,11 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   }
   // The colophon: a details after the page, holding the losses; the tape's link opens it.
   if ($("colophon").tagName !== "DETAILS" || !$("colophon").contains($("rail")) || all.indexOf($("colophon")) < all.indexOf($("frame"))) tapeBad.push("colophon placement");
-  $("about").onclick();
+  const entry = $("contents-list").querySelector("a");
+  entry?.onclick(click);
+  $("about").onclick(click);
+  const clicks = lossy + 1 + (entry ? 1 : 0);
+  if (kept !== clicks) tapeBad.push(`in-page links moved the address (${kept} of ${clicks} kept it)`);
   if (!$("colophon").hasAttribute("open")) tapeBad.push("about this copy leaves the colophon shut");
   const before = $("tape-more").hidden;
   $("fold").onclick();

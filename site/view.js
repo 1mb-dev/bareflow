@@ -37,7 +37,7 @@ function tally(r) {
     chip.className = "chip";
     chip.href = "#rail";
     chip.textContent = `${r.losses} loss${r.losses === 1 ? "" : "es"}`;
-    chip.onclick = unfold;
+    chip.onclick = (e) => unfold(e, $("rail"));
     s.append(chip);
   }
   if (r.flattened) s.append(`${r.losses ? " " : ""}structure unreliable`);
@@ -61,15 +61,24 @@ function contents() {
     const li = document.createElement("li"), a = document.createElement("a");
     a.href = `#${h.id}`;
     a.textContent = h.textContent;
-    a.onclick = () => { $("contents").removeAttribute("open"); };
+    a.onclick = (e) => { $("contents").removeAttribute("open"); jump(e, h); };
     li.append(a);
     list.append(li);
   }
   $("contents").dataset.shown = String(heads.length >= 4);
 }
 
+// In-page links move the view and focus, never the address: the address is the share URL, and a
+// fragment there becomes part of the target's (and the Markdown's source line).
+function jump(event, el) {
+  event.preventDefault();
+  if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
+  el.scrollIntoView();
+  el.focus({ preventScroll: true });
+}
+
 // The colophon opens for whoever asks for it: the chip and the tape's link land inside it.
-const unfold = () => { $("colophon").setAttribute("open", ""); };
+const unfold = (event, el) => { $("colophon").setAttribute("open", ""); jump(event, el); };
 
 export function mode(source) {
   $("frame").hidden = source;
@@ -104,7 +113,7 @@ export function showView(r, url) {
   $("view").hidden = false;
   mode(false);
   $("mode").onclick = () => mode($("mode").getAttribute("aria-pressed") !== "true");
-  $("about").onclick = unfold;
+  $("about").onclick = (e) => unfold(e, $("colophon").querySelector("summary"));
   $("copy").onclick = () => navigator.clipboard.writeText(r.markdown).then(() => said($("copy"), "copied"), () => said($("copy"), "copy failed: use markdown, select all"));
   $("download").onclick = () => {
     const a = document.createElement("a");
