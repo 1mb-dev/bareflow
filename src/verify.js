@@ -1222,7 +1222,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
       }
     }
   };
-  const numbering = [];
+  const numbering = [], levels = [];
   for (const { doc, markdown, name } of runs) {
     const where = name ?? doc.source.url;
     const article = renderDoc(doc, document), rail = renderLosses(doc, document);
@@ -1231,9 +1231,14 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     const notes = [...markdown.matchAll(/^L(\d+) ([a-z-]+): /gm)].map((m) => `L${m[1]} ${m[2]}`);
     const shown = [...rail.querySelectorAll(".loss-n")].map((e, i) => `${e.textContent} ${losses[i]?.source}`);
     if (JSON.stringify(shown) !== JSON.stringify(notes) || shown.length !== losses.length) numbering.push(`${where}: ${shown.join(",")} vs ${notes.join(",")}`);
+    const body = markdown.slice(markdown.indexOf("\n---\n") + 5).split(/\n## bareflow: \d+ loss/)[0];
+    const mdLevels = marked.lexer(body).filter((t) => t.type === "heading").map((t) => t.depth).join("");
+    const viewLevels = [...article.querySelectorAll("h1, h2, h3, h4, h5, h6")].map((h) => h.tagName[1]).join("");
+    if (mdLevels !== viewLevels) levels.push(`${where}: ${viewLevels} vs ${mdLevels}`);
   }
   const lossy = runs.filter(({ doc }) => doc.sections.some((s) => s.losses.length)).length;
   record("view", "dom", `the view builds only its own tags and attributes on ${runs.length} pages; links http(s) or mailto, never 1mb.dev${domBad.length ? `: ${domBad.slice(0, 5).join(" | ")}` : ""}`, !domBad.length);
+  record("view", "outline", `the view's heading levels are the Markdown's on ${runs.length} pages${levels.length ? `: ${levels.slice(0, 3).join(" | ")}` : ""}`, !levels.length);
   record("view", "losses", `L<n> in the view is L<n> in the Markdown notes on ${lossy} pages with losses${numbering.length ? `: ${numbering.slice(0, 3).join(" | ")}` : ""}`, lossy >= 9 && !numbering.length);
 
   // Hostile prose, as the IR could carry it: each link either refused or resolved off 1mb.dev.

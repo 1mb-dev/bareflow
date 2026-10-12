@@ -189,12 +189,12 @@ export function renderDoc(doc, d) {
   const article = el("article", "page");
   const section = (s, depth) => {
     article.append(el(`h${Math.min(depth, 6)}`, null, s.title));
-    for (const b of s.blocks) article.append(block(b, depth));
+    for (const b of s.blocks) article.append(block(b));
     for (const c of s.children) section(c, depth + 1);
   };
-  function block(b, depth) {
+  function block(b) {
     switch (b.type) {
-      case "heading": return inline(el(`h${Math.min(b.level + depth, 6)}`), b.text);
+      case "heading": return inline(el(`h${Math.min(b.level, 6)}`), b.text);
       case "paragraph": return inline(el("p"), b.text);
       case "blockquote": return el("blockquote").appendChild(inline(el("p"), b.text)).parentNode;
       case "list": { const e = el(b.ordered ? "ol" : "ul"); for (const it of b.items) e.append(inline(el("li"), it)); return e; }
