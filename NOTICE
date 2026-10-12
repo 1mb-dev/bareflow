@@ -6,6 +6,9 @@ its five pages (usage/seed/runs/*/W.md). Each belongs to its publisher, on the p
 this project's MIT license does not cover it. To have a page removed, open an issue in this
 repository.
 
+The web app's home page shows an excerpt of test/fixtures/vitepress-vue-computed.html (vuejs.org,
+CC BY 4.0), with its attribution.
+
 test/fixtures/caniuse-grid.html
   https://caniuse.com/css-grid
 test/fixtures/devto-event-loop.html

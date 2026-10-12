@@ -32,7 +32,8 @@ import { scoreLoss, scoreNav } from "./truth.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
 import { sha256 } from "./sha256.js";
 import { bundle } from "../scripts/bundle.js";
-import { site } from "../scripts/site.js";
+import { MARK, site, splice } from "../scripts/site.js";
+import { EXAMPLE, LICENSE, excerpt } from "../scripts/example.js";
 import { parseShare } from "../site/url.js";
 import { parseInline, renderDoc, renderLosses } from "../site/render.js";
 
@@ -1217,8 +1218,50 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     JSON.stringify(routes) === JSON.stringify({ version: 1, include: ["/_fetch"], exclude: [] }));
   // Pages serves index.html for any path that is not a file (no 404.html), so it is the shell of
   // every share URL; / alone is rewritten to the home.
-  record("web", "home", "_redirects rewrites / alone, to _app/home; no 404.html; the home is the shell",
-    redirects === "/ /_app/home 200\n" && !top.includes("404.html") && home === html);
+  // The home's example (scripts/example.js): in the home only, once, with no ids. Its page and
+  // losses are the view's own renders of the frozen IR, read back from the built home, so the
+  // serializer and the splice are checked too; its own words and links are exactly these.
+  const exStart = home.indexOf('<section class="example">'), exEnd = home.indexOf("</section>\n", exStart) + "</section>\n".length;
+  const homeDoc = parseHTML(home).document, shellDoc = parseHTML(html).document, fresh = parseHTML("<!doctype html><html><body></body></html>").document;
+  const ex = homeDoc.querySelector("section.example"), exBad = [];
+  if (homeDoc.querySelectorAll("section.example, .exhibit").length !== 2 || shellDoc.querySelector(".example, .exhibit") || html.includes(MARK) || home.includes(MARK)) exBad.push("placement");
+  if (exStart < 0 || home.slice(0, exStart) + home.slice(exEnd) !== html) exBad.push("the home less the example is not the shell");
+  for (const [name, d] of [["home", homeDoc], ["shell", shellDoc]]) { const ids = [...d.querySelectorAll("[id]")].map((e) => e.id); if (new Set(ids).size !== ids.length) exBad.push(`${name}: duplicate id`); }
+  if (ex) {
+    const { doc, part } = await excerpt();
+    const page = renderDoc(part, fresh);
+    for (const h of page.querySelectorAll("[id]")) h.removeAttribute("id");
+    const shown = ex.querySelector("article").cloneNode(true);
+    for (const e of shown.querySelectorAll(".elision")) e.remove();
+    if (shown.outerHTML !== page.outerHTML) exBad.push("the page is not renderDoc of the excerpt");
+    const lost = renderLosses(doc, fresh);
+    lost.querySelector("details").setAttribute("open", "");
+    if (ex.querySelector(".losses")?.outerHTML !== lost.outerHTML) exBad.push("the losses are not renderLosses with L1 open");
+    if (ex.querySelector("[id]")) exBad.push("an id in the example");
+    const words = [...ex.querySelectorAll(":scope > h2, .exhibit-tape p, .caption, .elision, .exhibit > figcaption")].map((e) => e.textContent);
+    if (JSON.stringify(words) !== JSON.stringify(["example", "where it came from", "bareflow 2 losses", "from vuejs.org, not 1mb.dev", "nothing paraphrased",
+      "not shown here: 2 links to Vue School lessons", "not shown here: the rest of the page. Convert it now", "what bareflow could not keep",
+      '"Computed Properties" (c) 2019-present Yuxi (Evan) You and Vue documentation contributors. CC BY 4.0. Excerpt, converted by bareflow; changes marked above.'])) exBad.push(`words: ${JSON.stringify(words)}`);
+    const hrefs = [...ex.querySelectorAll("a")].map((a) => a.getAttribute("href"));
+    if (JSON.stringify(hrefs) !== JSON.stringify([`/${EXAMPLE.url}`, EXAMPLE.url, LICENSE])) exBad.push(`links: ${hrefs.join(" ")}`);
+    const EX_TAGS = new Set(["SECTION", "H1", "H2", "FIGURE", "FIGCAPTION", "DIV", "P", "SPAN", "A", "ARTICLE", "PRE", "CODE", "OL", "LI", "DETAILS", "SUMMARY"]);
+    const EX_CLASSES = new Set(["example", "exhibit", "exhibit-part", "exhibit-tape", "tape-line", "tape-from", "name", "chip", "caption", "elision", "page", "code", "losses", "loss-n"]);
+    for (const e of [ex, ...ex.querySelectorAll("*")]) {
+      if (!EX_TAGS.has(e.tagName)) exBad.push(`<${e.tagName}>`);
+      for (const { name, value } of e.attributes) {
+        const ok = name === "class" ? value.split(" ").every((c) => EX_CLASSES.has(c)) : name === "href" ? e.tagName === "A" : name === "open" ? e.tagName === "DETAILS" && value === "" : false;
+        if (!ok) exBad.push(`<${e.tagName} ${name}="${value.slice(0, 40)}">`);
+      }
+    }
+  }
+  const hostile = "$&$'$`$$</script><script>x</script>";
+  if (splice(`a${MARK}b`, hostile) !== `a${hostile}b`) exBad.push("the splice reads the example as a pattern");
+  const notice = await readFile(join(ROOT, "NOTICE"), "utf8");
+  if (!notice.replace(/\s+/g, " ").includes(`${EXAMPLE.fixture} (${new URL(EXAMPLE.url).hostname}, CC BY 4.0)`) ||
+    Object.values(inventory).find((p) => `test/fixtures/${p.fixture}` === EXAMPLE.fixture)?.url !== EXAMPLE.url) exBad.push("NOTICE does not name the example's page and license");
+  record("web", "home", "_redirects rewrites / alone, to _app/home; no 404.html; the home is the shell plus the example",
+    redirects === "/ /_app/home 200\n" && !top.includes("404.html") && !exBad.some((b) => /placement|not the shell/.test(b)));
+  record("web", "example", `the example: in the home once, no ids; its page and losses equal the view's renders of the frozen IR with L1 open; its words, links, tags, and attributes exactly its own; the splice takes text as text; NOTICE names it${exBad.length ? `: ${exBad.slice(0, 4).join(" | ")}` : ""}`, !exBad.length);
 
   // The design's rules (site/tokens.css): colors only in tokens.css, no shadow or gradient, corners
   // at 2px or less, --mark only as a ground, and every text pair readable in both themes.
