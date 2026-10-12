@@ -1236,6 +1236,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const check = (root, where) => {
     for (const e of [root, ...root.querySelectorAll("*")]) {
       if (!TAGS.has(e.tagName)) domBad.push(`${where}: <${e.tagName}>`);
+      if (e.tagName === "A" && e.parentElement?.closest("a")) domBad.push(`${where}: <a> inside <a>`);
       for (const { name, value } of e.attributes) {
         const ok = name === "class" ? value.split(" ").every((c) => CLASSES.has(c))
           : name === "id" ? /^H[1-6]$/.test(e.tagName) && /^bf-\S+$/.test(value)
@@ -1341,6 +1342,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     ["[x](mailto:a@b.c)", "mailto:a@b.c"], ["[x](https://not1mb.dev/)", "https://not1mb.dev/"],
     ["![i](https://e.com/i.png)", "https://e.com/i.png"], ["![i](/img/a.png)", "https://docs.example.com/img/a.png"], ["![i](javascript:alert(1))", null],
     ["![i](data:image/png;base64,AAAA)", null], ["![i](https://a.1mb.dev/i.png)", null], ["![i](mailto:a@b.c)", null],
+    ["[![build](https://ci.example/badge.svg)](https://ci.example/run)", "https://ci.example/run"],
   ];
   const wrongLinks = links.filter(([t, want]) => hrefOf(t) !== want).map(([t]) => t);
   record("view", "links", `hostile links: script, data, and 1mb.dev refused, relative resolved against the page, images links to their host, never loaded (${links.length})${wrongLinks.length ? `: ${wrongLinks.join(" ")}` : ""}`, !wrongLinks.length);

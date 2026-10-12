@@ -164,40 +164,36 @@ export function renderDoc(doc, d) {
   const base = doc.source.finalUrl || doc.source.url;
   const el = (tag, cls, text) => { const e = d.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const inline = (parent, s) => { for (const n of parseInline(s)) parent.append(node(n)); return parent; };
-  function node(n) {
+  // A checked href as a link, or the same content as refused text.
+  const anchor = (href, ...parts) => {
+    const e = href ? el("a") : el("span", "link-refused");
+    if (href) { e.href = href; e.rel = "noopener noreferrer nofollow ugc"; }
+    e.append(...parts);
+    return e;
+  };
+  // inLink: inside a link an image is words, not a second link (an <a> in an <a> takes the click).
+  function node(n, inLink) {
     switch (n.t) {
       case "text": return d.createTextNode(n.v);
       case "br": return el("br");
       case "code": return el("code", null, n.v);
-      case "strong": case "em": { const e = el(n.t); for (const k of n.c) e.append(node(k)); return e; }
-      case "link": {
-        const href = safeHref(n.href, base);
-        const e = href ? el("a") : el("span", "link-refused");
-        if (href) { e.href = href; e.rel = "noopener noreferrer nofollow ugc"; }
-        for (const k of n.c) e.append(node(k));
-        return e;
-      }
-      case "image": return picture(n.alt, n.src, false);
+      case "strong": case "em": { const e = el(n.t); for (const k of n.c) e.append(node(k, inLink)); return e; }
+      case "link": return anchor(safeHref(n.href, base), ...n.c.map((k) => node(k, true)));
+      case "image": return picture(n.alt, n.src, false, inLink);
     }
   }
   // An image is never loaded: it is a link to the image on its host (http(s) only, by safeHref),
   // named by its alt. Block: a figure, `image, <host>` over the alt. Inline: the alt, then `(image)`.
   // Unlinkable (data:, 1mb.dev, ...): the same words, not a link.
-  function picture(alt, src, block) {
+  function picture(alt, src, block, inLink) {
     const href = safeHref(src, base), web = href && /^https?:/.test(href) ? href : null;
-    const link = (...parts) => {
-      const e = web ? el("a") : el("span", "link-refused");
-      if (web) { e.href = web; e.rel = "noopener noreferrer nofollow ugc"; }
-      e.append(...parts);
-      return e;
-    };
     if (block) {
       const fig = el("figure", "image");
-      fig.append(link(el("span", "image-host", web ? `image, ${new URL(web).hostname}` : "image"), ...(alt ? [el("span", "image-alt", alt)] : [])));
+      fig.append(anchor(web, el("span", "image-host", web ? `image, ${new URL(web).hostname}` : "image"), ...(alt ? [el("span", "image-alt", alt)] : [])));
       return fig;
     }
     const f = d.createDocumentFragment();
-    f.append(link(alt || "image"), ...(alt ? [el("span", "image-tag", " (image)")] : []));
+    f.append(inLink ? d.createTextNode(alt || "image") : anchor(web, alt || "image"), ...(alt ? [el("span", "image-tag", " (image)")] : []));
     return f;
   }
   const article = el("article", "page");
