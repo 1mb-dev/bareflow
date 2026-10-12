@@ -58,8 +58,10 @@ function fold(full, keep) {
 // block measures 0 wide.
 function reachable() {
   if ($("frame").hidden) return;
-  for (const e of $("frame").querySelectorAll("pre, .table-scroll")) {
-    const scrolls = e.scrollWidth > e.clientWidth, table = e.classList.contains("table-scroll");
+  // Every read before any write: one layout per call, not one per block.
+  const blocks = [...$("frame").querySelectorAll("pre, .table-scroll")].map((e) => [e, e.scrollWidth > e.clientWidth]);
+  for (const [e, scrolls] of blocks) {
+    const table = e.classList.contains("table-scroll");
     for (const [name, value] of [["tabindex", "0"], ...(table ? [["role", "region"], ["aria-label", "table"]] : [])]) {
       if (scrolls) e.setAttribute(name, value); else e.removeAttribute(name);
     }
@@ -120,7 +122,6 @@ const unfold = (event, el) => { $("colophon").setAttribute("open", ""); jump(eve
 export function mode(source) {
   $("frame").hidden = source;
   $("contents").hidden = $("toc").hidden = source || $("contents").dataset.shown !== "true";
-  $("rail").hidden = !$("rail").querySelector("li"); // in the folded colophon, so in both modes
   $("output").hidden = !source;
   $("mode").setAttribute("aria-pressed", String(source));
   reachable();
@@ -143,6 +144,7 @@ export function showView(r, url) {
   contents();
   $("rail").querySelector("ol")?.remove();
   if (r.losses) $("rail").append(renderLosses(r.doc, document));
+  $("rail").hidden = !r.losses; // in the folded colophon, so shown in both modes
   $("output").textContent = r.markdown;
   $("copy").hidden = $("about").hidden = $("fold").hidden = false;
   let kept = null;
@@ -151,7 +153,7 @@ export function showView(r, url) {
   $("fold").onclick = () => fold($("tape-more").hidden, true);
   $("view").hidden = false;
   mode(false);
-  document.fonts?.ready.then(reachable); // a web font arriving can change what overflows
+  document.fonts?.ready.then(() => { reachable(); current(); }); // a web font moves what overflows and where headings sit
   $("mode").onclick = () => mode($("mode").getAttribute("aria-pressed") !== "true");
   $("about").onclick = (e) => unfold(e, $("colophon").querySelector("summary"));
   $("copy").onclick = () => navigator.clipboard.writeText(r.markdown).then(() => said($("copy"), "copied"), () => said($("copy"), "copy failed: use markdown, select all"));
