@@ -80,8 +80,8 @@ export const edgeTransport = (fetchImpl, { limit } = {}) => async (url, { header
     // is sent, a deadline or a reset arrives as a cut body. A compressed body is read: its declared
     // length is not the page's.
     if (limit && res.body && declared <= maxBytes && !res.headers.get("content-encoding")) {
-      streaming = true;
       const { readable, writable } = limit(declared);
+      streaming = true;
       res.body.pipeTo(writable).catch(() => {}).finally(() => clearTimeout(timer));
       return { status: res.status, stream: readable, length: declared };
     }

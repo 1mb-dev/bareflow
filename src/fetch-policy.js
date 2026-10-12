@@ -62,7 +62,10 @@ export async function fetchBody(url, transport, { timeout = 30000, check, maxByt
     }
     if (res.status >= 400) throw new Error(`HTTP ${res.status} from ${at}; check the URL (bareflow does not retry)`);
     if (res.stream) {
-      if (!(res.length <= maxBytes)) throw new Error(`a transport handed on ${res.length} bytes, past the ${maxBytes}-byte cap`);
+      if (!(res.length <= maxBytes)) {
+        res.stream.cancel().catch(() => {});
+        throw new Error(`a transport handed on ${res.length} bytes, past the ${maxBytes}-byte cap`);
+      }
       return { finalUrl: at, stream: res.stream, over: false };
     }
     const body = res.body ?? new Uint8Array();
@@ -84,6 +87,9 @@ export function snapshot({ finalUrl, body }) {
 
 export async function fetchPage(url, transport, opts) {
   const got = await fetchBody(url, transport, opts);
-  if (got.stream) throw new Error("fetchPage needs bytes: this transport hands bodies on as streams");
+  if (got.stream) {
+    got.stream.cancel().catch(() => {});
+    throw new Error("fetchPage needs bytes: this transport hands bodies on as streams");
+  }
   return snapshot(got);
 }

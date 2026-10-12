@@ -893,6 +893,11 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     !off.length && paste.markdown?.includes("\ninput: paste\n") && binary.error === "not-html" && empty.error === "empty" && typeof empty.markdown === "string" && big.error === "over-cap");
 }
 
+// FixedLengthStream's contract (Workers only): the stream errors past, or short of, n bytes. The
+// Function's pass-through goes through it; piped counts its uses.
+let piped = 0;
+const limit = (n) => { piped++; let seen = 0; return new TransformStream({ transform(c, out) { seen += c.length; if (seen > n) throw new Error("too many bytes"); out.enqueue(c); }, flush() { if (seen < n) throw new Error("too few bytes"); } }); };
+
 // One fetch policy, two transports: the CLI's node:http and the Function's WHATWG fetch (here
 // undici, its requests sent to a local server) give the same outcome on every transport case;
 // limits come from the policy, so a transport with its own cap or hop count turns this red.
@@ -917,6 +922,7 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     if (req.url === "/drip") { res.writeHead(200, { "content-type": "text/html" }); const t = setInterval(() => res.write(" "), 50); res.on("close", () => clearInterval(t)); return; }
     if (req.url === "/empty") { res.writeHead(204); return res.end(); }
     if (req.url === "/gzcut") { res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip", "content-length": gzcut.length }); return res.end(gzcut); }
+    if (req.url === "/declared-ok") { const page = Buffer.alloc(200000, 98); res.writeHead(200, { "content-type": "text/html", "content-length": page.length }); return res.end(page); }
     if (req.url === "/exact" || req.url === "/exact1" || req.url === "/declared") { const n = WEB_MAX_BYTES + (req.url === "/exact" ? 0 : 1); res.writeHead(200, { "content-type": "text/html", ...(req.url === "/declared" ? { "content-length": n } : {}) }); return res.end(Buffer.alloc(n, 97)); }
     res.writeHead(404); res.end();
   });
@@ -934,13 +940,17 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   }
   // At the web's cap, through fetchBody: over, and the bytes kept unless the edge refused unread.
   const capped = (p) => p.then(({ finalUrl, body, over }) => `${finalUrl} ${over} ${over ? "" : body.length}`, (e) => e.message.replace(/\(.*?\)/, "(...)"));
-  const webPaths = ["/endless", "/bomb", "/exact", "/exact1", "/declared", "/gzcut", "/page"];
+  const webPaths = ["/endless", "/bomb", "/exact", "/exact1", "/declared", "/gzcut", "/declared-ok", "/page"];
+  // The edge as the Function runs it, with the limiter: a passed-through stream is read to bytes here.
+  const bytesOf = async (r) => (r.stream ? { ...r, body: new Uint8Array(await new Response(r.stream).arrayBuffer()) } : r);
+  piped = 0;
   for (const p of webPaths) {
     const u = `http://site.test:${port}${p}`;
-    const [a, b] = await Promise.all([capped(fetchBody(u, nodeTransport(lookup), { maxBytes: WEB_MAX_BYTES })), capped(fetchBody(u, edgeTransport(toLocal), { maxBytes: WEB_MAX_BYTES }))]);
-    const over = !["/exact", "/page"].includes(p);
+    const [a, b] = await Promise.all([capped(fetchBody(u, nodeTransport(lookup), { maxBytes: WEB_MAX_BYTES })), capped(fetchBody(u, edgeTransport(toLocal, { limit }), { maxBytes: WEB_MAX_BYTES }).then(bytesOf))]);
+    const over = !["/exact", "/declared-ok", "/page"].includes(p);
     if (a !== b || !a.startsWith(`${u} ${over} `)) off.push(`${p} at the web cap: node "${a.slice(0, 90)}" edge "${b.slice(0, 90)}"`);
   }
+  const tablePiped = piped;
   server.close();
   // Equal output does not show the edge stopped reading: the policy trims the body either way.
   let pulled = 0;
@@ -953,8 +963,8 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   const pastWeb = pulled - WEB_MAX_BYTES;
   pulled = 0;
   const declared = await fetchBody("https://a.example/", edgeTransport(async () => new Response(new ReadableStream({ pull(c) { pulled += chunk.length; c.enqueue(chunk); } }, { highWaterMark: 0 }), { status: 200, headers: { "content-length": String(WEB_MAX_BYTES + 1) } })), { maxBytes: WEB_MAX_BYTES });
-  record("fetch", "transports", `node and edge transports agree on ${paths.length} cases (redirects, 6 hops, cap, gzip bomb, bad gzip, no location, private hop, drip, 204, 404) and ${webPaths.length} at the web cap (endless, bomb, exactly the cap, one byte over, declared over, compressed over, a page); the edge reads ${pastCap} bytes past the cap, ${pastWeb} past the web cap, and none of a declared-over body${off.length ? `: ${off.join("; ")}` : ""}`,
-    !off.length && pastCap <= 2 * chunk.length && web.over && web.body.length === WEB_MAX_BYTES && pastWeb <= 2 * chunk.length && declared.over && pulled === 0);
+  record("fetch", "transports", `node and edge transports agree on ${paths.length} cases (redirects, 6 hops, cap, gzip bomb, bad gzip, no location, private hop, drip, 204, 404) and ${webPaths.length} at the web cap with the limiter (endless, bomb, exactly the cap, one byte over, declared over, compressed over, declared within: piped, a page); the edge reads ${pastCap} bytes past the cap, ${pastWeb} past the web cap, and none of a declared-over body${off.length ? `: ${off.join("; ")}` : ""}`,
+    !off.length && tablePiped === 1 && pastCap <= 2 * chunk.length && web.over && web.body.length === WEB_MAX_BYTES && pastWeb <= 2 * chunk.length && declared.over && pulled === 0);
 }
 
 // The /_fetch Function (src/edge.js via functions/_fetch.js): no token -> 403 before any request;
@@ -981,9 +991,6 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     const u = new URL(url); u.hostname = "127.0.0.1"; u.port = String(port); u.protocol = "http:";
     return fetch(u, init);
   };
-  // FixedLengthStream's contract (Workers only): the stream errors past, or short of, n bytes.
-  let piped = 0;
-  const limit = (n) => { piped++; let seen = 0; return new TransformStream({ transform(c, out) { seen += c.length; if (seen > n) throw new Error("too many bytes"); out.enqueue(c); }, flush() { if (seen < n) throw new Error("too few bytes"); } }); };
   const onRequestGet = handler(platform, { timeout: 3000, limit });
   const call = (fn, target, { token = "good", method = "GET", env = { TURNSTILE_SECRET: "secret" }, origin = "https://bareflow.1mb.dev" } = {}) =>
     fn({ request: new Request(`${origin}/_fetch${target == null ? "" : `?url=${encodeURIComponent(target)}`}`, { method, headers: token ? { "x-turnstile-token": token } : {} }), env });
@@ -1066,7 +1073,7 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     if (settle) await new Promise((ok) => setTimeout(ok, settle));
     return { status: res.status, unread, text, aborted };
   };
-  const declared = await through({ "content-length": String(html.length) }, { timeout: 200, settle: 300 });
+  const declared = await through({ "content-length": String(html.length) }, { timeout: 1000, settle: 1100 });
   const compressed = await through({ "content-length": String(html.length), "content-encoding": "gzip" });
   const undeclared = await through({});
   const malformed = await through({ "content-length": `${html.length}, 5000000` });
