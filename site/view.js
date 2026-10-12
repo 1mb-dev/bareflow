@@ -110,6 +110,9 @@ globalThis.addEventListener?.("scroll", current, { passive: true });
 // fragment there becomes part of the target's (and the Markdown's source line).
 function jump(event, el) {
   event.preventDefault();
+  // Still a step Back undoes: an entry at the same address, pushed before the scroll so the
+  // browser keeps the old position on the entry it leaves.
+  history.pushState(history.state, "");
   measure(); // the tape may have just changed height (a list closed); the observer reports late
   if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "-1");
   el.scrollIntoView();

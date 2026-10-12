@@ -1273,9 +1273,12 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const shellWindow = parseHTML(await readFile(join(ROOT, "site/index.html"), "utf8")), shell = shellWindow.document;
   shellWindow.HTMLElement.prototype.scrollIntoView ??= function () {}; // layout-free stand-ins
   shellWindow.HTMLElement.prototype.focus ??= function () {};
-  // In-page links must not move the address (the share URL): each handler prevents the default.
-  let kept = 0;
+  // In-page links must not move the address (the share URL): each handler prevents the default,
+  // and adds one history entry with no URL, so Back undoes the jump.
+  let kept = 0, pushed = 0;
   const click = { preventDefault() { kept++; } };
+  const pageHistory = globalThis.history;
+  globalThis.history = { state: null, pushState(state, title, url) { if (url === undefined) pushed++; } };
   const page = globalThis.document;
   globalThis.document = shell;
   const view = await import("../site/view.js");
@@ -1327,6 +1330,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const clicks = lossy + 1 + (entry ? 1 : 0) + (margin ? 1 : 0);
   if ($("toc").parentElement !== $("view") || $("toc").nextElementSibling !== $("frame")) tapeBad.push("margin contents placement");
   if (kept !== clicks) tapeBad.push(`in-page links moved the address (${kept} of ${clicks} kept it)`);
+  if (pushed !== clicks) tapeBad.push(`in-page links left no step for Back (${pushed} of ${clicks})`);
+  globalThis.history = pageHistory;
   if (!$("colophon").hasAttribute("open")) tapeBad.push("about this copy leaves the colophon shut");
   const before = $("tape-more").hidden;
   $("fold").onclick();
