@@ -1,4 +1,4 @@
-// The mdflow IR: the typed document contract. Canonical form; Markdown and JSON are renders.
+// The bareflow IR: the typed document contract. Canonical form; Markdown and JSON are renders.
 //
 // Block-level structure is typed (heading, paragraph, code, list, table, blockquote, image).
 // Loss markers are section-level findings (section.losses), not content blocks. Inline
@@ -6,7 +6,7 @@
 // schema revision, not a v1 requirement.
 import { sha256 } from "./sha256.js";
 
-export const SCHEMA = "mdflow/ir/v2";
+export const SCHEMA = "bareflow/ir/v3";
 
 // How the HTML reached the conversion: fetched by the CLI, fetched by the edge Function, or
 // pasted by a person (its URL is then their assertion).

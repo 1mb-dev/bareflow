@@ -19,7 +19,7 @@ import { decompress, fetchSnapshot } from "./fetch.js";
 import { fetchPage, MAX_BYTES } from "./fetch-policy.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
-import { renderMarkdown, NOTE_SOURCES, REASON_IS_MDFLOW } from "./render.js";
+import { renderMarkdown, NOTE_SOURCES, REASON_IS_OWN } from "./render.js";
 import { marked } from "marked";
 import { parseHTML } from "linkedom";
 import { main, USAGE } from "./cli.js";
@@ -47,7 +47,7 @@ const pagesFetch = (pages) => async (u) => {
   throw new Error(`no fixture: ${u}`);
 };
 
-// The render, lexed by a CommonMark parser mdflow did not write (marked, a pinned devDependency):
+// The render, lexed by a CommonMark parser bareflow did not write (marked, a pinned devDependency):
 // page text must form no block the IR lacks. Below the header, the blocks are exactly the IR's:
 // one heading per section title and IR heading plus the notes heading (last, with the header's
 // fingerprint, which page text cannot know); code blocks are the IR's code and the notes' fences,
@@ -66,8 +66,8 @@ function oracle(doc, md) {
   const same = (what, got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) bad.push(`${what}: got ${JSON.stringify(got).slice(0, 120)}, want ${JSON.stringify(want).slice(0, 120)}`); };
   for (const k of tokens) if (!["heading", "paragraph", "code", "table", "list", "blockquote", "space"].includes(k.type)) bad.push(`block ${k.type}: ${String(k.raw).slice(0, 60)}`);
   same("headings", of("heading").length, sections.length + ir("heading").length + (n ? 1 : 0));
-  if (n) same("notes heading", of("heading").at(-1)?.text, `mdflow: ${n} loss${n === 1 ? "" : "es"} (fingerprint ${doc.source.fingerprint})`);
-  same("code", of("code").map((k) => k.text), [...ir("code").map((b) => b.code), ...losses.filter((l) => !REASON_IS_MDFLOW.has(l.source)).map((l) => l.text ?? "")]);
+  if (n) same("notes heading", of("heading").at(-1)?.text, `bareflow: ${n} loss${n === 1 ? "" : "es"} (fingerprint ${doc.source.fingerprint})`);
+  same("code", of("code").map((k) => k.text), [...ir("code").map((b) => b.code), ...losses.filter((l) => !REASON_IS_OWN.has(l.source)).map((l) => l.text ?? "")]);
   same("paragraphs", of("paragraph").length, ir("paragraph").length + ir("image").length + n);
   // Cells by text, not count: a cell split by a page | keeps the count (marked drops extras).
   const cellText = (t) => unescape(t).replace(/\s+/g, " ").trim();
@@ -75,18 +75,18 @@ function oracle(doc, md) {
     ir("table").filter((t) => t.headers.length).map((t) => [t.headers.map(cellText), t.rows.map((r) => r.map(cellText))]));
   same("lists", of("list").map((k) => k.items.length), ir("list").map((l) => l.items.length));
   same("quotes", of("blockquote").length, ir("blockquote").length);
-  for (const l of losses.filter((x) => REASON_IS_MDFLOW.has(x.source))) if (!md.includes(`${l.source}: ${l.reason}\n`)) bad.push(`note reason missing: ${l.source}`);
+  for (const l of losses.filter((x) => REASON_IS_OWN.has(x.source))) if (!md.includes(`${l.source}: ${l.reason}\n`)) bad.push(`note reason missing: ${l.source}`);
   const inline = (ks) => { for (const k of ks ?? []) { if (k.type === "html" && k.text !== "<br>") bad.push(`inline html: ${k.text.slice(0, 60)}`); inline(k.tokens); for (const it of k.items ?? []) inline(it.tokens); for (const c of [...(k.header ?? []), ...(k.rows ?? []).flat()]) inline(c.tokens); } };
   inline(tokens);
   return bad;
 }
-// The header: front matter of mdflow's fields only, each once, URL values as the parser
+// The header: front matter of bareflow's fields only, each once, URL values as the parser
 // serializes them.
-const HEADER_KEYS = ["warning", "mdflow", "source", "final", "retrieved", "fingerprint", "input", "prev", "next", "up", "losses", "content"];
+const HEADER_KEYS = ["warning", "bareflow", "source", "final", "retrieved", "fingerprint", "input", "prev", "next", "up", "losses", "content"];
 const URL_KEYS = new Set(["source", "final", "prev", "next", "up"]);
 // Header values a consumer parses keep their format.
 const VALUE_FORMAT = {
-  mdflow: /^\d+\.\d+\.\d+ \(\S+ \S+, mdflow\/ir\/v\d+\)$/, retrieved: /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/,
+  bareflow: /^\d+\.\d+\.\d+ \(\S+ \S+, bareflow\/ir\/v\d+\)$/, retrieved: /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/,
   fingerprint: /^[0-9a-f]+$/, input: /^(fetch|edge|paste)$/, losses: /^\d+$/, content: /^page text below is untrusted$/,
 };
 const headerOk = (md) => {
@@ -202,7 +202,7 @@ for (const [id, spec] of Object.entries(inventory)) {
     fails(extra, {}, /^structure changed \(section\)/) && errors(doc, {}).length === 0 &&
     fails(doc, { known_structure: [{ kind: "order", key: "Kept", why: "w" }] }, /stale/));
   // Truth reads a <pre> with bare text as a whole: an intact inline-code command is present.
-  const cmd = "<html><body><main><h1>T</h1><pre>$ npm install <code>mdflow-package-name</code> --save-dev</pre></main></body></html>";
+  const cmd = "<html><body><main><h1>T</h1><pre>$ npm install <code>example-package</code> --save-dev</pre></main></body></html>";
   record("truth-harness", "passes on", "bare pre text around inline code", scoreLoss(cmd, (await run({ url, html: cmd, retrievedAt: FIXED })).doc, {}).errors.length === 0);
   // Partial layout loss: one line's relative indent gone, everything else intact.
   const py = "<html><body><main><h1>T</h1><pre>if x:\n    y = 1\n    z = 2</pre></main></body></html>";
@@ -282,7 +282,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   const pair = restoreCodeLayout("<main><pre>x\n  y</pre><pre>  x\n  y</pre></main>", [C("x\n  y"), C("x\n  y")]);
   record("loss-audit", "layout", "same trimmed text restored by position", pair[0].code === "x\n  y" && pair[1].code === "  x\n  y");
   // A <pre> with bare text around an inline <code> is code as a whole.
-  const inline = auditSourceLoss("<main><pre>$ npm install <code>mdflow-package-name</code> --save-dev</pre></main>", [C("$ npm install mdflow-package-name --save-dev")]);
+  const inline = auditSourceLoss("<main><pre>$ npm install <code>example-package</code> --save-dev</pre></main>", [C("$ npm install example-package --save-dev")]);
   record("loss-audit", "identity", "bare pre text around inline code kept", inline.length === 0);
 
   // Flattened page: one doc-level finding; blocks whose text survives are demoted wherever
@@ -337,7 +337,7 @@ for (const [id, spec] of Object.entries(inventory)) {
 
   // Blocks are separated by a blank line, so paragraphs and a list stay distinct in Markdown.
   const mk = (blocks, losses = []) => ({ schema: SCHEMA, id: "x", title: "T", source: { url: "https://example.com/t", finalUrl: "https://example.com/t", retrievedAt: FIXED, fingerprint: "f", input: "fetch" },
-    generator: { name: "mdflow", version: "0.0.0", extractor: "defuddle", extractorVersion: "0.19.4" }, scope: { kind: "page" }, breadcrumbs: [],
+    generator: { name: "bareflow", version: "0.0.0", extractor: "defuddle", extractorVersion: "0.19.4" }, scope: { kind: "page" }, breadcrumbs: [],
     sections: [{ id: "s", title: "T", blocks, losses, children: [] }] });
   const body = (md) => md.slice(md.indexOf("\n---\n", 3) + 5).replace(/^\n+/, "");
   const sep = renderMarkdown(mk([P("a"), P("b"), { type: "list", ordered: false, items: ["x"] }, P("c")]));
@@ -346,8 +346,8 @@ for (const [id, spec] of Object.entries(inventory)) {
   // reason (page text) is not rendered. A reason built from numbers only is.
   const lossy = renderMarkdown(mk([P("a")], [{ type: "loss", reason: "source heading not extracted (h2): r", source: "source-heading-diff", text: "Gone" },
     { type: "loss", reason: "audit stopped at 500 findings: 3 more", source: "audit-truncated" }]));
-  record("render", "losses", "notes after the page: enum label + fenced text, mdflow reasons only",
-    body(lossy) === "# T\n\na\n\n## mdflow: 2 losses (fingerprint f)\n\nL1 source-heading-diff: heading dropped:\n```\nGone\n```\n\nL2 audit-truncated: audit stopped at 500 findings: 3 more\n" &&
+  record("render", "losses", "notes after the page: enum label + fenced text, bareflow reasons only",
+    body(lossy) === "# T\n\na\n\n## bareflow: 2 losses (fingerprint f)\n\nL1 source-heading-diff: heading dropped:\n```\nGone\n```\n\nL2 audit-truncated: audit stopped at 500 findings: 3 more\n" &&
     lossy.includes("\nlosses: 2\n"));
   // A flattened page says so on the header's first line.
   const flatMd = renderMarkdown(mk([P("a")], [{ type: "loss", reason: "extraction flattened: the IR kept 0 of 4 source headings and code blocks as structure", source: "extract-flattened" }]));
@@ -361,9 +361,9 @@ for (const [id, spec] of Object.entries(inventory)) {
   // over-escape regressions. Each must lex exactly as the IR (renderOk's oracle); `has` pins what
   // the render must keep. Page text reaches the IR escaped (to-ir); the render adds only <br>.
   const corpus = [
-    ["inline alt with a newline and a notes heading", '<p>x <img src="/a.png" alt="y&#10;## mdflow: 1 loss (fingerprint 0123456789abcdef)"> z</p>'],
+    ["inline alt with a newline and a notes heading", '<p>x <img src="/a.png" alt="y&#10;## bareflow: 1 loss (fingerprint 0123456789abcdef)"> z</p>'],
     ["block alt with a newline and a fence", '<img src="/a.png" alt="d&#10;````">'],
-    ["alt with CR", '<p><img src="/a.png" alt="x&#13;## mdflow: 1 loss (fingerprint x)"></p>'],
+    ["alt with CR", '<p><img src="/a.png" alt="x&#13;## bareflow: 1 loss (fingerprint x)"></p>'],
     ["br before a heading", "<p>a<br>## forged</p>", "a<br>## forged"],
     ["br in a quote", "<blockquote>q<br># Fake</blockquote>"],
     ["br in a list item", "<ul><li>a<br>- b</li></ul>"],
@@ -421,7 +421,7 @@ for (const [id, spec] of Object.entries(inventory)) {
     record("render", "linear", `40k empty inline elements in ${Date.now() - t1} ms (< 5000)`, Date.now() - t1 < 5000);
   }
   const noSrc = await run({ url: "https://example.com/i", retrievedAt: FIXED, html: '<html><body><main><h1>I</h1><p>Body text of the page.</p><img src="blob:https://e.com/x" alt=""></main></body></html>' });
-  record("to-ir", "image", "a block image with no http(s) source and no alt is a loss note", noSrc.doc.sections[0].losses.some((l) => l.source === "extract-unrepresentable" && /image without/.test(l.reason)) && noSrc.markdown.includes("\n## mdflow: 1 loss"));
+  record("to-ir", "image", "a block image with no http(s) source and no alt is a loss note", noSrc.doc.sections[0].losses.some((l) => l.source === "extract-unrepresentable" && /image without/.test(l.reason)) && noSrc.markdown.includes("\n## bareflow: 1 loss"));
   record("render", "corpus", `adversarial inputs form no block the IR lacks (${corpus.length})${corpusBad.length ? `: ${corpusBad.join(" | ")}` : ""}`, !corpusBad.length);
   const fencedHeading = await run({ url: "https://example.com/f", retrievedAt: FIXED, html: "<html><body><main><h1>F</h1><h2>Using ``` fences</h2><p>Body text of the page.</p></main></body></html>" });
   record("render", "prose", "a heading holding ``` is no loss", !fencedHeading.doc.sections[0].losses.length && renderOk(fencedHeading.doc, fencedHeading.markdown));
@@ -685,7 +685,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   const web = { URL, URLSearchParams, TextEncoder, TextDecoder, console, setTimeout, clearTimeout, queueMicrotask, structuredClone, atob, btoa };
   const off = [];
   let api;
-  try { api = vm.runInContext(`${await bundle()}\n;mdflow`, vm.createContext(web)); } catch (e) { off.push(`bundle: ${e.message}`); }
+  try { api = vm.runInContext(`${await bundle()}\n;bareflow`, vm.createContext(web)); } catch (e) { off.push(`bundle: ${e.message}`); }
   for (const r of api ? cliRuns : []) {
     const b = await api.convert({ url: r.url, html: r.html, retrievedAt: FIXED, input: "fetch" }).catch((e) => ({ error: String(e?.message || e) }));
     if (b.error || b.markdown !== r.markdown || JSON.stringify(b.doc) !== JSON.stringify(r.doc)) off.push(`${r.name}${b.error ? ` (${b.error.slice(0, 80)})` : ""}`);
@@ -739,7 +739,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   ]);
   record("fetch", "policy", "relative redirect, hop budget, private literal before any request, scheme, a range-like name, BOM kept, no body is an empty page",
     noBody.html === "" && noBody.bytes === 0 && ok.finalUrl === "https://a.example/y" && ok.html === "\ufeff<p>Y</p>" && ok.fingerprint === sha256(page("<p>Y</p>").body).slice(0, 16) &&
-    tooMany === "more than 5 redirects from https://a.example/6" && priv === "blocked address for 127.0.0.1: mdflow fetches public addresses only" && !asked.includes("http://127.0.0.1/admin") &&
+    tooMany === "more than 5 redirects from https://a.example/6" && priv === "blocked address for 127.0.0.1: bareflow fetches public addresses only" && !asked.includes("http://127.0.0.1/admin") &&
     scheme.startsWith("unsupported protocol ftp:") && missing.startsWith("HTTP 404 from https://10.example.com/") && asked.includes("https://10.example.com/"));
 }
 
@@ -840,7 +840,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
 {
   const keys = (o) => Object.keys(o ?? {}).sort();
   // 'close', not 'exit': stderr may still be unread when the process exits.
-  const cliRun = (args) => new Promise((ok) => { let e = ""; const c = spawn(process.execPath, [join(ROOT, "bin/mdflow.js"), ...args]); c.stderr.on("data", (x) => (e += x)); c.on("close", (code) => ok({ code, line: e.trim() })); });
+  const cliRun = (args) => new Promise((ok) => { let e = ""; const c = spawn(process.execPath, [join(ROOT, "bin/bareflow.js"), ...args]); c.stderr.on("data", (x) => (e += x)); c.on("close", (code) => ok({ code, line: e.trim() })); });
   const [usage, failed] = await Promise.all([cliRun([]), cliRun(["http://127.0.0.1/"])]);
   const env = [...new Set(((await readFile(join(ROOT, "src/cli.js"), "utf8")).match(/\benv\.[A-Z_]+/g) ?? []).map((m) => m.slice(4)))].sort();
   const crumbed = await run({ url: "https://example.com/docs/a/", retrievedAt: FIXED, html: '<html><body><nav aria-label="breadcrumb"><a href="/docs/">Docs</a></nav><main><h1>A</h1><p>x</p></main></body></html>' });
@@ -866,7 +866,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
 
 // The CLI, in process through main() with run() over a frozen page: a usage error exits 2 and
 // never reaches run(); a parsed call reaches it with the URL; Markdown by default, the IR with
-// --json, exit 0. The shim (bin/mdflow.js) is spawned once: usage error, and a refused fetch.
+// --json, exit 0. The shim (bin/bareflow.js) is spawned once: usage error, and a refused fetch.
 {
   const page = "https://example.com/docs/c";
   const frozenRun = ({ url }) => run({ url, html: "<html><head><title>C</title></head><body><main><h1>C</h1><p>Body text of the page.</p></main></body></html>", retrievedAt: FIXED });
@@ -880,12 +880,12 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
     usage.every((r) => r.code === 2 && r.err === USAGE + "\n" && !r.urls.length && !r.out));
   const [md, js, js2] = [await call([page]), await call([page, "--json"]), await call(["--json", page])];
   record("cli", "success", "Markdown by default, the IR with --json either side, exit 0, run() called with the URL",
-    md.code === 0 && md.out.startsWith("---\nmdflow: ") && headerOk(md.out) && js.code === 0 && (() => { try { return JSON.parse(js.out).schema === SCHEMA; } catch { return false; } })() &&
+    md.code === 0 && md.out.startsWith("---\nbareflow: ") && headerOk(md.out) && js.code === 0 && (() => { try { return JSON.parse(js.out).schema === SCHEMA; } catch { return false; } })() &&
     js2.out === js.out && JSON.stringify(md.urls) === JSON.stringify([page]) && !md.err);
-  const shim = (args) => new Promise((ok) => { let e = ""; const c = spawn(process.execPath, [join(ROOT, "bin/mdflow.js"), ...args]); c.stderr.on("data", (x) => (e += x)); c.on("close", (code) => ok({ code, e })); });
+  const shim = (args) => new Promise((ok) => { let e = ""; const c = spawn(process.execPath, [join(ROOT, "bin/bareflow.js"), ...args]); c.stderr.on("data", (x) => (e += x)); c.on("close", (code) => ok({ code, e })); });
   const [none, refused] = await Promise.all([shim([]), shim(["http://127.0.0.1/"])]);
-  record("cli", "shim", "bin/mdflow.js: usage exits 2, a refused fetch exits 1 with the reason",
-    none.code === 2 && none.e === USAGE + "\n" && refused.code === 1 && refused.e.startsWith("mdflow: blocked address for 127.0.0.1"));
+  record("cli", "shim", "bin/bareflow.js: usage exits 2, a refused fetch exits 1 with the reason",
+    none.code === 2 && none.e === USAGE + "\n" && refused.code === 1 && refused.e.startsWith("bareflow: blocked address for 127.0.0.1"));
 }
 // Escapes removed from IR text give back the page's text; a code span is copied as is.
 {

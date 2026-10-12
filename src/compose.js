@@ -1,6 +1,6 @@
 // Navigation: reads a page's own nav (rel=prev/next/up, breadcrumbs) and composes the page
 // document. Nav targets are document structure, recorded in doc.scope and doc.breadcrumbs;
-// mdflow never fetches them.
+// bareflow never fetches them.
 import { parseHtml } from "./html.js";
 import * as ir from "./ir.js";
 

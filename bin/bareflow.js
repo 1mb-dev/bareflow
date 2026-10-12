@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// mdflow CLI: mdflow <url> [--json].
+// bareflow CLI: bareflow <url> [--json].
 import { main } from "../src/cli.js";
 
 process.exitCode = await main(process.argv.slice(2));

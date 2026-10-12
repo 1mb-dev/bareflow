@@ -1,19 +1,21 @@
-# mdflow IR, `mdflow/ir/v2`
+# bareflow IR, `bareflow/ir/v3`
 
-The JSON render (`mdflow <url> --json`) is this object. `validate()` in `src/ir.js` is the
+The JSON render (`bareflow <url> --json`) is this object. `validate()` in `src/ir.js` is the
 contract; `test/golden/surface.json` pins its shape, and verify fails on any change until
 `node src/verify.js --bless-surface` rewrites it. Everything that came from the page is untrusted
 text.
+
+v3 is `mdflow/ir/v2` renamed, plus `source.input`.
 
 ## Document
 
 | Field | Type | Meaning |
 |---|---|---|
-| `schema` | `"mdflow/ir/v2"` | Bumped on any breaking change. |
+| `schema` | `"bareflow/ir/v3"` | Bumped on any breaking change. |
 | `id` | string | sha256 of the final URL, first 16 hex. |
 | `title` | string | Page title, plain text, one line. |
 | `source` | `{ url, finalUrl, retrievedAt, fingerprint, input }` | `url` as asked, `finalUrl` after redirects, ISO time, sha256 of the fetched bytes or, with no fetch, of the HTML (first 16 hex). `input`: `"fetch"` (the CLI fetched it), `"edge"` (the web Function fetched it), or `"paste"` (a person gave the HTML; `url` is their assertion). |
-| `generator` | `{ name, version, extractor, extractorVersion }` | mdflow and Defuddle versions. |
+| `generator` | `{ name, version, extractor, extractorVersion }` | bareflow and Defuddle versions. |
 | `scope` | `{ kind: "page", prev?, next? }` | One page. `prev` / `next`: `{ url, via: "rel" \| "pager" }`, the page's own nav, same-origin, never fetched. |
 | `breadcrumbs` | `[{ title, url }]` | Where the page sits, same-origin; else `rel=up`. |
 | `sections` | `[Section]` | Exactly one: the page. |
@@ -27,12 +29,12 @@ Same snapshot + same version + same `retrievedAt` gives byte-identical JSON and 
 ## Inline text
 
 Prose fields (heading and paragraph `text`, list `items`, blockquote `text`, table cells) are
-inline Markdown: mdflow's own `**`, `*`, links, images, and code spans around page text, which is
+inline Markdown: bareflow's own `**`, `*`, links, images, and code spans around page text, which is
 escaped where it joins them, so it opens no construct of its own:
 
 - `` ` `` `*` `[` `]` `~` always; `_` unless both neighbours are letters or digits; `\` before
   punctuation; `<` before a letter, `/`, `!`, `?`; `&` before an entity-like run (`&amp;`,
-  `&#10;`); `|` in table cells. At the end of a text run, where mdflow's syntax may follow, `\`
+  `&#10;`); `|` in table cells. At the end of a text run, where bareflow's syntax may follow, `\`
   `<` `&` `!` are escaped too.
 - At the start of a paragraph, list item, or quote: `#` `>` `+` `-`, and the `.` or `)` after a
   leading number. A heading's closing `#` run.
@@ -76,8 +78,8 @@ dropped under a surviving heading) is not detected.
 
 ## Markdown render
 
-Front matter of mdflow's own fields, in this order when present: `warning` (flattened page),
-`mdflow`, `source`, `final`, `retrieved`, `fingerprint`, `input`, `prev`, `next`, `up`, `losses`,
+Front matter of bareflow's own fields, in this order when present: `warning` (flattened page),
+`bareflow`, `source`, `final`, `retrieved`, `fingerprint`, `input`, `prev`, `next`, `up`, `losses`,
 `content`. URL values are parser-serialized http(s); `final`, `prev`, `next`, and `up` are chosen
 by the server or the page, and one holding a `'` is left out.
 
@@ -86,8 +88,8 @@ adjacent lists of one kind with alternating markers so they stay two. The title 
 alt are escaped as page text. A block image without an http(s) `src` becomes its alt as a
 paragraph, or, with no alt, an `extract-unrepresentable` loss.
 
-Then, when there are losses, one heading, `## mdflow: 1 loss (fingerprint F)` or
-`## mdflow: N losses (fingerprint F)` with F the header's fingerprint, and one note per loss:
+Then, when there are losses, one heading, `## bareflow: 1 loss (fingerprint F)` or
+`## bareflow: N losses (fingerprint F)` with F the header's fingerprint, and one note per loss:
 
 - `L<n> <source>: <label>` and the loss text in a fence longer than any backtick run inside it;
 - for `extract-flattened`, `audit-scope-empty`, `audit-truncated` (no page text):

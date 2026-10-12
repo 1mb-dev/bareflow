@@ -9,7 +9,7 @@ const LOSSLESS_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "HEAD"
 // Math / interactive widgets often carry these classes.
 const MATH_CLASS = /math|katex|interactive|playground|live-?example/i;
 
-// A link or image target mdflow will write: http(s), mailto, or relative; an empty one or any
+// A link or image target bareflow will write: http(s), mailto, or relative; an empty one or any
 // other scheme (javascript:, data:) is dropped and only the text kept. The scheme is read as a
 // browser reads a rendered href: entities decoded ("javascript&colon;"), leading and trailing C0
 // controls and spaces gone, tab and newline removed ("\x01java\tscript:").
@@ -253,8 +253,8 @@ function childBlocks(el, out) {
 export function contentToBlocks(contentHtml) {
   // Wrap in a container: Defuddle's content is a fragment, and linkedom parses a
   // fragment with its top element as documentElement, leaving document.body empty.
-  const { document } = parseHTML(`<div id="__mdflow">${contentHtml || ""}</div>`);
-  const root = document.querySelector("#__mdflow");
+  const { document } = parseHTML(`<div id="__bareflow">${contentHtml || ""}</div>`);
+  const root = document.querySelector("#__bareflow");
   const out = [];
   childBlocks(innerMain(root) ?? root, out);
   return out;

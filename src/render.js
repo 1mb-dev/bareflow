@@ -3,8 +3,8 @@
 // versus the source, since inline content is preserved as Markdown and extractor drops are
 // only partially recoverable.
 //
-// Layout: a front-matter header (mdflow's fields only), the page, then one note per loss under
-// a heading that carries the snapshot fingerprint. Header values are mdflow's own or
+// Layout: a front-matter header (bareflow's fields only), the page, then one note per loss under
+// a heading that carries the snapshot fingerprint. Header values are bareflow's own or
 // re-serialized http(s) URLs; final, prev, next, and up are chosen by the server or the page.
 // Note labels come from the closed loss-source set, and page text in a note is fenced.
 
@@ -18,16 +18,16 @@ const NOTE = {
   "source-table-diff": "table dropped; cell text:",
   "extract-unrepresentable": "embed or interactive content not representable; source:",
 };
-export const REASON_IS_MDFLOW = new Set(["extract-flattened", "audit-scope-empty", "audit-truncated"]);
+export const REASON_IS_OWN = new Set(["extract-flattened", "audit-scope-empty", "audit-truncated"]);
 import { dest, escapeHeadingEnd, escapeStart, escapeText, fenced } from "./md.js";
 
-export const NOTE_SOURCES = [...Object.keys(NOTE), ...REASON_IS_MDFLOW];
+export const NOTE_SOURCES = [...Object.keys(NOTE), ...REASON_IS_OWN];
 
 export function renderMarkdown(doc) {
   const n = doc.sections.reduce((k, s) => k + s.losses.length, 0);
   const out = [...header(doc, doc.sections[0], n), ""];
   for (const s of doc.sections) renderSection(s, 1, out);
-  if (n) out.push(`## mdflow: ${n} loss${n === 1 ? "" : "es"} (fingerprint ${doc.source.fingerprint})`, "", ...lossNotes(doc));
+  if (n) out.push(`## bareflow: ${n} loss${n === 1 ? "" : "es"} (fingerprint ${doc.source.fingerprint})`, "", ...lossNotes(doc));
   // No blank-line squeezing over the whole output: it would rewrite code and verbatim note text.
   return out.join("\n").trimEnd() + "\n";
 }
@@ -47,7 +47,7 @@ function header(doc, page, losses) {
   const { source: src, generator: g } = doc;
   const lines = ["---"];
   if (page.losses.some((l) => l.source === "extract-flattened")) lines.push("warning: extraction flattened this page; its structure below is unreliable, see the loss notes");
-  lines.push(`mdflow: ${g.version} (${g.extractor} ${g.extractorVersion}, ${doc.schema})`);
+  lines.push(`bareflow: ${g.version} (${g.extractor} ${g.extractorVersion}, ${doc.schema})`);
   const from = url(src.url), final = chosen(src.finalUrl ?? src.url);
   if (from) lines.push(`source: ${from}`);
   if (final && final !== from) lines.push(`final: ${final}`);
@@ -65,7 +65,7 @@ function lossNotes(doc) {
   for (const s of doc.sections) {
     for (const l of s.losses) {
       n++;
-      if (REASON_IS_MDFLOW.has(l.source)) { out.push(`L${n} ${l.source}: ${l.reason}`, ""); continue; }
+      if (REASON_IS_OWN.has(l.source)) { out.push(`L${n} ${l.source}: ${l.reason}`, ""); continue; }
       out.push(`L${n} ${l.source}: ${NOTE[l.source] ?? "unclassified loss; source:"}`);
       out.push(fenced(l.text ?? ""), "");
     }
@@ -74,7 +74,7 @@ function lossNotes(doc) {
 }
 
 // IR prose is inline Markdown with page text already escaped (to-ir.js); its only line break is
-// <br>, written here as an mdflow <br> so no page text starts an output line.
+// <br>, written here as a bareflow <br> so no page text starts an output line.
 const br = (t) => t.replace(/\n/g, "<br>");
 // The section title and an image's alt are plain text: escaped like page text in prose.
 const plain = (t) => escapeText((t || "").replace(/\s+/g, " ").trim());

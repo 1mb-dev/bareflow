@@ -1,4 +1,4 @@
-// Markdown syntax mdflow writes around page text: one place for the rules both the IR (inline
+// Markdown syntax bareflow writes around page text: one place for the rules both the IR (inline
 // Markdown, see ir.js) and the render depend on.
 
 const longestRun = (t) => Math.max(0, ...(t.match(/`+/g) ?? []).map((r) => r.length));
@@ -21,7 +21,7 @@ const PUNCT = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 const ALNUM = /[A-Za-z0-9]/;
 
 // Page text inside inline Markdown, escaped where it would open or close a construct, and only
-// there (escapes cost bytes against the cost bar). One pass, linear. At the end of a run mdflow's
+// there (escapes cost bytes against the cost bar). One pass, linear. At the end of a run bareflow's
 // own syntax may follow, so \ < & ! are escaped there too.
 export function escapeText(t, { cell = false } = {}) {
   let out = "";
@@ -32,7 +32,7 @@ export function escapeText(t, { cell = false } = {}) {
     else if (c === "_") out += ALNUM.test(prev) && ALNUM.test(next) ? "_" : "\\_";
     else if (c === "<") out += !next || /[A-Za-z/!?]/.test(next) ? "\\<" : "<";
     else if (c === "&") out += !next || /^#?[A-Za-z0-9]+;/.test(t.slice(i + 1, i + 34)) ? "\\&" : "&";
-    else if (c === "!" && !next) out += "\\!"; // before mdflow's [ it would make a link an image
+    else if (c === "!" && !next) out += "\\!"; // before bareflow's [ it would make a link an image
     else if (c === "|" && cell) out += "\\|";
     else out += c;
   }
@@ -40,7 +40,7 @@ export function escapeText(t, { cell = false } = {}) {
 }
 
 // A prose field's first characters, where a line start could open a block: an ATX heading, a
-// quote, a list item, an ordered-list delimiter. mdflow writes none of these at a field start.
+// quote, a list item, an ordered-list delimiter. bareflow writes none of these at a field start.
 export const escapeStart = (t) => t.replace(/^([#>+-])/, "\\$1").replace(/^(\d{1,9})([.)])/, "$1\\$2");
 
 // A heading's closing "#" run would be eaten as the ATX closing sequence ("C #" renders "C").

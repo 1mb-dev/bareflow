@@ -1,10 +1,10 @@
 {
-  "name": "mdflow",
+  "name": "bareflow",
   "version": "0.4.0",
   "description": "Deterministic, faithful, versioned document layer for technical web content",
   "type": "module",
   "bin": {
-    "mdflow": "./bin/mdflow.js"
+    "bareflow": "./bin/bareflow.js"
   },
   "files": [
     "bin",
@@ -15,7 +15,7 @@
     "NOTICE"
   ],
   "scripts": {
-    "mdflow": "node bin/mdflow.js",
+    "bareflow": "node bin/bareflow.js",
     "verify": "node src/verify.js",
     "bundle": "node scripts/bundle.js"
   },

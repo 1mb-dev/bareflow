@@ -1,11 +1,11 @@
 {
  "cli": {
-  "usage": "usage: mdflow <url> [--json]",
+  "usage": "usage: bareflow <url> [--json]",
   "usageExit": 2,
   "errorExit": 1,
   "env": []
  },
- "schema": "mdflow/ir/v2",
+ "schema": "bareflow/ir/v3",
  "document": [
   "breadcrumbs",
   "generator",
@@ -67,7 +67,7 @@
  ],
  "header": [
   "warning",
-  "mdflow",
+  "bareflow",
   "source",
   "final",
   "retrieved",

@@ -12,7 +12,7 @@ import { blocked, fetchPage, MAX_BYTES, noAnswer, REDIRECT } from "./fetch-polic
 
 // Decompress a capped body, streaming so the decompressed output is also capped at MAX_BYTES:
 // the decompressor is destroyed at the cap, so a bomb costs at most MAX_BYTES of output and the
-// CPU to make it, not the whole expansion. Corrupt data rejects, unless mdflow cut the body at
+// CPU to make it, not the whole expansion. Corrupt data rejects, unless bareflow cut the body at
 // the cap (truncated): then what decoded so far is the page.
 export function decompress(body, enc, { truncated = false } = {}) {
   const factory = enc.includes("gzip") ? createGunzip : enc.includes("deflate") ? createInflate : enc.includes("br") ? createBrotliDecompress : null;

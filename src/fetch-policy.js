@@ -16,7 +16,7 @@ export const REQUEST_HEADERS = {
 export const REDIRECT = new Set([301, 302, 303, 307, 308]);
 
 export const noAnswer = (url, budget) => new Error(`no answer from ${url} within ${budget} ms (redirects included); retry, or open it in a browser`);
-export const blocked = (host) => new Error(`blocked address for ${host}: mdflow fetches public addresses only`);
+export const blocked = (host) => new Error(`blocked address for ${host}: bareflow fetches public addresses only`);
 
 // The one URL check: parsed, and http(s). Both the fetch and a pasted page's asserted URL go
 // through it.
@@ -54,7 +54,7 @@ export async function fetchPage(url, transport, { timeout = 30000 } = {}) {
       try { at = new URL(res.location, at).toString(); } catch { throw new Error(`redirect ${res.status} from ${at} to an invalid location`); }
       continue;
     }
-    if (res.status >= 400) throw new Error(`HTTP ${res.status} from ${at}; check the URL (mdflow does not retry)`);
+    if (res.status >= 400) throw new Error(`HTTP ${res.status} from ${at}; check the URL (bareflow does not retry)`);
     const body = (res.body ?? new Uint8Array()).subarray(0, MAX_BYTES);
     return {
       finalUrl: at,

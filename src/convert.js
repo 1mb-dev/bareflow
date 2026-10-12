@@ -48,7 +48,7 @@ export async function convert({ url, finalUrl = url, html, retrievedAt, fingerpr
   const nav = extractNav(html, finalUrl);
 
   const source = { url, finalUrl, retrievedAt, fingerprint, input };
-  const generator = { name: "mdflow", version: VERSION, extractor: EXTRACTOR, extractorVersion: EXTRACTOR_VERSION };
+  const generator = { name: "bareflow", version: VERSION, extractor: EXTRACTOR, extractorVersion: EXTRACTOR_VERSION };
   const doc = compose({ url: finalUrl, nav, title, blocks, losses, source, generator });
   validate(doc);
 
