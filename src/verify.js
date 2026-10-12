@@ -1126,6 +1126,9 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const npx = (await Promise.all(served.map(async (f) => (/\bnpx\b/.test(await readFile(f, "utf8")) ? [f] : [])))).flat();
   const headers = await readFile(join(out, "_headers"), "utf8");
   const routes = JSON.parse(await readFile(join(out, "_routes.json"), "utf8"));
+  const redirects = await readFile(join(out, "_redirects"), "utf8");
+  const home = await readFile(join(out, "_app/home.html"), "utf8").catch(() => "");
+  const top = await readdir(out);
   const [tokens, style, builtStyle] = await Promise.all([join(ROOT, "site/tokens.css"), join(ROOT, "site/style.css"), join(out, "_app/style.css")].map((f) => readFile(f, "utf8")));
   const scripts = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1]);
   const visible = parseHTML(html).document.getElementById("pointer")?.textContent;
@@ -1212,6 +1215,10 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("web", "headers", "_headers: the CSP (Turnstile's script-src and frame-src only), nosniff, no-referrer; the Function routed at /_fetch only",
     headers.includes(`  Content-Security-Policy: ${CSP}\n`) && headers.includes("  X-Content-Type-Options: nosniff\n") && headers.includes("  Referrer-Policy: no-referrer\n") &&
     JSON.stringify(routes) === JSON.stringify({ version: 1, include: ["/_fetch"], exclude: [] }));
+  // Pages serves index.html for any path that is not a file (no 404.html), so it is the shell of
+  // every share URL; / alone is rewritten to the home.
+  record("web", "home", "_redirects rewrites / alone, to _app/home; no 404.html; the home is the shell",
+    redirects === "/ /_app/home 200\n" && !top.includes("404.html") && home === html);
 
   // The design's rules (site/tokens.css): colors only in tokens.css, no shadow or gradient, corners
   // at 2px or less, --mark only as a ground, and every text pair readable in both themes.

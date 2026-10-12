@@ -1,6 +1,8 @@
 // The web app: `npm run site` writes dist/site/, the Pages output directory (functions/ is beside
 // it at the repo root). The worker is the verified bundle (scripts/bundle.js) plus site/worker.js.
 // TURNSTILE_SITEKEY sets the widget's key; unset, it is Cloudflare's always-pass test key.
+// Pages serves index.html for every path that is not a file, so it is the shell of every share
+// URL; the home is _app/home.html, served at / by _redirects.
 import { build } from "esbuild";
 import { copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
@@ -15,9 +17,11 @@ export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.
   await rm(out, { recursive: true, force: true });
   await mkdir(join(out, "_app"), { recursive: true });
   const app = await build({ entryPoints: [join(ROOT, "site/app.js")], bundle: true, format: "esm", platform: "browser", minify: true, write: false, logLevel: "silent" });
-  const html = (await readFile(join(ROOT, "site/index.html"), "utf8")).replace("__SITEKEY__", sitekey);
+  // A function, not a string: a replacement string reads $&, $', and $` as patterns.
+  const html = (await readFile(join(ROOT, "site/index.html"), "utf8")).replace("__SITEKEY__", () => sitekey);
   await Promise.all([
     writeFile(join(out, "index.html"), html),
+    writeFile(join(out, "_app/home.html"), html),
     writeFile(join(out, "_app/app.js"), app.outputFiles[0].text),
     copyFile(join(ROOT, "site/theme.js"), join(out, "_app/theme.js")),
     writeFile(join(out, "_app/worker.js"), `${await bundle()}\n${await readFile(join(ROOT, "site/worker.js"), "utf8")}`),
@@ -25,6 +29,7 @@ export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.
     cp(join(ROOT, "site/fonts"), join(out, "_app/fonts"), { recursive: true }),
     copyFile(join(ROOT, "site/_headers"), join(out, "_headers")),
     copyFile(join(ROOT, "site/_routes.json"), join(out, "_routes.json")),
+    copyFile(join(ROOT, "site/_redirects"), join(out, "_redirects")),
   ]);
   return out;
 }
