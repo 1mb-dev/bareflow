@@ -961,7 +961,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   const badToken = await ask("https://a.example/page", { token: "bad" });
   const ok = await ask("https://a.example/page");
   const h = ok.headers;
-  const guards = await Promise.all(["https://u:p@a.example/", "http://a.example:8080/", "https://8.8.8.8/", "https://[2606:4700::1111]/", "https://1mb.dev/", "https://bareflow.1mb.dev/x", "https://x.pages.dev/", "file:///etc/passwd", "javascript:alert(1)"].map(refusedFirst));
+  const guards = await Promise.all(["https://u:p@a.example/", "http://a.example:8080/", "https://8.8.8.8/", "https://[2606:4700::1111]/", "https://1mb.dev/", "https://bareflow.1mb.dev/x", "https://x.pages.dev/", "https://1mb.dev./", "https://bareflow.1mb.dev../x", "https://x.pages.dev./", "https://localhost/", "https://a.localhost/", "https://intranet/", "file:///etc/passwd", "javascript:alert(1)"].map(refusedFirst));
   const priv = await ask("http://10.0.0.1/");
   const toOwn = await ask("https://a.example/to-own");
   const toPort = await ask("https://a.example/to-port");
@@ -971,7 +971,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   server.close();
   record("edge", "token", "no token: 403 with no request made; a failed Turnstile check: 403 after siteverify only",
     noToken.status === 403 && noToken.code === "token" && noToken.calls.length === 0 && badToken.status === 403 && badToken.calls.length === 1 && badToken.calls[0] === SITEVERIFY);
-  record("edge", "guards", "credentials, port 8080, IPv4 and IPv6 literals, 1mb.dev, *.1mb.dev, *.pages.dev, file:, javascript: refused before Turnstile; private literal 403; a redirect to our zone or another port refused",
+  record("edge", "guards", "credentials, port 8080, IPv4 and IPv6 literals, 1mb.dev, *.1mb.dev, *.pages.dev (trailing dots too), localhost, single-label names, file:, javascript: refused before Turnstile; private literal 403; a redirect to our zone or another port refused",
     guards.every(Boolean) && priv.status === 403 && priv.code === "blocked" && priv.calls.length === 0 && toOwn.code === "url" && toPort.code === "url");
   record("edge", "response", "a page: inert octet-stream bytes, final URL, no upstream headers; 404 upstream, no url, POST named",
     ok.status === 200 && new TextDecoder().decode(ok.body) === "<p>page</p>" && h.get("content-type") === "application/octet-stream" && h.get("x-content-type-options") === "nosniff" &&
