@@ -58,23 +58,21 @@
   <div id="view" hidden>
     <div id="frame" class="frame"></div>
     <pre id="output" class="source" hidden></pre>
-    <section id="colophon" class="colophon" aria-labelledby="colophon-head">
-      <h2 id="colophon-head">about this copy</h2>
-      <dl id="provenance" class="provenance"></dl>
+    <details id="colophon" class="colophon">
+      <summary>about this copy</summary>
+      <p class="caption">the markdown's header</p>
+      <pre id="header" class="header"></pre>
+      <section id="rail" class="rail" aria-labelledby="rail-head" hidden>
+        <h2 id="rail-head">losses</h2>
+      </section>
       <div id="actions" class="actions">
-        <div class="modes" role="group" aria-label="Show the page">
-          <button id="mode-rendered" type="button" aria-pressed="true">rendered</button>
-          <button id="mode-source" type="button" aria-pressed="false">markdown</button>
-        </div>
+        <button id="mode" type="button" aria-pressed="false">show markdown</button>
         <button id="download" type="button">download .md</button>
         <a id="original" target="_blank" rel="noopener noreferrer">open original</a>
-        <a id="report" target="_blank" rel="noopener noreferrer">wrong output? report</a>
+        <a id="report" target="_blank" rel="noopener noreferrer">report wrong output</a>
       </div>
-      <section id="rail" class="rail" aria-labelledby="rail-head" hidden>
-        <h3 id="rail-head">losses</h3>
-      </section>
       <p id="note" class="note" hidden>A shared link fetches the page again; it does not keep this copy.</p>
-    </section>
+    </details>
   </div>
 </section>
 </main>

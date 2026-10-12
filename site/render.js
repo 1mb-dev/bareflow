@@ -242,7 +242,7 @@ export function renderLosses(doc, d) {
     li.append(head);
     if (l.text != null) {
       const det = d.createElement("details");
-      const sum = d.createElement("summary"); sum.textContent = "source";
+      const sum = d.createElement("summary"); sum.textContent = "what was dropped";
       const pre = d.createElement("pre"); pre.textContent = l.text;
       det.append(sum, pre); li.append(det);
     }

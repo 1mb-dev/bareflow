@@ -1,5 +1,5 @@
 // The result view, filled from one conversion: the tape (origin, loss count, copy, contents), the
-// rendered page or raw Markdown, and the colophon (provenance, actions, losses). app.js calls it
+// rendered page or raw Markdown, and the colophon, folded (header, losses, actions). app.js calls it
 // for a live result; the contact sheet (scripts/contact.js) calls it for each frozen page, so both
 // show the same view.
 import { renderDoc, renderLosses } from "./render.js";
@@ -37,6 +37,7 @@ function tally(r) {
     chip.className = "chip";
     chip.href = "#rail";
     chip.textContent = `${r.losses} loss${r.losses === 1 ? "" : "es"}`;
+    chip.onclick = unfold;
     s.append(chip);
   }
   if (r.flattened) s.append(`${r.losses ? " " : ""}structure unreliable`);
@@ -60,34 +61,22 @@ function contents() {
     const li = document.createElement("li"), a = document.createElement("a");
     a.href = `#${h.id}`;
     a.textContent = h.textContent;
-    a.onclick = () => { $("contents").open = false; };
+    a.onclick = () => { $("contents").removeAttribute("open"); };
     li.append(a);
     list.append(li);
   }
   $("contents").dataset.shown = String(heads.length >= 4);
 }
 
-// The Markdown header's own lines, key and value, as the provenance card.
-function provenance(markdown, losses) {
-  const dl = $("provenance");
-  dl.replaceChildren();
-  for (const line of markdown.slice(4, markdown.indexOf("\n---\n")).split("\n")) {
-    const at = line.indexOf(": ");
-    const dt = document.createElement("dt"), dd = document.createElement("dd");
-    dt.textContent = line.slice(0, at);
-    dd.textContent = line.slice(at + 2);
-    if ((dt.textContent === "losses" && losses) || dt.textContent === "warning") dd.className = "marked";
-    dl.append(dt, dd);
-  }
-}
+// The colophon opens for whoever asks for it: the chip and the tape's link land inside it.
+const unfold = () => { $("colophon").setAttribute("open", ""); };
 
 export function mode(source) {
   $("frame").hidden = source;
   $("contents").hidden = source || $("contents").dataset.shown !== "true";
   $("rail").hidden = source || !$("rail").querySelector("li");
   $("output").hidden = !source;
-  $("mode-rendered").setAttribute("aria-pressed", String(!source));
-  $("mode-source").setAttribute("aria-pressed", String(source));
+  $("mode").setAttribute("aria-pressed", String(source));
 }
 
 // A button says what it did for two seconds; the status line keeps the result's own message.
@@ -99,7 +88,8 @@ function said(button, text) {
 }
 
 export function showView(r, url) {
-  provenance(r.markdown, r.losses);
+  $("header").textContent = r.markdown.slice(4, r.markdown.indexOf("\n---\n"));
+  $("colophon").removeAttribute("open");
   tally(r);
   $("frame").replaceChildren(renderDoc(r.doc, document));
   contents();
@@ -113,8 +103,8 @@ export function showView(r, url) {
   $("fold").onclick = () => fold($("tape-more").hidden, true);
   $("view").hidden = false;
   mode(false);
-  $("mode-rendered").onclick = () => mode(false);
-  $("mode-source").onclick = () => mode(true);
+  $("mode").onclick = () => mode($("mode").getAttribute("aria-pressed") !== "true");
+  $("about").onclick = unfold;
   $("copy").onclick = () => navigator.clipboard.writeText(r.markdown).then(() => said($("copy"), "copied"), () => said($("copy"), "copy failed: use markdown, select all"));
   $("download").onclick = () => {
     const a = document.createElement("a");
