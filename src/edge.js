@@ -1,8 +1,9 @@
 // The web's fetch: the /_fetch Pages Function (functions/_fetch.js) as a handler over an injected
-// fetch, so verify runs it under Node. It fetches and returns the capped bytes; it does not decode,
-// hash, or convert (the browser does, CPU here stays under the free plan's 10 ms). Workers fetch
-// cannot pin DNS: a name that resolves to a private address is refused by Cloudflare's network,
-// not here. Literals, ports, userinfo, and our own zones are refused here on every hop.
+// fetch, so verify runs it under Node. It returns the capped bytes, or a declared length within
+// the cap passed through unread; it does not decode, hash, or convert (the browser does, CPU here
+// stays under the free plan's 10 ms). Workers fetch cannot pin DNS: a name that resolves to a
+// private address is refused by Cloudflare's network, not here. Literals, ports, userinfo, and our
+// own zones are refused here on every hop.
 import { checkTarget, fetchBody, MAX_BYTES, noAnswer, REDIRECT } from "./fetch-policy.js";
 
 export const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
@@ -55,9 +56,10 @@ async function readCapped(stream, max) {
 // policy's deadline whether headers or body are late.
 // Workers decompress in the Function's CPU time (10 ms on Free), so it asks for identity; a site
 // that compresses anyway is still decoded, and still capped.
-export const edgeTransport = (fetchImpl) => async (url, { headers, deadline, budget, maxBytes }) => {
+export const edgeTransport = (fetchImpl, { stream = false } = {}) => async (url, { headers, deadline, budget, maxBytes }) => {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), Math.max(0, deadline - Date.now()));
+  let streaming = false;
   try {
     const res = await fetchImpl(url, { method: "GET", headers: { ...headers, "accept-encoding": "identity" }, redirect: "manual", signal: ctl.signal });
     if (REDIRECT.has(res.status) || res.status >= 400) {
@@ -65,9 +67,19 @@ export const edgeTransport = (fetchImpl) => async (url, { headers, deadline, bud
       return { status: res.status, location: res.headers.get("location") ?? undefined };
     }
     // A declared length over the cap is refused unread; an understated one is caught by the read.
-    if (Number(res.headers.get("content-length")) > maxBytes) {
+    // Only a plain integer is a declared length: "10, 5000000" or "abc" is read like an undeclared one.
+    const raw = res.headers.get("content-length")?.trim();
+    const declared = raw && /^\d+$/.test(raw) ? Number(raw) : NaN;
+    if (declared > maxBytes) {
       res.body?.cancel().catch(() => {});
       return { status: res.status, over: true };
+    }
+    // A declared, uncompressed length within the cap is handed on unread, no byte of it in JS: the
+    // runtime frames it to that length, and the timer stays armed so the deadline still cuts it. A
+    // compressed body is never handed on: it could inflate past any cap outside JS.
+    if (stream && res.body && declared <= maxBytes && !res.headers.get("content-encoding")) {
+      streaming = true;
+      return { status: res.status, stream: res.body };
     }
     try { return { status: res.status, body: await readCapped(res.body, maxBytes) }; }
     catch (e) {
@@ -79,7 +91,7 @@ export const edgeTransport = (fetchImpl) => async (url, { headers, deadline, bud
     if (ctl.signal.aborted) throw noAnswer(url, budget);
     throw e;
   } finally {
-    clearTimeout(timer);
+    if (!streaming) clearTimeout(timer);
   }
 };
 
@@ -122,8 +134,8 @@ export const handler = (fetchImpl, { timeout = 30000 } = {}) => async ({ request
   if (verdict === "down") return fail(503, "unavailable", "the bot check service did not answer; try again later");
   if (verdict === "bad") return fail(403, "token", "the Turnstile check failed or expired; reload the page");
   try {
-    const { finalUrl, body, over } = await fetchBody(target, edgeTransport(fetchImpl), { timeout, check: edgeCheck, maxBytes: WEB_MAX_BYTES });
+    const { finalUrl, body, stream, over } = await fetchBody(target, edgeTransport(fetchImpl, { stream: true }), { timeout, check: edgeCheck, maxBytes: WEB_MAX_BYTES });
     if (over) return fail(502, "over-cap", `the page is over ${WEB_MAX_BYTES / 1048576} MB, the web's limit; npx bareflow reads up to ${MAX_BYTES / 1048576} MB`);
-    return new Response(body, { status: 200, headers: { ...INERT, "content-type": "application/octet-stream", "content-disposition": "attachment", "x-final-url": finalUrl } });
+    return new Response(stream ?? body, { status: 200, headers: { ...INERT, "content-type": "application/octet-stream", "content-disposition": "attachment", "x-final-url": finalUrl } });
   } catch (e) { return failure(e); }
 };

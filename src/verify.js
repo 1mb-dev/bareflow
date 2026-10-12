@@ -1022,6 +1022,42 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     ok.status === 200 && new TextDecoder().decode(ok.body) === "<p>page</p>" && h.get("content-type") === "application/octet-stream" && h.get("x-content-type-options") === "nosniff" &&
     h.get("content-disposition") === "attachment" && h.get("content-security-policy") === "sandbox; default-src 'none'" && h.get("x-final-url") === "https://a.example/page" &&
     !h.has("set-cookie") && !h.has("x-upstream") && wide.status === 200 && wide.headers.get("x-final-url") === "https://a.example/%E6%97%A5" && missing.status === 502 && missing.code === "upstream" && noUrl.status === 400 && post.status === 405);
+  // Pass-through: a declared, uncompressed length within the web cap reaches the response unread;
+  // a compressed or undeclared body is read; the deadline still cuts a passed-through body.
+  let pulls = 0;
+  const html = new TextEncoder().encode("<p>declared</p>");
+  const through = async (headers, { endless = false, timeout = 3000 } = {}) => {
+    const upstream = async (url, init) => {
+      if (url === SITEVERIFY) return Response.json({ success: true });
+      let ctl;
+      init.signal.addEventListener("abort", () => { try { ctl.error(new Error("aborted")); } catch {} });
+      // Each pull waits a tick, as a network does: a synchronous endless source starves the timers.
+      return new Response(new ReadableStream({ start(c) { ctl = c; }, async pull(c) { pulls++; await new Promise((ok) => setTimeout(ok, 5)); c.enqueue(html); if (!endless) c.close(); } }, { highWaterMark: 0 }), { status: 200, headers });
+    };
+    pulls = 0;
+    const res = await handler(upstream, { timeout })({ request: new Request("https://bareflow.1mb.dev/_fetch?url=https%3A%2F%2Fa.example%2F", { headers: { "x-turnstile-token": "good" } }), env: { TURNSTILE_SECRET: "secret" } });
+    const unread = pulls === 0;
+    // Bounded and cancelled: a deadline that failed would otherwise read the endless body forever.
+    const reader = res.body.getReader(), parts = [], stop = Date.now() + 2000;
+    let text;
+    try {
+      for (;;) {
+        const r = await Promise.race([reader.read(), new Promise((ok) => setTimeout(ok, Math.max(0, stop - Date.now())).unref())]);
+        if (!r) { reader.cancel().catch(() => {}); text = "hung"; break; }
+        if (r.done) { text = new TextDecoder().decode(Buffer.concat(parts)); break; }
+        parts.push(r.value);
+      }
+    } catch { text = "cut"; }
+    return { status: res.status, unread, text };
+  };
+  const declared = await through({ "content-length": String(html.length) });
+  const compressed = await through({ "content-length": String(html.length), "content-encoding": "gzip" });
+  const undeclared = await through({});
+  const malformed = await through({ "content-length": `${html.length}, 5000000` });
+  const late = await through({ "content-length": "1000" }, { endless: true, timeout: 200 });
+  record("edge", "pass-through", "a declared, uncompressed length within the web cap is handed on unread; compressed, undeclared, or malformed (15, 5000000) is read; the deadline cuts a passed-through body",
+    declared.status === 200 && declared.unread && declared.text === "<p>declared</p>" && !compressed.unread && compressed.text === "<p>declared</p>" &&
+    !undeclared.unread && undeclared.text === "<p>declared</p>" && !malformed.unread && malformed.text === "<p>declared</p>" && late.status === 200 && late.unread && late.text === "cut");
   record("edge", "cap", "every page fetch asks for identity; one byte over the web cap: 502 over-cap naming the CLI; exactly the cap: 200 with every byte",
     encodings.size === 1 && encodings.has("identity") && big.status === 502 && big.code === "over-cap" && /^the page is over 1 MB, the web's limit; npx bareflow reads up to 5 MB$/.test(new TextDecoder().decode(big.body)) &&
     exact.status === 200 && exact.body.length === WEB_MAX_BYTES);
