@@ -96,6 +96,7 @@ export function metrics(buf, sample = SAMPLE) {
   return {
     upm, ascent: hhea.getInt16(4), descent: -hhea.getInt16(6), lineGap: hhea.getInt16(8),
     typo: { ascent: os2.getInt16(68), descent: -os2.getInt16(70), lineGap: os2.getInt16(72), use: !!(os2.getUint16(62) & 0x80) },
+    win: { ascent: os2.getUint16(74), descent: os2.getUint16(76) },
     avg: widths.reduce((s, w) => s + w, 0) / widths.length / upm, axes,
   };
 }
@@ -103,10 +104,11 @@ export function metrics(buf, sample = SAMPLE) {
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const [web, local, sample] = process.argv.slice(2);
   const w = metrics(readFileSync(web), sample), l = metrics(readFileSync(local), sample);
-  // The overrides use hhea; a web face that asks for typo metrics (and has different ones) would
-  // lay out differently per platform, so refuse it rather than guess.
-  if (w.typo.use && (w.typo.ascent !== w.ascent || w.typo.descent !== w.descent || w.typo.lineGap !== w.lineGap)) {
-    console.error(`${web}: USE_TYPO_METRICS with typo metrics unlike hhea; these overrides would not hold`);
+  // The overrides use hhea. Windows lays the web face out by typo metrics (USE_TYPO_METRICS) or by
+  // usWin; if those differ from hhea the swap moves text per platform, so refuse rather than guess.
+  const other = w.typo.use ? [w.typo.ascent, w.typo.descent, w.typo.lineGap] : [w.win.ascent, w.win.descent, 0];
+  if (other[0] !== w.ascent || other[1] !== w.descent || other[2] !== w.lineGap) {
+    console.error(`${web}: Windows metrics unlike hhea (${other} vs ${[w.ascent, w.descent, w.lineGap]}); these overrides would not hold`);
     process.exit(1);
   }
   const size = w.avg / l.avg;
