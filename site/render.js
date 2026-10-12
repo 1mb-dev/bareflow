@@ -158,8 +158,9 @@ export function safeHref(href, base) {
 }
 
 // The page's sections and blocks as an <article>. Every element and attribute here is a literal;
-// page text arrives only through textContent and checked hrefs. No ids: page ids could clobber
-// globals, so a #fragment link goes to the original page.
+// page text arrives only through textContent and checked hrefs. The page's own ids are not kept
+// (they could clobber globals), so a #fragment link goes to the original page; headings carry
+// bf- ids of ours.
 export function renderDoc(doc, d) {
   const base = doc.source.finalUrl || doc.source.url;
   const el = (tag, cls, text) => { const e = d.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -200,7 +201,7 @@ export function renderDoc(doc, d) {
   // Headings get ids from their text, prefixed so no page id can take one of the view's own.
   const taken = new Set();
   const heading = (e) => {
-    const slug = `bf-${e.textContent.toLowerCase().normalize("NFKD").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "") || "section"}`;
+    const slug = `bf-${e.textContent.toLowerCase().normalize("NFKD").replace(/\p{M}/gu, "").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "") || "section"}`;
     let id = slug;
     for (let n = 2; taken.has(id); n++) id = `${slug}-${n}`;
     taken.add(id);
