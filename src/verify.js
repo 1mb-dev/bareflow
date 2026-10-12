@@ -1209,7 +1209,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
 
   const { document } = parseHTML("<!doctype html><html><body></body></html>");
   const TAGS = new Set(["ARTICLE", "H1", "H2", "H3", "H4", "H5", "H6", "P", "UL", "OL", "LI", "BLOCKQUOTE", "FIGURE", "FIGCAPTION", "PRE", "CODE", "TABLE", "THEAD", "TBODY", "TR", "TH", "TD", "A", "STRONG", "EM", "BR", "SPAN", "DETAILS", "SUMMARY", "DIV"]);
-  const CLASSES = new Set(["page", "code", "image", "image-alt", "image-src", "link-refused", "losses", "loss-n", "table-scroll"]);
+  const CLASSES = new Set(["page", "code", "image", "image-host", "image-alt", "image-tag", "link-refused", "losses", "loss-n", "table-scroll"]);
   const offSite = (h) => { try { const u = new URL(h); return /^(https?|mailto):$/.test(u.protocol) && !/(^|\.)1mb\.dev\.?$/i.test(u.hostname); } catch { return false; } };
   const domBad = [];
   const check = (root, where) => {
@@ -1317,10 +1317,12 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     ["[x](javascript:alert(1))", null], ["[x](JavaScript:alert\\(1\\))", null], ["[x](data:text/html,x)", null], ["[x](vbscript:x)", null],
     ["[x](https://a.1mb.dev/p)", null], ["[x](//evil.1mb.dev/)", null], ["[x](HTTPS://WWW.1MB.DEV./)", null], ["[x](https://1mb.dev)", null],
     ["\\[x\\](https://e.com)", null], ["[x](/rel?q=1)", "https://docs.example.com/rel?q=1"], ["[x](#frag)", "https://docs.example.com/guide/page#frag"],
-    ["[x](mailto:a@b.c)", "mailto:a@b.c"], ["[x](https://not1mb.dev/)", "https://not1mb.dev/"], ["![i](https://e.com/i.png)", null],
+    ["[x](mailto:a@b.c)", "mailto:a@b.c"], ["[x](https://not1mb.dev/)", "https://not1mb.dev/"],
+    ["![i](https://e.com/i.png)", "https://e.com/i.png"], ["![i](/img/a.png)", "https://docs.example.com/img/a.png"], ["![i](javascript:alert(1))", null],
+    ["![i](data:image/png;base64,AAAA)", null], ["![i](https://a.1mb.dev/i.png)", null], ["![i](mailto:a@b.c)", null],
   ];
   const wrongLinks = links.filter(([t, want]) => hrefOf(t) !== want).map(([t]) => t);
-  record("view", "links", `hostile links: script, data, and 1mb.dev refused, relative resolved against the page, images never loaded (${links.length})${wrongLinks.length ? `: ${wrongLinks.join(" ")}` : ""}`, !wrongLinks.length);
+  record("view", "links", `hostile links: script, data, and 1mb.dev refused, relative resolved against the page, images links to their host, never loaded (${links.length})${wrongLinks.length ? `: ${wrongLinks.join(" ")}` : ""}`, !wrongLinks.length);
   const t0 = Date.now();
   for (const t of ["[".repeat(1e5), "![".repeat(5e4), "*".repeat(1e5) + "a", "*a ".repeat(5e4), "**a* ".repeat(3e4), "[a".repeat(3e4) + "](u)".repeat(3e4), "`".repeat(1e5), "` ``".repeat(3e4), "\\".repeat(1e5)]) parseInline(t);
   record("view", "linear", `hostile inline runs (100k brackets, stars, backticks) read in ${Date.now() - t0} ms (< 3000)`, Date.now() - t0 < 3000);

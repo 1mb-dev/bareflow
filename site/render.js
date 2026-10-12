@@ -177,14 +177,28 @@ export function renderDoc(doc, d) {
         for (const k of n.c) e.append(node(k));
         return e;
       }
-      case "image": return placeholder(n.alt, n.src);
+      case "image": return picture(n.alt, n.src, false);
     }
   }
-  // An image is never loaded: its alt and address, in a frame.
-  function placeholder(alt, src) {
-    const e = el("span", "image");
-    e.append(el("span", "image-alt", alt || "image"), el("span", "image-src", src));
-    return e;
+  // An image is never loaded: it is a link to the image on its host (http(s) only, by safeHref),
+  // named by its alt. Block: a figure, `image, <host>` over the alt. Inline: the alt, then `(image)`.
+  // Unlinkable (data:, 1mb.dev, ...): the same words, not a link.
+  function picture(alt, src, block) {
+    const href = safeHref(src, base), web = href && /^https?:/.test(href) ? href : null;
+    const link = (...parts) => {
+      const e = web ? el("a") : el("span", "link-refused");
+      if (web) { e.href = web; e.rel = "noopener noreferrer nofollow ugc"; }
+      e.append(...parts);
+      return e;
+    };
+    if (block) {
+      const fig = el("figure", "image");
+      fig.append(link(el("span", "image-host", web ? `image, ${new URL(web).hostname}` : "image"), ...(alt ? [el("span", "image-alt", alt)] : [])));
+      return fig;
+    }
+    const f = d.createDocumentFragment();
+    f.append(link(alt || "image"), ...(alt ? [el("span", "image-tag", " (image)")] : []));
+    return f;
   }
   const article = el("article", "page");
   // Headings get ids from their text, prefixed so no page id can take one of the view's own.
@@ -214,7 +228,7 @@ export function renderDoc(doc, d) {
         fig.append(el("pre").appendChild(el("code", null, b.code)).parentNode);
         return fig;
       }
-      case "image": return el("p").appendChild(placeholder(b.alt, b.src)).parentNode;
+      case "image": return picture(b.alt, b.src, true);
       case "table": {
         if (!b.headers.length) return d.createTextNode(""); // as the Markdown render: no table
         const t = el("table");

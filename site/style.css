@@ -77,8 +77,13 @@ pre code { background: none; padding: 0; font-size: inherit; }
 @media (min-width: 76rem) {
   .page pre, .table-scroll { width: max-content; min-width: 100%; max-width: 56rem; }
 }
-.image { display: inline-flex; flex-direction: column; border: 1px dashed var(--ink-2); padding: var(--s-1) var(--s-2); font: var(--t-small)/1.4 var(--mono); color: var(--ink-2); max-width: 100%; }
-.image-src { overflow-wrap: anywhere; }
+/* Images are links, never loads: a figure between hairlines, where it came from over what it shows. */
+.page figure.image { margin: var(--s-3) 0; padding: var(--s-2) 0; border-block: 1px solid var(--rule); }
+.image > a, .image > .link-refused { display: block; color: var(--ink); text-decoration: none; }
+.image > a .image-alt { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.15em; } /* links are underlined; the host line is not */
+.image-host { display: block; font: var(--t-small)/1.5 var(--mono); color: var(--ink-2); overflow-wrap: anywhere; }
+.image-alt { overflow-wrap: anywhere; }
+.image-tag { font: var(--t-small) var(--mono); color: var(--ink-2); }
 
 /* The margin contents, from 56rem: sticky under the tape; the column stays centered while the
    margin holds the list, and moves right when it does not. */
