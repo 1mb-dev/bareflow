@@ -43,8 +43,8 @@ export function checkTarget(url) {
 // is absent on a redirect, and a response without one (204, 304) is an empty page. It rejects
 // with noAnswer at the deadline. check(url) runs on every hop after checkTarget: the edge
 // Function's own guards. over: the page did not fit maxBytes; body is at most its first maxBytes.
-// A transport may instead resolve { status, stream }: a body within maxBytes by its declared
-// length, handed on unread (the edge Function's response; fetchPage needs bytes).
+// A transport may instead resolve { status, stream, length }: a body handed on unread through a
+// stream that enforces length bytes (the edge Function's response; fetchPage needs bytes).
 export async function fetchBody(url, transport, { timeout = 30000, check, maxBytes = MAX_BYTES } = {}) {
   const deadline = Date.now() + timeout;
   // Serialized as the parser does, so finalUrl has one form with or without a redirect.
@@ -61,7 +61,10 @@ export async function fetchBody(url, transport, { timeout = 30000, check, maxByt
       continue;
     }
     if (res.status >= 400) throw new Error(`HTTP ${res.status} from ${at}; check the URL (bareflow does not retry)`);
-    if (res.stream) return { finalUrl: at, stream: res.stream, over: false };
+    if (res.stream) {
+      if (!(res.length <= maxBytes)) throw new Error(`a transport handed on ${res.length} bytes, past the ${maxBytes}-byte cap`);
+      return { finalUrl: at, stream: res.stream, over: false };
+    }
     const body = res.body ?? new Uint8Array();
     return { finalUrl: at, body: body.subarray(0, maxBytes), over: !!res.over || body.length > maxBytes };
   }
@@ -79,4 +82,8 @@ export function snapshot({ finalUrl, body }) {
   };
 }
 
-export const fetchPage = async (url, transport, opts) => snapshot(await fetchBody(url, transport, opts));
+export async function fetchPage(url, transport, opts) {
+  const got = await fetchBody(url, transport, opts);
+  if (got.stream) throw new Error("fetchPage needs bytes: this transport hands bodies on as streams");
+  return snapshot(got);
+}

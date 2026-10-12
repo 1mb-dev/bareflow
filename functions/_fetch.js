@@ -2,4 +2,4 @@
 // src/edge.js. FixedLengthStream is a Workers API: it errors past (or short of) n bytes, natively.
 import { handler } from "../src/edge.js";
 
-export const onRequestGet = handler((url, init) => fetch(url, init), { limit: (body, n) => body.pipeThrough(new FixedLengthStream(n)) });
+export const onRequestGet = handler((url, init) => fetch(url, init), { limit: (n) => new FixedLengthStream(n) });

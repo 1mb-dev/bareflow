@@ -74,13 +74,16 @@ export const edgeTransport = (fetchImpl, { limit } = {}) => async (url, { header
       res.body?.cancel().catch(() => {});
       return { status: res.status, over: true };
     }
-    // A declared, uncompressed length within the cap is handed on unread through limit(body, n),
-    // the platform's native stream that errors past n bytes: the declared length is enforced, not
-    // trusted. The timer stays armed so the deadline still cuts it. A compressed body is read: its
-    // declared length is not the page's.
+    // A declared, uncompressed length within the cap is handed on unread: piped natively into
+    // limit(n), the platform's stream that errors past (or short of) n bytes, so the length is
+    // enforced, not trusted. The timer covers the pipe and is cleared when it settles. Once the 200
+    // is sent, a deadline or a reset arrives as a cut body. A compressed body is read: its declared
+    // length is not the page's.
     if (limit && res.body && declared <= maxBytes && !res.headers.get("content-encoding")) {
       streaming = true;
-      return { status: res.status, stream: limit(res.body, declared) };
+      const { readable, writable } = limit(declared);
+      res.body.pipeTo(writable).catch(() => {}).finally(() => clearTimeout(timer));
+      return { status: res.status, stream: readable, length: declared };
     }
     try { return { status: res.status, body: await readCapped(res.body, maxBytes) }; }
     catch (e) {
