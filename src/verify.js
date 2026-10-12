@@ -17,6 +17,7 @@ import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
 import { decompress, fetchSnapshot } from "./fetch.js";
 import { fetchPage, MAX_BYTES } from "./fetch-policy.js";
+import { edgeTransport, handler, SITEVERIFY } from "./edge.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
 import { renderMarkdown, NOTE_SOURCES, REASON_IS_OWN } from "./render.js";
@@ -832,6 +833,97 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
     moved.doc.source.finalUrl === finalUrl && moved.markdown.includes(`\nfinal: ${finalUrl}\n`) && moved.doc.sections[0].blocks[0].text.includes(`](${finalUrl}intro)`) &&
     moved.doc.sections[0].url === finalUrl && moved.doc.id === createHash("sha256").update(finalUrl).digest("hex").slice(0, 16));
   record("fetch", "cap", "an endless body is read to the byte cap and the connection closed, inside the budget", endless === MAX_BYTES);
+}
+
+// One fetch policy, two transports: the CLI's node:http and the Function's WHATWG fetch (here
+// undici, its requests sent to a local server) give the same outcome on every transport case;
+// limits come from the policy, so a transport with its own cap or hop count turns this red.
+{
+  const bomb = gzipSync(Buffer.alloc(MAX_BYTES * 2, 65));
+  const server = createServer((req, res) => {
+    const hop = Number(req.url.match(/^\/c(\d)$/)?.[1]);
+    if (!Number.isNaN(hop)) { res.writeHead(302, { location: `/c${hop + 1}` }); return res.end(); }
+    if (req.url === "/page") { res.writeHead(200, { "content-type": "text/html", "set-cookie": "s=1" }); return res.end("<html><body><main><h1>P</h1></main></body></html>"); }
+    if (req.url === "/moved") { res.writeHead(301, { location: "/page" }); return res.end(); }
+    if (req.url === "/endless") { res.writeHead(200, { "content-type": "text/html" }); const mb = Buffer.alloc(1 << 20, 97); const t = setInterval(() => res.write(mb), 5); res.on("close", () => clearInterval(t)); return; }
+    if (req.url === "/bomb") { res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip" }); return res.end(bomb); }
+    if (req.url === "/gz") { res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip" }); return res.end(gzipSync("<p>gz</p>")); }
+    if (req.url === "/badgzip") { res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip" }); return res.end("<html>not gzip</html>"); }
+    if (req.url === "/noloc") { res.writeHead(302); return res.end(); }
+    if (req.url === "/priv") { res.writeHead(307, { location: "http://10.0.0.1/admin" }); return res.end(); }
+    if (req.url === "/drip") { res.writeHead(200, { "content-type": "text/html" }); const t = setInterval(() => res.write(" "), 50); res.on("close", () => clearInterval(t)); return; }
+    if (req.url === "/empty") { res.writeHead(204); return res.end(); }
+    res.writeHead(404); res.end();
+  });
+  await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
+  const port = server.address().port;
+  const lookup = (_host, opts, cb) => (opts?.all ? cb(null, [{ address: "127.0.0.1", family: 4 }]) : cb(null, "127.0.0.1", 4));
+  const toLocal = (url, init) => { const u = new URL(url); u.hostname = "127.0.0.1"; return fetch(u, init); };
+  const outcome = (p) => p.then((s) => `${s.finalUrl} ${s.bytes} ${s.fingerprint}`, (e) => e.message.replace(/\(.*?\)/, "(...)"));
+  const paths = ["/page", "/moved", "/c0", "/c1", "/endless", "/bomb", "/gz", "/badgzip", "/noloc", "/priv", "/drip", "/empty", "/missing"];
+  const off = [];
+  for (const p of paths) {
+    const u = `http://site.test:${port}${p}`, timeout = p === "/drip" ? 300 : 5000;
+    const [a, b] = await Promise.all([outcome(fetchSnapshot(u, { timeout, lookup })), outcome(fetchPage(u, edgeTransport(toLocal), { timeout }))]);
+    if (a !== b) off.push(`${p}: node "${a.slice(0, 90)}" edge "${b.slice(0, 90)}"`);
+  }
+  server.close();
+  // Equal output does not show the edge stopped reading: the policy trims the body either way.
+  let pulled = 0;
+  const chunk = new Uint8Array(64 * 1024);
+  const endless = async () => new Response(new ReadableStream({ pull(c) { pulled += chunk.length; c.enqueue(chunk); } }), { status: 200 });
+  await fetchPage("https://a.example/", edgeTransport(endless));
+  record("fetch", "transports", `node and edge transports agree on ${paths.length} cases (redirects, 6 hops, cap, gzip bomb, bad gzip, no location, private hop, drip, 204, 404); the edge reads ${pulled - MAX_BYTES} bytes past the cap${off.length ? `: ${off.join("; ")}` : ""}`,
+    !off.length && pulled - MAX_BYTES <= 2 * chunk.length);
+}
+
+// The /_fetch Function (src/edge.js via functions/_fetch.js): no token -> 403 before any request;
+// its own guards (credentials, ports, IP literals, our zones) before Turnstile and on every hop;
+// a fetched page comes back as inert bytes with the final URL and none of the upstream headers.
+{
+  const server = createServer((req, res) => {
+    if (req.url === "/page") { res.writeHead(200, { "content-type": "text/html", "set-cookie": "s=1", "x-upstream": "1" }); return res.end("<p>page</p>"); }
+    if (req.url === "/to-own") { res.writeHead(302, { location: "https://bareflow.1mb.dev/" }); return res.end(); }
+    if (req.url === "/to-port") { res.writeHead(302, { location: "http://b.example:8080/" }); return res.end(); }
+    res.writeHead(404); res.end();
+  });
+  await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
+  const port = server.address().port;
+  let calls = [];
+  const platform = async (url, init) => {
+    calls.push(String(url));
+    if (url === SITEVERIFY) return Response.json({ success: JSON.parse(init.body).response === "good" });
+    const u = new URL(url); u.hostname = "127.0.0.1"; u.port = String(port); u.protocol = "http:";
+    return fetch(u, init);
+  };
+  const onRequestGet = handler(platform, { timeout: 3000 });
+  const ask = async (target, { token = "good", method = "GET" } = {}) => {
+    calls = [];
+    const q = target == null ? "" : `?url=${encodeURIComponent(target)}`;
+    const res = await onRequestGet({ request: new Request(`https://bareflow.1mb.dev/_fetch${q}`, { method, headers: token ? { "x-turnstile-token": token } : {} }), env: { TURNSTILE_SECRET: "secret" } });
+    return { status: res.status, code: res.headers.get("x-bareflow-error"), headers: res.headers, body: new Uint8Array(await res.arrayBuffer()), calls: [...calls] };
+  };
+  const refusedFirst = async (target) => { const r = await ask(target); return r.status === 400 && r.code === "url" && r.calls.length === 0; };
+  const noToken = await ask("https://a.example/page", { token: null });
+  const badToken = await ask("https://a.example/page", { token: "bad" });
+  const ok = await ask("https://a.example/page");
+  const h = ok.headers;
+  const guards = await Promise.all(["https://u:p@a.example/", "http://a.example:8080/", "https://8.8.8.8/", "https://[2606:4700::1111]/", "https://1mb.dev/", "https://bareflow.1mb.dev/x", "https://x.pages.dev/", "file:///etc/passwd", "javascript:alert(1)"].map(refusedFirst));
+  const priv = await ask("http://10.0.0.1/");
+  const toOwn = await ask("https://a.example/to-own");
+  const toPort = await ask("https://a.example/to-port");
+  const missing = await ask("https://a.example/missing");
+  const noUrl = await ask(null);
+  const post = await ask("https://a.example/page", { method: "POST" });
+  server.close();
+  record("edge", "token", "no token: 403 with no request made; a failed Turnstile check: 403 after siteverify only",
+    noToken.status === 403 && noToken.code === "token" && noToken.calls.length === 0 && badToken.status === 403 && badToken.calls.length === 1 && badToken.calls[0] === SITEVERIFY);
+  record("edge", "guards", "credentials, port 8080, IPv4 and IPv6 literals, 1mb.dev, *.1mb.dev, *.pages.dev, file:, javascript: refused before Turnstile; private literal 403; a redirect to our zone or another port refused",
+    guards.every(Boolean) && priv.status === 403 && priv.code === "blocked" && priv.calls.length === 0 && toOwn.code === "url" && toPort.code === "url");
+  record("edge", "response", "a page: inert octet-stream bytes, final URL, no upstream headers; 404 upstream, no url, POST named",
+    ok.status === 200 && new TextDecoder().decode(ok.body) === "<p>page</p>" && h.get("content-type") === "application/octet-stream" && h.get("x-content-type-options") === "nosniff" &&
+    h.get("content-disposition") === "attachment" && h.get("content-security-policy") === "sandbox; default-src 'none'" && h.get("x-final-url") === "https://a.example/page" &&
+    !h.has("set-cookie") && !h.has("x-upstream") && missing.status === 502 && missing.code === "upstream" && noUrl.status === 400 && post.status === 405);
 }
 
 // The frozen surface (MLP v1): CLI usage and exit codes, the IR's shape, the header's fields, and

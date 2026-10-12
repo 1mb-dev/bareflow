@@ -11,6 +11,7 @@
     "src",
     "!src/verify.js",
     "!src/truth.js",
+    "!src/edge.js",
     "docs",
     "NOTICE"
   ],
