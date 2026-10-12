@@ -1155,20 +1155,24 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     JSON.stringify(routes) === JSON.stringify({ version: 1, include: ["/_fetch"], exclude: [] }));
 
   // The design's rules (site/tokens.css): colors only in tokens.css, no shadow or gradient, corners
-  // at 2px or less, and text tokens readable on paper and on their washes in both themes.
+  // at 2px or less, --mark only as a ground, and every text pair readable in both themes.
   const COLOR = /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(|:\s*(?:[^;{}]*\s)?(?:white|black|red|blue|green|gray|grey|silver|orange|purple|yellow|pink|brown)\b/i;
   const rules = (t) => t.replace(/\/\*[\s\S]*?\*\//g, ""); // comments may name what is banned
   const radii = [...rules(tokens + style).matchAll(/(?:border-radius|--radius):\s*([^;]+)/g)].map((m) => m[1].trim());
-  record("web", "design", "colors only in tokens.css; no box-shadow, text-shadow, or gradient; radius <= 2px; the build puts the tokens first",
-    !COLOR.test(rules(style)) && !/box-shadow|text-shadow|gradient\(/.test(rules(tokens + style)) && radii.length && radii.every((r) => r === "var(--radius)" || /^(0|[0-2](\.\d+)?px)$/.test(r)) &&
+  record("web", "design", "colors only in tokens.css; no box-shadow, text-shadow, or gradient; radius <= 2px; no text in --mark; the build puts the tokens first",
+    !COLOR.test(rules(style)) && !/(^|[\s;{])color:\s*var\(--mark\)/m.test(rules(style)) && !/box-shadow|text-shadow|gradient\(/.test(rules(tokens + style)) && radii.length && radii.every((r) => r === "var(--radius)" || /^(0|[0-2](\.\d+)?px)$/.test(r)) &&
     builtStyle.startsWith(tokens));
   const lum = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)).reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
   const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
-  const [light, dark] = tokens.split("@media (prefers-color-scheme: dark)").map((b) => Object.fromEntries([...b.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-f]{6})\b/gi)].map((m) => [m[1], m[2]])));
-  const pairs = [["ink", "paper"], ["ink-2", "paper"], ["mark", "paper"], ["mark", "mark-wash"], ["ink", "mark-wash"], ["ink", "code-wash"], ["ink-2", "code-wash"]];
-  const low = [["light", light], ["dark", { ...light, ...dark }]].flatMap(([name, t]) => pairs.map(([f, b]) => [name, f, b, t[f] && t[b] ? ratio(t[f], t[b]) : 0]).filter((p) => p[3] < 4.5));
-  record("web", "contrast", `ink, ink-2, and mark at 4.5:1 or more on paper and washes, light and dark (${pairs.length * 2} pairs)${low.length ? `: ${low.map((p) => `${p[0]} ${p[1]}/${p[2]} ${p[3].toFixed(2)}`).join(", ")}` : ""}`,
-    Object.keys(dark).length >= 8 && !low.length);
+  // A block's colors by its selector: light is the first :root; dark is written once under the
+  // system's media query and once for data-theme="dark".
+  const colors = (sel) => { const at = tokens.indexOf(`${sel} {`); return at < 0 ? {} : Object.fromEntries([...tokens.slice(at, tokens.indexOf("}", at)).matchAll(/--([a-z0-9-]+):\s*(#[0-9a-f]{6})\b/gi)].map((m) => [m[1], m[2]])); };
+  const light = colors(":root"), dark = colors(':root:not([data-theme="light"])'), darkSet = colors(':root[data-theme="dark"]');
+  const pairs = [["ink", "paper"], ["ink-2", "paper"], ["ink", "code-wash"], ["ink-2", "code-wash"], ["tape-ink", "tape"], ["mark-ink", "mark"], ["focus", "paper"]];
+  const low = [["light", light], ["dark", dark]].flatMap(([name, t]) => pairs.map(([f, b]) => [name, f, b, t[f] && t[b] ? ratio(t[f], t[b]) : 0]).filter((p) => p[3] < 4.5));
+  record("web", "contrast", `every text pair at 4.5:1 or more, light and dark (${pairs.length * 2} pairs); dark sets every light color, the same under the media query and data-theme${low.length ? `: ${low.map((p) => `${p[0]} ${p[1]}/${p[2]} ${p[3].toFixed(2)}`).join(", ")}` : ""}`,
+    Object.keys(light).length >= 10 && Object.keys(light).every((k) => k in dark) && JSON.stringify(dark) === JSON.stringify(darkSet) &&
+    tokens.includes('@media (prefers-color-scheme: dark) {\n  :root:not([data-theme="light"]) {') && !low.length);
 }
 
 // The result view (site/render.js). Its inline reader agrees with marked on every prose field of

@@ -1,10 +1,11 @@
 /* bareflow's tokens: every color, type, and space value the site uses is defined here.
-   Two voices that never mix: the page's words in --serif and ink, never colored; bareflow's words
-   in --mono, small and --ink-2, as the Markdown header writes them.
-   --mark is the one accent and means a loss, only: a page with no loss shows no --mark at all.
+   Grayscale, with one hue: --mark, a ground under --mark-ink for a loss only (a page with no loss
+   shows no --mark), never a text color and never alone.
+   Themes: the system's by default; data-theme on <html> overrides it. The two dark blocks are one
+   palette written twice (verify fails if they differ).
    verify enforces: no color literal outside this file; no box-shadow, gradient, or text-shadow;
-   no border-radius over 2px; --ink, --ink-2, and --mark at 4.5:1 or more on --paper and on their
-   washes, in both themes. --rule is decoration; a control's edge uses --ink-2 (3:1 non-text).
+   no border-radius over 2px; no text in --mark; every text pair at 4.5:1 or more in both themes.
+   --rule and --tape-edge are decoration; a control's edge uses --ink-2 (3:1 non-text).
    Fonts are self-hosted from /_app/fonts (site/fonts: SOURCE, OFL.txt). Each has a local fallback
    face whose overrides come from scripts/font-metrics.js, so the swap does not move the text. */
 @font-face { font-family: "Literata"; font-style: normal; font-weight: 200 900; font-display: swap;
@@ -20,18 +21,31 @@
 @font-face { font-family: "Mono Fallback"; src: local("Menlo Regular"), local("Menlo-Regular"), local("DejaVu Sans Mono");
   size-adjust: 104.97%; ascent-override: 93.74%; descent-override: 30.10%; line-gap-override: 0%; }
 :root {
-  --paper: #fbfaf6; --ink: #1b1a17; --ink-2: #5c5a54; --rule: #d8d5cc;
-  --mark: #b8361b; --mark-wash: #f8e9e3; --code-wash: #f1efe8; --focus: #1b1a17;
+  --paper: #ffffff; --ink: #15171a; --ink-2: #5b6067; --rule: #e3e5e8; --code-wash: #f3f4f6;
+  --tape: #15171a; --tape-ink: #f4f5f6; --tape-edge: #15171a; --mark: #ffe14d; --mark-ink: #15171a;
+  --focus: #15171a; --w-text: 400;
   --serif: "Literata", "Literata Fallback", Georgia, serif;
   --mono: "Atkinson Hyperlegible Mono", "Mono Fallback", ui-monospace, Menlo, Consolas, monospace;
-  --t-small: 0.8125rem; --t-body: 1.0625rem; --t-head: 1.25rem; --t-title: 1.625rem;
+  --t-small: 0.8125rem; --t-body: 1.0625rem; --lh-body: 1.55;
+  --t-title: 1.75rem; --t-h2: 1.375rem; --t-h3: 1.125rem; --t-h4: 1rem;
   --s-1: 0.25rem; --s-2: 0.5rem; --s-3: 1rem; --s-4: 2rem;
-  --measure: 40rem; --radius: 2px;
+  --measure: 66ch; --radius: 2px;
   color-scheme: light dark;
 }
+@media (min-width: 40rem) {
+  :root { --t-body: 1.125rem; --lh-body: 1.6; --t-title: 2.25rem; }
+}
 @media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #161512; --ink: #e8e5dd; --ink-2: #a3a097; --rule: #38352f;
-    --mark: #f07a58; --mark-wash: #2a1c17; --code-wash: #201f1b; --focus: #e8e5dd;
+  :root:not([data-theme="light"]) {
+    --paper: #111315; --ink: #e6e7e9; --ink-2: #9aa0a6; --rule: #2a2d31; --code-wash: #1a1c1f;
+    --tape: #2b2e33; --tape-ink: #f1f2f3; --tape-edge: #3a3e44; --mark: #e8c547; --mark-ink: #111315;
+    --focus: #e6e7e9; --w-text: 380;
   }
 }
+:root[data-theme="dark"] {
+  --paper: #111315; --ink: #e6e7e9; --ink-2: #9aa0a6; --rule: #2a2d31; --code-wash: #1a1c1f;
+  --tape: #2b2e33; --tape-ink: #f1f2f3; --tape-edge: #3a3e44; --mark: #e8c547; --mark-ink: #111315;
+  --focus: #e6e7e9; --w-text: 380;
+  color-scheme: dark;
+}
+:root[data-theme="light"] { color-scheme: light; }

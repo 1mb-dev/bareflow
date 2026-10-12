@@ -30,8 +30,6 @@ for (const p of pages) {
 
 await site(OUT, "contact-sheet");
 await mkdir(join(OUT, "cases"));
-const tokens = await readFile(join(ROOT, "site/tokens.css"), "utf8");
-const dark = tokens.slice(tokens.indexOf("@media (prefers-color-scheme: dark)")).match(/:root \{[^}]*\}/)[0];
 const entry = `
 import { showView, summary, mode } from "./site/view.js";
 const q = new URLSearchParams(location.search);
@@ -49,7 +47,7 @@ if (q.get("mode") === "markdown") mode(true);
 const viewer = await build({ stdin: { contents: entry, resolveDir: ROOT, loader: "js" }, bundle: true, format: "esm", platform: "browser", write: false, logLevel: "silent" });
 const shell = (await readFile(join(OUT, "index.html"), "utf8"))
   .replace(/<script src="https:\/\/challenges[^>]*><\/script>\n/, "")
-  .replace('<script type="module" src="/_app/app.js"></script>', '<script>if (new URLSearchParams(location.search).get("theme") === "dark") document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: "/dark.css" }));</script>\n<script type="module" src="/viewer.js"></script>');
+  .replace('<script type="module" src="/_app/app.js"></script>', '<script>document.documentElement.dataset.theme = new URLSearchParams(location.search).get("theme") || "light";</script>\n<script type="module" src="/viewer.js"></script>');
 const sheet = `<!doctype html>
 <html><head><meta charset="utf-8"><title>bareflow contact sheet</title>
 <style>body { font: 14px/1.4 ui-monospace, monospace; margin: 16px; } nav a { margin-right: 12px; } #sheet { display: flex; flex-wrap: wrap; gap: 32px 24px; align-items: flex-start; } figure { margin: 0; }
@@ -79,7 +77,6 @@ fetch("/cases/index.json").then((r) => r.json()).then((cases) => {
 await Promise.all([
   writeFile(join(OUT, "view.html"), shell),
   writeFile(join(OUT, "viewer.js"), viewer.outputFiles[0].text),
-  writeFile(join(OUT, "dark.css"), dark),
   ...cases.map((c, i) => writeFile(join(OUT, "cases", `${i}.json`), JSON.stringify(c))),
   writeFile(join(OUT, "cases", "index.json"), JSON.stringify(cases.map(({ name, losses }) => ({ name, losses })))),
   writeFile(join(OUT, "sheet.html"), sheet),
