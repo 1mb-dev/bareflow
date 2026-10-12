@@ -1103,8 +1103,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     exact.status === 200 && exact.body.length === WEB_MAX_BYTES);
 }
 
-// The built site: the shell tells curl and agents where the CLI is, scripts load from self and
-// Turnstile only, app code writes no HTML, and _headers carries the CSP.
+// The built site: the shell tells curl and agents where the CLI is, scripts load from self
+// (Turnstile's on a target route only), app code writes no HTML, and _headers carries the CSP.
 {
   const out = siteOut;
   const html = await readFile(join(out, "index.html"), "utf8");
@@ -1140,13 +1140,49 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const linked = [...builtStyle.matchAll(/url\((\/[^)]+)\)/g), ...html.matchAll(/<link rel="preload" href="([^"]+)"/g)].map((m) => m[1]);
   const unlinked = (await Promise.all(linked.map((u) => readFile(join(out, u)).then(() => [], () => [u])))).flat();
   const ofl = await readFile(join(fontDir, "OFL.txt"), "utf8").catch(() => "");
+  const appCode = await readFile(join(out, "_app/app.js"), "utf8");
   await rm(out, { recursive: true, force: true });
   record("web", "fonts", `${fontFiles.length} fonts, ${fontTotal} bytes (cap ${FONT_CAP}), each equal to its SOURCE sha256; every url() and preload resolves; OFL.txt ships${[...unsourced, ...unlinked].length ? `: ${[...unsourced, ...unlinked].join(", ")}` : ""}`,
     fontFiles.length === 3 && fontTotal <= FONT_CAP && Object.keys(sourced).length === fontFiles.length && !unsourced.length &&
     linked.length >= 5 && !unlinked.length && (ofl.match(/SIL OPEN FONT LICENSE Version 1\.1/g) ?? []).length === 2);
-  record("web", "shell", "the shell's text for curl and agents names no command that does not exist yet; sitekey set; scripts from self and challenges.cloudflare.com only",
+  record("web", "shell", "the shell's text for curl and agents names no command that does not exist yet; sitekey set; scripts from self only",
     visible === "bareflow converts this page in your browser. The CLI and MCP server ship on npm with 0.5.0. Source: github.com/1mb-dev/bareflow." && html.includes('data-sitekey="test-sitekey"') &&
-    scripts.length === 3 && scripts.every((s) => s.startsWith("/_app/") || s.startsWith("https://challenges.cloudflare.com/")));
+    scripts.length === 2 && scripts.every((s) => s.startsWith("/_app/")));
+  // Turnstile's script loads only to fetch a page: the built app.js, run on the built shell, adds
+  // exactly that script on a target route, and none on the home, a paste, or a refused address.
+  const TURNSTILE = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+  const runApp = (path, act) => {
+    const w = parseHTML(html), did = [], timers = [];
+    const ctx = {
+      document: w.document, location: { href: `https://bareflow.1mb.dev${path}`, origin: "https://bareflow.1mb.dev", assign: (u) => did.push(`assign ${u}`) },
+      history: { replaceState() {}, pushState() {} }, fetch: (u) => { did.push(`fetch ${u}`); return new Promise(() => {}); },
+      Worker: class { postMessage() { did.push("worker"); } terminate() {} }, setTimeout: (f) => timers.push(f), clearTimeout() {}, URL, URLSearchParams,
+    };
+    ctx.window = ctx;
+    vm.runInNewContext(appCode, ctx);
+    act?.(w.document, w.Event);
+    const said = [...w.document.querySelectorAll("script")].map((e) => e.getAttribute("src")).filter((u) => !u.startsWith("/_app/")).concat(did).join(" ");
+    return Object.assign(new String(said), { d: w.document, timers });
+  };
+  const submit = (id, fields) => (d, Event) => {
+    for (const [f, v] of Object.entries(fields)) d.getElementById(f).value = v;
+    d.getElementById(id).dispatchEvent(new Event("submit", { cancelable: true }));
+  };
+  const loads = {
+    home: runApp("/"), query: runApp("/?ref=x"), go: runApp("/", submit("go", { target: "https://docs.example.com/a" })),
+    paste: runApp("/", submit("paste-form", { "paste-url": "https://docs.example.com/a", "paste-html": "<p>a</p>" })),
+    refused: runApp("/javascript:alert(1)"), target: runApp("/https://docs.example.com/guide/"), bare: runApp("/docs.example.com/guide/"),
+  };
+  const want = { home: "", query: "", go: "assign https://bareflow.1mb.dev/https://docs.example.com/a", paste: "worker", refused: "", target: TURNSTILE, bare: TURNSTILE };
+  const wrong = Object.keys(want).filter((k) => String(loads[k]) !== want[k]);
+  // A blocked script fails the fetch at the next check, not after the 10 s wait.
+  const { d: blockedDoc, timers } = runApp("/https://docs.example.com/guide/");
+  blockedDoc.querySelector(`script[src="${TURNSTILE}"]`)?.onerror?.();
+  timers.splice(0).forEach((f) => f());
+  await new Promise((r) => setImmediate(r));
+  const blockedSaid = blockedDoc.getElementById("status").textContent;
+  record("web", "turnstile", `Turnstile's script is added on a target route only, once, from its one address; the home, a submit, a paste, and a refused address make no request; a blocked script fails at the next check${wrong.map((k) => ` ${k}: ${JSON.stringify(String(loads[k]))}`).join("")}${blockedSaid.startsWith("Fetching is unavailable") ? "" : `; blocked: ${JSON.stringify(blockedSaid)}`}`,
+    !wrong.length && blockedSaid.startsWith("Fetching is unavailable"));
   record("web", "claims", `no npx in site/, the built site, or the Function's messages (${served.length} files)${npx.length ? `: ${npx.join(", ")}` : ""}`,
     !npx.length && served.some((f) => f.endsWith(join("_app", "app.js"))) && served.some((f) => f.endsWith("index.html")));
   // The theme: theme.js is a classic script in <head> before the stylesheet, so it sets data-theme

@@ -45,7 +45,6 @@ if (q.get("mode") === "markdown") mode(true);
 `;
 const viewer = await build({ stdin: { contents: entry, resolveDir: ROOT, loader: "js" }, bundle: true, format: "esm", platform: "browser", write: false, logLevel: "silent" });
 const shell = (await readFile(join(OUT, "index.html"), "utf8"))
-  .replace(/<script src="https:\/\/challenges[^>]*><\/script>\n/, "")
   .replace('<script src="/_app/theme.js"></script>\n', "") // the sheet sets the theme from ?theme=
   .replace('<script type="module" src="/_app/app.js"></script>', '<script>{ const t = new URLSearchParams(location.search).get("theme") || "light"; if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }</script>\n<script type="module" src="/viewer.js"></script>');
 const sheet = `<!doctype html>

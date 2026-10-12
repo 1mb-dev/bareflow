@@ -42,11 +42,21 @@ function showResult(r, url) {
   if (r.error) fail(r.error, r.message);
 }
 
+// Turnstile's script loads only to fetch a page: the home and a paste make no third-party request.
+let blocked = false;
+function loadTurnstile() {
+  const s = document.createElement("script");
+  s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+  s.onerror = () => { blocked = true; };
+  document.head.append(s);
+}
+
 // One Turnstile token per fetch; tokens are single-use.
 function token() {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     const ready = () => {
+      if (blocked) return reject(new Error("unavailable"));
       if (window.turnstile) {
         return window.turnstile.render($("challenge"), {
           sitekey: document.body.dataset.sitekey,
@@ -62,6 +72,7 @@ function token() {
 }
 
 async function fetchAndConvert(url) {
+  loadTurnstile();
   const host = new URL(url).hostname;
   origin(url);
   $("original").href = url;
