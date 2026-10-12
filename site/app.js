@@ -1,6 +1,7 @@
 // The page: route the share URL, get the bytes from /_fetch behind Turnstile, convert in the
 // worker, show the Markdown as text. Page content reaches the DOM through textContent only.
 import { parseShare } from "./url.js";
+import { renderDoc, renderLosses } from "./render.js";
 
 const $ = (id) => document.getElementById(id);
 const ORIGIN = location.origin;
@@ -36,13 +37,52 @@ const convertIn = (msg, transfer) => new Promise((resolve) => {
   w.postMessage(msg, transfer);
 });
 
+// The Markdown header's own lines, key and value, as the provenance card.
+function provenance(markdown, losses) {
+  const dl = $("provenance");
+  dl.replaceChildren();
+  for (const line of markdown.slice(4, markdown.indexOf("\n---\n")).split("\n")) {
+    const at = line.indexOf(": ");
+    const dt = document.createElement("dt"), dd = document.createElement("dd");
+    dt.textContent = line.slice(0, at);
+    dd.textContent = line.slice(at + 2);
+    if ((dt.textContent === "losses" && losses) || dt.textContent === "warning") dd.className = "marked";
+    dl.append(dt, dd);
+  }
+}
+
+function mode(source) {
+  $("frame").hidden = source;
+  $("rail").hidden = source || !$("rail").querySelector("li");
+  $("output").hidden = !source;
+  $("mode-rendered").setAttribute("aria-pressed", String(!source));
+  $("mode-source").setAttribute("aria-pressed", String(source));
+}
+
+// A button says what it did for two seconds; the status line keeps the result's own message.
+function said(button, text) {
+  const was = button.dataset.label ??= button.textContent;
+  button.textContent = text;
+  clearTimeout(button.timer);
+  button.timer = setTimeout(() => { button.textContent = was; }, 2000);
+}
+
 function showResult(r, url) {
   if (r.error && !r.markdown) return fail(r.error, r.message);
-  if (r.error) fail(r.error, r.message); else status(r.flattened ? "Extraction flattened this page: its structure is unreliable, see the loss notes at the end." : `${r.losses} loss${r.losses === 1 ? "" : "es"} marked.`);
+  if (r.error) fail(r.error, r.message); else status(r.flattened ? "Extraction flattened this page: its structure is unreliable, see the losses." : `${r.losses} loss${r.losses === 1 ? "" : "es"} marked.`);
+  provenance(r.markdown, r.losses);
+  $("frame").replaceChildren(renderDoc(r.doc, document));
+  $("rail").querySelector("ol")?.remove();
+  if (r.losses) {
+    $("rail-head").textContent = `losses: ${r.losses}`;
+    $("rail").append(renderLosses(r.doc, document));
+  }
   $("output").textContent = r.markdown;
-  $("output").hidden = false;
-  $("actions").hidden = false;
-  $("copy").onclick = () => navigator.clipboard.writeText(r.markdown).then(() => status("Copied."), () => status("Copy failed: select the text instead."));
+  $("view").hidden = false;
+  mode(false);
+  $("mode-rendered").onclick = () => mode(false);
+  $("mode-source").onclick = () => mode(true);
+  $("copy").onclick = () => navigator.clipboard.writeText(r.markdown).then(() => said($("copy"), "copied"), () => said($("copy"), "copy failed: use markdown, select all"));
   $("download").onclick = () => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([r.markdown], { type: "text/markdown;charset=utf-8" }));

@@ -20,7 +20,7 @@ export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.
     writeFile(join(out, "index.html"), html),
     writeFile(join(out, "_app/app.js"), app.outputFiles[0].text),
     writeFile(join(out, "_app/worker.js"), `${await bundle()}\n${await readFile(join(ROOT, "site/worker.js"), "utf8")}`),
-    copyFile(join(ROOT, "site/style.css"), join(out, "_app/style.css")),
+    writeFile(join(out, "_app/style.css"), (await Promise.all(["site/tokens.css", "site/style.css"].map((f) => readFile(join(ROOT, f), "utf8")))).join("\n")),
     copyFile(join(ROOT, "site/_headers"), join(out, "_headers")),
     copyFile(join(ROOT, "site/_routes.json"), join(out, "_routes.json")),
   ]);

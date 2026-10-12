@@ -2,8 +2,8 @@
 // conversion here is the one verify diffs with the CLI. One message in, one out:
 //   { input: "edge", url, finalUrl, bytes }  bytes from /_fetch (ArrayBuffer)
 //   { input: "paste", url, html }            a page a person gave; url is their assertion
-// -> { markdown, losses, flattened } or { error, message } with error one of not-html, over-cap,
-//    empty (with markdown), convert.
+// -> { markdown, doc, losses, flattened } or { error, message } with error one of not-html,
+//    over-cap, empty (with markdown and doc), convert. `doc` is the IR the result view renders.
 /* global bareflow */
 const fail = (error, message, extra) => ({ error, message, ...extra });
 
@@ -20,10 +20,10 @@ async function work(m) {
   }
   const { doc, markdown } = await bareflow.convert(args);
   const count = (s) => s.blocks.length + s.children.reduce((n, c) => n + count(c), 0);
-  if (!doc.sections.reduce((n, s) => n + count(s), 0)) return fail("empty", "the page has no readable content; sites that render with JavaScript come back empty", { markdown });
+  if (!doc.sections.reduce((n, s) => n + count(s), 0)) return fail("empty", "the page has no readable content; sites that render with JavaScript come back empty", { markdown, doc });
   // Loss count and flattening as the header states them (the golden surface pins its fields).
   const header = markdown.slice(0, markdown.indexOf("\n---\n"));
-  return { markdown, losses: Number(header.match(/^losses: (\d+)$/m)[1]), flattened: /^warning: /m.test(header) };
+  return { markdown, doc, losses: Number(header.match(/^losses: (\d+)$/m)[1]), flattened: /^warning: /m.test(header) };
 }
 
 self.onmessage = async ({ data }) => {

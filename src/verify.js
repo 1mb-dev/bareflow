@@ -892,15 +892,16 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     const w = await ask({ input: "edge", url: r.url, finalUrl, bytes: body.buffer });
     const s = snapshot({ finalUrl, body });
     const c = await convert({ url: r.url, finalUrl, html: s.html, retrievedAt: s.retrievedAt, fingerprint: s.fingerprint, input: "edge" });
-    if (w.error || noTime(w.markdown) !== noTime(c.markdown) || !w.markdown.includes(`\nfingerprint: ${sha256(body).slice(0, 16)}\n`) ||
+    const noTimeDoc = (d) => JSON.stringify({ ...d, source: { ...d?.source, retrievedAt: "-" } });
+    if (w.error || noTime(w.markdown) !== noTime(c.markdown) || noTimeDoc(w.doc) !== noTimeDoc(c.doc) || !w.markdown.includes(`\nfingerprint: ${sha256(body).slice(0, 16)}\n`) ||
       w.losses !== c.doc.sections.reduce((n, x) => n + x.losses.length, 0)) off.push(`${r.name} edge${w.error ? ` (${w.message})` : ""}`);
   }
   const paste = await ask({ input: "paste", url: "https://p.example/doc", html: "<html><body><main><h1>Doc</h1><p>Pasted body text, long enough to be content.</p></main></body></html>" });
   const binary = await ask({ input: "edge", url: "https://p.example/f.pdf", finalUrl: "https://p.example/f.pdf", bytes: new Uint8Array([37, 80, 68, 70, 0, 1]).buffer });
   const empty = await ask({ input: "edge", url: "https://p.example/app", finalUrl: "https://p.example/app", bytes: new TextEncoder().encode('<html><body><div id="root"></div><script src="/app.js"></script></body></html>').buffer });
   const big = await ask({ input: "paste", url: "https://p.example/big", html: "a".repeat(MAX_BYTES + 1) });
-  record("web", "worker", `site worker = bundle + glue: CLI-equal documents from /_fetch bytes; paste, binary, empty, oversized named${off.length ? `; differ: ${off.join(", ")}` : ""}`,
-    !off.length && paste.markdown?.includes("\ninput: paste\n") && binary.error === "not-html" && empty.error === "empty" && typeof empty.markdown === "string" && big.error === "over-cap");
+  record("web", "worker", `site worker = bundle + glue: CLI-equal Markdown and IR from /_fetch bytes; paste, binary, empty, oversized named${off.length ? `; differ: ${off.join(", ")}` : ""}`,
+    !off.length && paste.markdown?.includes("\ninput: paste\n") && paste.doc?.source.input === "paste" && binary.error === "not-html" && empty.error === "empty" && typeof empty.markdown === "string" && empty.doc?.sections && big.error === "over-cap");
 }
 
 // FixedLengthStream's contract (Workers only): the stream errors past, or short of, n bytes. The
@@ -1116,6 +1117,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const sunk = (await Promise.all(scanned.map(async (f) => (SINKS.test(await readFile(f, "utf8")) ? [f] : [])))).flat();
   const headers = await readFile(join(out, "_headers"), "utf8");
   const routes = JSON.parse(await readFile(join(out, "_routes.json"), "utf8"));
+  const [tokens, style, builtStyle] = await Promise.all([join(ROOT, "site/tokens.css"), join(ROOT, "site/style.css"), join(out, "_app/style.css")].map((f) => readFile(f, "utf8")));
   const scripts = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1]);
   const visible = parseHTML(html).document.getElementById("pointer")?.textContent;
   await rm(out, { recursive: true, force: true });
@@ -1128,6 +1130,22 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("web", "headers", "_headers: the CSP (Turnstile's script-src and frame-src only), nosniff, no-referrer; the Function routed at /_fetch only",
     headers.includes(`  Content-Security-Policy: ${CSP}\n`) && headers.includes("  X-Content-Type-Options: nosniff\n") && headers.includes("  Referrer-Policy: no-referrer\n") &&
     JSON.stringify(routes) === JSON.stringify({ version: 1, include: ["/_fetch"], exclude: [] }));
+
+  // The design's rules (site/tokens.css): colors only in tokens.css, no shadow or gradient, corners
+  // at 2px or less, and text tokens readable on paper and on their washes in both themes.
+  const COLOR = /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(|:\s*(?:[^;{}]*\s)?(?:white|black|red|blue|green|gray|grey|silver|orange|purple|yellow|pink|brown)\b/i;
+  const rules = (t) => t.replace(/\/\*[\s\S]*?\*\//g, ""); // comments may name what is banned
+  const radii = [...rules(tokens + style).matchAll(/(?:border-radius|--radius):\s*([^;]+)/g)].map((m) => m[1].trim());
+  record("web", "design", "colors only in tokens.css; no box-shadow, text-shadow, or gradient; radius <= 2px; the build puts the tokens first",
+    !COLOR.test(rules(style)) && !/box-shadow|text-shadow|gradient\(/.test(rules(tokens + style)) && radii.length && radii.every((r) => r === "var(--radius)" || /^(0|[0-2](\.\d+)?px)$/.test(r)) &&
+    builtStyle.startsWith(tokens));
+  const lum = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)).reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const [light, dark] = tokens.split("@media (prefers-color-scheme: dark)").map((b) => Object.fromEntries([...b.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-f]{6})\b/gi)].map((m) => [m[1], m[2]])));
+  const pairs = [["ink", "paper"], ["ink-2", "paper"], ["mark", "paper"], ["mark", "mark-wash"], ["ink", "mark-wash"], ["ink", "code-wash"], ["ink-2", "code-wash"]];
+  const low = [["light", light], ["dark", { ...light, ...dark }]].flatMap(([name, t]) => pairs.map(([f, b]) => [name, f, b, t[f] && t[b] ? ratio(t[f], t[b]) : 0]).filter((p) => p[3] < 4.5));
+  record("web", "contrast", `ink, ink-2, and mark at 4.5:1 or more on paper and washes, light and dark (${pairs.length * 2} pairs)${low.length ? `: ${low.map((p) => `${p[0]} ${p[1]}/${p[2]} ${p[3].toFixed(2)}`).join(", ")}` : ""}`,
+    Object.keys(dark).length >= 8 && !low.length);
 }
 
 // The result view (site/render.js). Its inline reader agrees with marked on every prose field of

@@ -1,0 +1,24 @@
+/* bareflow's tokens: every color, type, and space value the site uses is defined here.
+   Two voices that never mix: the page's words in --serif and ink, never colored; bareflow's words
+   in --mono, small and --ink-2, as the Markdown header writes them.
+   --mark is the one accent and means a loss, only: a page with no loss shows no --mark at all.
+   verify enforces: no color literal outside this file; no box-shadow, gradient, or text-shadow;
+   no border-radius over 2px; --ink, --ink-2, and --mark at 4.5:1 or more on --paper and on their
+   washes, in both themes. --rule is decoration; a control's edge uses --ink-2 (3:1 non-text).
+   No web fonts: the stacks are system faces, so the CSP needs no font-src. */
+:root {
+  --paper: #fbfaf6; --ink: #1b1a17; --ink-2: #5c5a54; --rule: #d8d5cc;
+  --mark: #b8361b; --mark-wash: #f8e9e3; --code-wash: #f1efe8; --focus: #1b1a17;
+  --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Sitka Text", Cambria, Georgia, serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --t-small: 0.8125rem; --t-body: 1.0625rem; --t-head: 1.25rem; --t-title: 1.625rem;
+  --s-1: 0.25rem; --s-2: 0.5rem; --s-3: 1rem; --s-4: 2rem;
+  --measure: 40rem; --radius: 2px;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #161512; --ink: #e8e5dd; --ink-2: #a3a097; --rule: #38352f;
+    --mark: #f07a58; --mark-wash: #2a1c17; --code-wash: #201f1b; --focus: #e8e5dd;
+  }
+}
