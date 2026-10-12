@@ -936,6 +936,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
 {
   const server = createServer((req, res) => {
     if (req.url === "/page") { res.writeHead(200, { "content-type": "text/html", "set-cookie": "s=1", "x-upstream": "1" }); return res.end("<p>page</p>"); }
+    if (req.url === "/%E6%97%A5") { res.writeHead(200, { "content-type": "text/html" }); return res.end("<p>ri</p>"); }
     if (req.url === "/to-own") { res.writeHead(302, { location: "https://bareflow.1mb.dev/" }); return res.end(); }
     if (req.url === "/to-port") { res.writeHead(302, { location: "http://b.example:8080/" }); return res.end(); }
     res.writeHead(404); res.end();
@@ -945,7 +946,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   let calls = [];
   const platform = async (url, init) => {
     calls.push(String(url));
-    if (url === SITEVERIFY) return Response.json({ success: JSON.parse(init.body).response === "good" });
+    if (url === SITEVERIFY) { const t = JSON.parse(init.body).response; if (t === "unreachable") throw new TypeError("fetch failed"); return t === "outage" ? Response.json({ success: false }, { status: 503 }) : Response.json({ success: t === "good" }); }
     const u = new URL(url); u.hostname = "127.0.0.1"; u.port = String(port); u.protocol = "http:";
     return fetch(u, init);
   };
@@ -960,6 +961,8 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   const noToken = await ask("https://a.example/page", { token: null });
   const badToken = await ask("https://a.example/page", { token: "bad" });
   const noSecret = await ask("https://a.example/page", { env: {} });
+  const outage = await ask("https://a.example/page", { token: "outage" });
+  const unreachable = await ask("https://a.example/page", { token: "unreachable" });
   const ok = await ask("https://a.example/page");
   const h = ok.headers;
   const guards = await Promise.all(["https://u:p@a.example/", "http://a.example:8080/", "https://8.8.8.8/", "https://[2606:4700::1111]/", "https://1mb.dev/", "https://bareflow.1mb.dev/x", "https://x.pages.dev/", "https://1mb.dev./", "https://bareflow.1mb.dev../x", "https://x.pages.dev./", "https://localhost/", "https://a.localhost/", "https://intranet/", "file:///etc/passwd", "javascript:alert(1)"].map(refusedFirst));
@@ -967,18 +970,19 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   const toOwn = await ask("https://a.example/to-own");
   const toPort = await ask("https://a.example/to-port");
   const missing = await ask("https://a.example/missing");
+  const wide = await ask("https://a.example/\u65e5");
   const noUrl = await ask(null);
   const post = await ask("https://a.example/page", { method: "POST" });
   server.close();
-  record("edge", "token", "no token: 403 with no request made; a failed Turnstile check: 403 after siteverify only; no secret configured: 503 unavailable",
+  record("edge", "token", "no token: 403 with no request made; a failed Turnstile check: 403 after siteverify only; no secret configured or siteverify down: 503 unavailable",
     noToken.status === 403 && noToken.code === "token" && noToken.calls.length === 0 && badToken.status === 403 && badToken.calls.length === 1 && badToken.calls[0] === SITEVERIFY &&
-    noSecret.status === 503 && noSecret.code === "unavailable" && noSecret.calls.length === 0);
+    noSecret.status === 503 && noSecret.code === "unavailable" && noSecret.calls.length === 0 && outage.status === 503 && outage.code === "unavailable" && unreachable.status === 503 && unreachable.code === "unavailable");
   record("edge", "guards", "credentials, port 8080, IPv4 and IPv6 literals, 1mb.dev, *.1mb.dev, *.pages.dev (trailing dots too), localhost, single-label names, file:, javascript: refused before Turnstile; private literal 403; a redirect to our zone or another port refused",
     guards.every(Boolean) && priv.status === 403 && priv.code === "blocked" && priv.calls.length === 0 && toOwn.code === "url" && toPort.code === "url");
-  record("edge", "response", "a page: inert octet-stream bytes, final URL, no upstream headers; 404 upstream, no url, POST named",
+  record("edge", "response", "a page: inert octet-stream bytes, final URL (ASCII for a non-ASCII target), no upstream headers; 404 upstream, no url, POST named",
     ok.status === 200 && new TextDecoder().decode(ok.body) === "<p>page</p>" && h.get("content-type") === "application/octet-stream" && h.get("x-content-type-options") === "nosniff" &&
     h.get("content-disposition") === "attachment" && h.get("content-security-policy") === "sandbox; default-src 'none'" && h.get("x-final-url") === "https://a.example/page" &&
-    !h.has("set-cookie") && !h.has("x-upstream") && missing.status === 502 && missing.code === "upstream" && noUrl.status === 400 && post.status === 405);
+    !h.has("set-cookie") && !h.has("x-upstream") && wide.status === 200 && wide.headers.get("x-final-url") === "https://a.example/%E6%97%A5" && missing.status === 502 && missing.code === "upstream" && noUrl.status === 400 && post.status === 405);
 }
 
 // The built site (scripts/site.js): the shell tells curl and agents where the CLI is, scripts load

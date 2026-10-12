@@ -81,11 +81,13 @@ function failure(e) {
   return fail(502, "upstream", m);
 }
 
-async function tokenOk(fetchImpl, secret, token, ip) {
+// "ok", "bad" (Turnstile said no), or "down" (siteverify did not answer usably: not the visitor's fault).
+async function checkToken(fetchImpl, secret, token, ip) {
   try {
     const res = await fetchImpl(SITEVERIFY, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ secret, response: token, remoteip: ip ?? undefined }), signal: AbortSignal.timeout(10000) });
-    return (await res.json())?.success === true;
-  } catch { return false; }
+    if (!res.ok) return "down";
+    return (await res.json())?.success === true ? "ok" : "bad";
+  } catch { return "down"; }
 }
 
 // GET /_fetch?url=<target> with the Turnstile token in x-turnstile-token. The target and the
@@ -98,7 +100,9 @@ export const handler = (fetchImpl, { timeout = 30000 } = {}) => async ({ request
   const target = new URL(request.url).searchParams.get("url");
   if (!target) return fail(400, "url", "no url parameter");
   try { checkTarget(target); edgeCheck(target); } catch (e) { return failure(e); }
-  if (!(await tokenOk(fetchImpl, env.TURNSTILE_SECRET, token, request.headers.get("cf-connecting-ip")))) return fail(403, "token", "the Turnstile check failed or expired; reload the page");
+  const verdict = await checkToken(fetchImpl, env.TURNSTILE_SECRET, token, request.headers.get("cf-connecting-ip"));
+  if (verdict === "down") return fail(503, "unavailable", "the bot check service did not answer; try again later");
+  if (verdict === "bad") return fail(403, "token", "the Turnstile check failed or expired; reload the page");
   try {
     const { finalUrl, body } = await fetchBody(target, edgeTransport(fetchImpl), { timeout, check: edgeCheck });
     return new Response(body, { status: 200, headers: { ...INERT, "content-type": "application/octet-stream", "content-disposition": "attachment", "x-final-url": finalUrl } });

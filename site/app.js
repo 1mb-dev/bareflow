@@ -5,6 +5,7 @@ import { parseShare } from "./url.js";
 const $ = (id) => document.getElementById(id);
 const ORIGIN = location.origin;
 const REPO = "https://github.com/1mb-dev/bareflow";
+const ASK = "Give a page address, like https://docs.example.com/guide/install.";
 const UNAVAILABLE = "Fetch is unavailable right now: paste the page's HTML on the home page, or run npx bareflow <url>.";
 
 // The names the app gives each failure: /_fetch codes, worker codes, and the page's own.
@@ -91,17 +92,18 @@ async function fetchAndConvert(url) {
   try { res = await fetch(`/_fetch?url=${encodeURIComponent(url)}`, { headers: { "x-turnstile-token": t } }); } catch { return fail("unavailable"); }
   if (res.status === 429) return fail("limited");
   const code = res.headers.get("x-bareflow-error");
-  if (code) return fail(code, await res.text());
+  if (code) return fail(code, await res.text().catch(() => ""));
   // Out of Function quota, Pages serves the shell for /_fetch instead.
   if (!res.ok || res.headers.get("content-type") !== "application/octet-stream") return fail("unavailable");
   status(`Converting ${host}...`);
-  const bytes = await res.arrayBuffer();
+  let bytes;
+  try { bytes = await res.arrayBuffer(); } catch { return fail("unavailable", "The page stopped arriving partway."); }
   showResult(await convertIn({ input: "edge", url, finalUrl: res.headers.get("x-final-url") || url, bytes }, [bytes]), url);
 }
 
 async function convertPasted(url, html) {
   const p = parseShare(`${ORIGIN}/${url}`, ORIGIN);
-  if (p.kind !== "target" && p.kind !== "redirect") return alertIn("paste-url", p.message);
+  if (p.kind !== "target" && p.kind !== "redirect") return alertIn("paste-url", p.message || ASK);
   show("result");
   $("banner").textContent = `Pasted page, asserted as ${new URL(p.url).hostname}. Nothing was fetched.`;
   $("original").href = p.url;
@@ -123,7 +125,7 @@ function landing() {
     const typed = $("target").value.trim();
     const p = parseShare(`${ORIGIN}/${typed}`, ORIGIN);
     if (p.kind === "target" || p.kind === "redirect") location.assign(`${ORIGIN}/${p.url}`);
-    else alertIn("target", p.message);
+    else alertIn("target", p.message || ASK);
   });
   $("paste-form").addEventListener("submit", (e) => {
     e.preventDefault();

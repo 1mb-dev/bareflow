@@ -43,7 +43,8 @@ export function checkTarget(url) {
 // the deadline. check(url) runs on every hop after checkTarget: the edge Function's own guards.
 export async function fetchBody(url, transport, { timeout = 30000, check } = {}) {
   const deadline = Date.now() + timeout;
-  let at = url;
+  // Serialized as the parser does, so finalUrl has one form with or without a redirect.
+  let at = httpUrl(url).href;
   for (let hop = 0; ; hop++) {
     if (hop > MAX_HOPS) throw new Error(`more than ${MAX_HOPS} redirects from ${at}`);
     const { host } = checkTarget(at);
