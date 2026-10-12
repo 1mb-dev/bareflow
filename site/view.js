@@ -53,11 +53,16 @@ function fold(full, keep) {
   measure();
 }
 
-// A code block or table that scrolls sideways takes keyboard focus; one that fits does not.
+// A code block or table that scrolls sideways takes keyboard focus, and a scrolling table is a
+// labelled region; one that fits is neither. Measured only while the page shows: hidden, every
+// block measures 0 wide.
 function reachable() {
+  if ($("frame").hidden) return;
   for (const e of $("frame").querySelectorAll("pre, .table-scroll")) {
-    if (e.scrollWidth > e.clientWidth) e.setAttribute("tabindex", "0");
-    else e.removeAttribute("tabindex");
+    const scrolls = e.scrollWidth > e.clientWidth, table = e.classList.contains("table-scroll");
+    for (const [name, value] of [["tabindex", "0"], ...(table ? [["role", "region"], ["aria-label", "table"]] : [])]) {
+      if (scrolls) e.setAttribute(name, value); else e.removeAttribute(name);
+    }
   }
 }
 globalThis.addEventListener?.("resize", reachable);
@@ -95,6 +100,7 @@ export function mode(source) {
   $("rail").hidden = source || !$("rail").querySelector("li");
   $("output").hidden = !source;
   $("mode").setAttribute("aria-pressed", String(source));
+  reachable();
 }
 
 // A button says what it did for two seconds; the status line keeps the result's own message.
@@ -121,7 +127,6 @@ export function showView(r, url) {
   $("fold").onclick = () => fold($("tape-more").hidden, true);
   $("view").hidden = false;
   mode(false);
-  reachable();
   $("mode").onclick = () => mode($("mode").getAttribute("aria-pressed") !== "true");
   $("about").onclick = (e) => unfold(e, $("colophon").querySelector("summary"));
   $("copy").onclick = () => navigator.clipboard.writeText(r.markdown).then(() => said($("copy"), "copied"), () => said($("copy"), "copy failed: use markdown, select all"));

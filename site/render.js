@@ -221,12 +221,9 @@ export function renderDoc(doc, d) {
         const row = (cells, tag) => { const r = el("tr"); for (const c of cells) r.append(inline(el(tag), c ?? "")); return r; };
         t.append(el("thead").appendChild(row(b.headers, "th")).parentNode);
         const body = el("tbody"); for (const r of b.rows) body.append(row(r, "td")); t.append(body);
-        // A labelled region scrolls a wide table in place.
-        const region = el("div", "table-scroll");
-        region.setAttribute("role", "region");
-        region.setAttribute("aria-label", "table");
-        region.append(t);
-        return region;
+        const wrap = el("div", "table-scroll"); // scrolls a wide table in place (view.js labels it then)
+        wrap.append(t);
+        return wrap;
       }
       default: return d.createTextNode("");
     }

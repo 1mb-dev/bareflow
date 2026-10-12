@@ -1218,7 +1218,6 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
       for (const { name, value } of e.attributes) {
         const ok = name === "class" ? value.split(" ").every((c) => CLASSES.has(c))
           : name === "id" ? /^H[1-6]$/.test(e.tagName) && /^bf-\S+$/.test(value)
-          : name === "role" || name === "aria-label" ? e.tagName === "DIV" && e.className === "table-scroll" && value === (name === "role" ? "region" : "table")
           : name === "href" ? e.tagName === "A" && offSite(value) : name === "rel" ? e.tagName === "A" && value === "noopener noreferrer nofollow ugc" : false;
         if (!ok) domBad.push(`${where}: <${e.tagName} ${name}="${value.slice(0, 60)}">`);
       }
