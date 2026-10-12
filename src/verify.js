@@ -956,10 +956,10 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     return fetch(u, init);
   };
   const onRequestGet = handler(platform, { timeout: 3000 });
-  const ask = async (target, { token = "good", method = "GET", env = { TURNSTILE_SECRET: "secret" } } = {}) => {
+  const ask = async (target, { token = "good", method = "GET", env = { TURNSTILE_SECRET: "secret" }, origin = "https://bareflow.1mb.dev" } = {}) => {
     calls = [];
     const q = target == null ? "" : `?url=${encodeURIComponent(target)}`;
-    const res = await onRequestGet({ request: new Request(`https://bareflow.1mb.dev/_fetch${q}`, { method, headers: token ? { "x-turnstile-token": token } : {} }), env });
+    const res = await onRequestGet({ request: new Request(`${origin}/_fetch${q}`, { method, headers: token ? { "x-turnstile-token": token } : {} }), env });
     return { status: res.status, code: res.headers.get("x-bareflow-error"), headers: res.headers, body: new Uint8Array(await res.arrayBuffer()), calls: [...calls] };
   };
   const refusedFirst = async (target) => { const r = await ask(target); return r.status === 400 && r.code === "url" && r.calls.length === 0; };
@@ -968,6 +968,11 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   const noSecret = await ask("https://a.example/page", { env: {} });
   const outage = await ask("https://a.example/page", { token: "outage" });
   const unreachable = await ask("https://a.example/page", { token: "unreachable" });
+  // Cloudflare's literals, not edge.js's: a typo there must fail here. One at a time: ask shares `calls`.
+  const testSecrets = ["1x0000000000000000000000000000000AA", "2x0000000000000000000000000000000AA", "3x0000000000000000000000000000000AA"];
+  const testSecret = [], testLocal = [];
+  for (const s of [...testSecrets, `${testSecrets[0]}\n`]) for (const origin of ["https://bareflow.1mb.dev", "https://preview.bareflow.pages.dev", "https://localhost.example"]) testSecret.push(await ask("https://a.example/page", { env: { TURNSTILE_SECRET: s }, origin }));
+  for (const origin of ["http://localhost:8788", "http://127.0.0.1:8788", "http://[::1]:8788"]) testLocal.push(await ask("https://a.example/page", { env: { TURNSTILE_SECRET: testSecrets[0] }, origin }));
   const ok = await ask("https://a.example/page");
   const h = ok.headers;
   const guards = await Promise.all(["https://u:p@a.example/", "http://a.example:8080/", "https://8.8.8.8/", "https://[2606:4700::1111]/", "https://1mb.dev/", "https://bareflow.1mb.dev/x", "https://x.pages.dev/", "https://1mb.dev./", "https://bareflow.1mb.dev../x", "https://x.pages.dev./", "https://localhost/", "https://a.localhost/", "https://intranet/", "file:///etc/passwd", "javascript:alert(1)"].map(refusedFirst));
@@ -982,6 +987,8 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   record("edge", "token", "no token: 403 with no request made; a failed Turnstile check: 403 after siteverify only; no secret configured or siteverify down: 503 unavailable",
     noToken.status === 403 && noToken.code === "token" && noToken.calls.length === 0 && badToken.status === 403 && badToken.calls.length === 1 && badToken.calls[0] === SITEVERIFY &&
     noSecret.status === 503 && noSecret.code === "unavailable" && noSecret.calls.length === 0 && outage.status === 503 && outage.code === "unavailable" && unreachable.status === 503 && unreachable.code === "unavailable");
+  record("edge", "test secret", "Cloudflare's 3 test secrets (and one with a trailing newline) on a public host: 503 unavailable with no request made; on localhost, 127.0.0.1, [::1]: checked as usual",
+    testSecret.every((r) => r.status === 503 && r.code === "unavailable" && r.calls.length === 0) && testLocal.every((r) => r.status === 200 && r.calls[0] === SITEVERIFY));
   record("edge", "guards", "credentials, port 8080, IPv4 and IPv6 literals, 1mb.dev, *.1mb.dev, *.pages.dev (trailing dots too), localhost, single-label names, file:, javascript: refused before Turnstile; private literal 403; a redirect to our zone or another port refused",
     guards.every(Boolean) && priv.status === 403 && priv.code === "blocked" && priv.calls.length === 0 && toOwn.code === "url" && toPort.code === "url");
   record("edge", "response", "a page: inert octet-stream bytes, final URL (ASCII for a non-ASCII target), no upstream headers; 404 upstream, no url, POST named",

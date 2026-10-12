@@ -7,6 +7,9 @@ import { checkTarget, fetchBody, MAX_BYTES, noAnswer, REDIRECT } from "./fetch-p
 
 export const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 export const OWN_ZONES = ["1mb.dev", "pages.dev"];
+// Cloudflare's published test secrets, refused off loopback: 1x passes every token.
+export const TEST_SECRETS = new Set(["1", "2", "3"].map((n) => `${n}x0000000000000000000000000000000AA`));
+const LOCAL = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 // The policy's checkTarget (scheme, private literals), then the Function's own guards.
 export function edgeCheck(url) {
@@ -96,9 +99,11 @@ async function checkToken(fetchImpl, secret, token, ip) {
 export const handler = (fetchImpl, { timeout = 30000 } = {}) => async ({ request, env }) => {
   if (request.method !== "GET") return fail(405, "url", "GET only");
   if (!env?.TURNSTILE_SECRET) return fail(503, "unavailable", "the fetch is not configured (no TURNSTILE_SECRET)");
+  const req = new URL(request.url);
+  if (TEST_SECRETS.has(env.TURNSTILE_SECRET.trim()) && !LOCAL.has(req.hostname)) return fail(503, "unavailable", "the fetch is not configured (a Turnstile test secret off localhost)");
   const token = request.headers.get("x-turnstile-token");
   if (!token) return fail(403, "token", "no Turnstile token; reload the page");
-  const target = new URL(request.url).searchParams.get("url");
+  const target = req.searchParams.get("url");
   if (!target) return fail(400, "url", "no url parameter");
   try { edgeCheck(target); } catch (e) { return failure(e); }
   const verdict = await checkToken(fetchImpl, env.TURNSTILE_SECRET, token, request.headers.get("cf-connecting-ip"));
