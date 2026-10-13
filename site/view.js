@@ -141,11 +141,10 @@ function said(button, text) {
 
 export function showView(r, url) {
   $("header").textContent = r.markdown.slice(4, r.markdown.indexOf("\n---\n"));
-  // The fingerprint as 64 bars, one per bit, under its hex; in the colophon, never the tape (a
-  // picture of the hex, not a seal).
+  // The fingerprint as 64 bars, one per bit, below the header that prints its hex (the one printed
+  // copy); in the colophon, never the tape.
   const hex = /^[0-9a-f]{16}$/.test(r.doc.source.fingerprint ?? "") ? r.doc.source.fingerprint : "";
   $("print").hidden = !hex;
-  $("print-hex").textContent = hex;
   $("bars").replaceChildren(...[...hex].flatMap((h) => [...parseInt(h, 16).toString(2).padStart(4, "0")]).map((bit) => {
     const bar = document.createElement("span");
     bar.className = bit === "1" ? "on" : "off";

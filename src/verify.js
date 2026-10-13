@@ -1483,13 +1483,13 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     if (h2.length >= 4) withContents++;
     const fp = doc.source.fingerprint, bars = [...$("bars").children];
     const bits = [...fp].map((h) => parseInt(h, 16).toString(2).padStart(4, "0")).join("");
-    if (!/^[0-9a-f]{16}$/.test(fp) || $("print").hidden || $("print-hex").textContent !== fp || bars.length !== 64 ||
+    if (!/^[0-9a-f]{16}$/.test(fp) || $("print").hidden || !$("header").textContent.includes(`\nfingerprint: ${fp}\n`) || bars.length !== 64 ||
       bars.map((b) => ({ on: "1", off: "0" })[b.className] ?? "x").join("") !== bits || bars.some((b) => b.tagName !== "SPAN" || b.attributes.length !== 1 || b.children.length || b.textContent)) barsBad.push(where);
     if (from !== `from ${host}, not 1mb.dev` || hostOnly !== host || pasted !== `pasted, asserted as ${host}, not 1mb.dev` || $("from").hidden || !said || !listed ||
       $("contents").hidden !== (h2.length < 4) || $("rail").querySelectorAll(".loss-n").length !== losses || $("fold").hidden || !folded() || !shut) tapeBad.push(where);
   }
   if (!$("colophon").contains($("print")) || $("tape").contains($("bars")) || $("print").nextElementSibling !== $("rail") || $("print").previousElementSibling !== $("header") ||
-    $("bars").getAttribute("aria-hidden") !== "true" || $("print").querySelector(".caption")?.textContent !== `fingerprint ${$("print-hex").textContent}`) barsBad.push("placement");
+    $("bars").getAttribute("aria-hidden") !== "true" || $("print").querySelector(".caption")?.textContent !== "fingerprint" || $("print").textContent !== "fingerprint") barsBad.push("placement");
   // The colophon: a details after the page, holding the losses; the tape's link opens it.
   if ($("colophon").tagName !== "DETAILS" || !$("colophon").contains($("rail")) || all.indexOf($("colophon")) < all.indexOf($("frame"))) tapeBad.push("colophon placement");
   const entry = $("contents-list").querySelector("a"), margin = $("toc-list").querySelector("a");
@@ -1511,7 +1511,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("view", "tape", `the tape is #result's first child, before the page, outside details; on ${runs.length} pages line 2 says from <host>, not 1mb.dev, only the host scrolling, says the count once (the chip) or that none is marked, and lists contents from 4 h2s (${withContents}), the same list in the margin; rolled keeps wordmark, origin, and count, and more/less toggles; the colophon, after the page, is shut until the chip or about this copy opens it; sticky; the host scrolls in place, never truncated${tapeBad.length ? `: ${tapeBad.slice(0, 5).join(" | ")}` : ""}`,
     !tapeBad.length && withContents >= 20 && /position:\s*sticky/.test(tapeRules) && /top:\s*0/.test(tapeRules) && !/text-overflow|overflow(-[xy])?:\s*(hidden|clip)/.test(tapeRules) && /overflow-x:\s*auto/.test(originRule));
 
-  record("view", "bars", `the fingerprint in the colophon, never the tape: its hex, then 64 bars, one per bit, classes only, hidden from screen readers (${runs.length} pages)${barsBad.length ? `: ${barsBad.slice(0, 5).join(" | ")}` : ""}`, !barsBad.length);
+  record("view", "bars", `the fingerprint in the colophon, never the tape: 64 bars, one per bit of the header's hex (its one printed copy), captioned fingerprint, classes only, hidden from screen readers (${runs.length} pages)${barsBad.length ? `: ${barsBad.slice(0, 5).join(" | ")}` : ""}`, !barsBad.length);
 
   // Hostile prose, as the IR could carry it: each link either refused or resolved off 1mb.dev.
   const base = "https://docs.example.com/guide/page";
