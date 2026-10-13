@@ -1139,6 +1139,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const routes = JSON.parse(await readFile(join(out, "_routes.json"), "utf8"));
   const redirects = await readFile(join(out, "_redirects"), "utf8");
   const home = await readFile(join(out, "_app/home.html"), "utf8").catch(() => "");
+  const privacy = await readFile(join(out, "privacy.html"), "utf8").catch(() => "");
+  const pages = await Promise.all((await readdir(out, { recursive: true })).filter((f) => f.endsWith(".html")).map(async (f) => [f, await readFile(join(out, f), "utf8")]));
   const top = await readdir(out);
   const [tokens, style, builtStyle] = await Promise.all([join(ROOT, "site/tokens.css"), join(ROOT, "site/style.css"), join(out, "_app/style.css")].map((f) => readFile(f, "utf8")));
   const scripts = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1]);
@@ -1164,6 +1166,12 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("web", "shell", "the shell's visible text for curl and agents equals the pinned sentence (CLI and MCP server as end posture, no version); sitekey set; scripts from self only",
     visible === "bareflow converts this page in your browser. The CLI and MCP server ship on npm. Source: github.com/1mb-dev/bareflow." && html.includes('data-sitekey="test-sitekey"') &&
     scripts.length === 2 && scripts.every((s) => s.startsWith("/_app/")));
+  // Every document the build writes loads scripts from self, each by src (the CSP blocks an inline
+  // one; this names it). The privacy page loads the theme alone: no app, so no Turnstile.
+  const srcs = Object.fromEntries(pages.map(([f, t]) => [f, [...t.matchAll(/<script\b[^>]*>/g)].map((m) => m[0].match(/\bsrc="([^"]+)"/)?.[1] ?? "inline")]));
+  const offSelf = Object.entries(srcs).flatMap(([f, s]) => s.filter((u) => !u.startsWith("/_app/")).map((u) => `${f}: ${u}`));
+  record("web", "scripts", `every HTML document (${pages.length}) loads scripts from /_app/ only; privacy.html the theme alone${offSelf.length ? `: ${offSelf.join(", ")}` : ""}`,
+    pages.length === 3 && !offSelf.length && JSON.stringify(srcs["privacy.html"]) === JSON.stringify(["/_app/theme.js"]));
   // Turnstile's script loads only to fetch a page: the built app.js, run on the built shell, adds
   // exactly that script on a target route, and none on the home, a paste, or a refused address.
   const TURNSTILE = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
@@ -1440,7 +1448,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     }
   }
   // The home's words: the door, the why pair quoted from its records, and a footer that says only
-  // what exists (no privacy page yet, nothing "soon"), opening with bareflow, with this build's version.
+  // what exists (nothing "soon"), opening with bareflow, with this build's version, the same bytes
+  // in every document.
   const wordsBad = [];
   const say = (sel) => homeDoc.querySelector(sel)?.textContent.replace(/\s+/g, " ").trim();
   const wBytes = await readFile(join(ROOT, "usage/seed/runs/S1/W.md")), w = wBytes.toString("utf8").trim(), readme = await readFile(join(ROOT, "README.md"), "utf8");
@@ -1451,12 +1460,21 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   if (quotes.length !== 2 || !w.endsWith(quoted(0) ?? "\0") || why[1] !== `Claude Code's WebFetch on deno add (${wBytes.length} bytes) ends:` || why[2] !== "The Deno docs end:" ||
     !readme.includes(quoted(1) ?? "\0") || !readme.includes("\n## Why\n")) wordsBad.push("why pair");
   const foot = [...homeDoc.querySelector(".foot").children].map((e) => e.textContent);
-  if (JSON.stringify(foot) !== JSON.stringify(["bareflow", `v${VERSION}`, "code: MIT", "source on GitHub", "theme: auto"]) || homeDoc.querySelector(".foot > a.name")?.getAttribute("href") !== "/" || JSON.stringify([...shellDoc.querySelector(".foot").children].map((e) => e.textContent)) !== JSON.stringify(foot)) wordsBad.push(`footer: ${foot.join(" | ")}`);
-  if (/\b(privacy|soon)\b/i.test(homeDoc.body.textContent)) wordsBad.push("privacy or soon");
+  const privDoc = parseHTML(privacy).document, foots = [homeDoc, shellDoc, privDoc].map((d) => d.querySelector(".foot")?.outerHTML);
+  if (JSON.stringify(foot) !== JSON.stringify(["bareflow", `v${VERSION}`, "code: MIT", "privacy", "source on GitHub", "theme: auto"]) || homeDoc.querySelector(".foot > a.name")?.getAttribute("href") !== "/" ||
+    homeDoc.querySelector(".foot > a:nth-child(4)")?.getAttribute("href") !== "/privacy" || new Set(foots).size !== 1) wordsBad.push(`footer: ${foot.join(" | ")}`);
+  if (/\bsoon\b/i.test(homeDoc.body.textContent)) wordsBad.push("soon");
   // The version lives in the footer only; the prose states the end posture without one.
   const prose = [homeDoc, shellDoc].map((d) => { const b = d.body.cloneNode(true); b.querySelector(".foot")?.remove(); return b.textContent; }).join(" ");
   if (prose.includes(VERSION)) wordsBad.push("a version in the prose");
   record("web", "words", `the home's door, its why pair quoted from usage/ and the README, a footer of only what exists with v${VERSION}${wordsBad.length ? `: ${wordsBad.join(" | ")}` : ""}`, !wordsBad.length);
+  // The privacy page: what leaves the browser, one fact a line. Links off this site are https and
+  // include Cloudflare's two policies. It names no domain of ours: which zone a target sees in
+  // CF-Worker is measured live before a line may name it.
+  const privMain = privDoc.querySelector("main"), offSite = [...(privMain?.querySelectorAll("a[href]") ?? [])].map((a) => a.getAttribute("href")).filter((h) => !h.startsWith("/"));
+  record("web", "privacy", `privacy.html: six lines, off-site links https with Cloudflare's privacy policy and Turnstile addendum, no domain of ours${offSite.length ? ` (${offSite.length} off-site links)` : ""}`,
+    privMain?.querySelectorAll("li").length === 6 && privMain.querySelector("a.name")?.getAttribute("href") === "/" && offSite.every((h) => h.startsWith("https://")) &&
+    ["https://www.cloudflare.com/privacypolicy/", "https://www.cloudflare.com/turnstile-privacy-policy/"].every((u) => offSite.includes(u)) && !/1mb\.dev|pages\.dev/.test(privMain.textContent));
   const hostile = "$&$'$`$$</script><script>x</script>";
   if (splice(`a${MARK}b`, hostile) !== `a${hostile}b`) exBad.push("the splice reads the example as a pattern");
   const notice = await readFile(join(ROOT, "NOTICE"), "utf8");
