@@ -53,6 +53,7 @@ const shell = (await readFile(join(OUT, "index.html"), "utf8"))
   .replace('<script src="/_app/theme.js"></script>\n', "")
   .replace('<script type="module" src="/_app/app.js"></script>', `${THEME}<script type="module" src="/viewer.js"></script>`);
 const privacy = (await readFile(join(OUT, "privacy.html"), "utf8")).replace('<script src="/_app/theme.js"></script>\n', () => THEME);
+if (!privacy.includes(THEME)) throw new Error("contact: privacy.html has no theme.js tag to swap for ?theme=");
 // The shell as served, with the stand-ins ahead of app.js. The interactive state gets Cloudflare's
 // dummy sitekey that always shows a challenge (it works from any host, localhost included).
 const states = shell.replace('<script type="module" src="/viewer.js"></script>', '<script src="/states-stub.js"></script>\n<script type="module" src="/_app/app.js"></script>');

@@ -1139,8 +1139,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const routes = JSON.parse(await readFile(join(out, "_routes.json"), "utf8"));
   const redirects = await readFile(join(out, "_redirects"), "utf8");
   const home = await readFile(join(out, "_app/home.html"), "utf8").catch(() => "");
-  const privacy = await readFile(join(out, "privacy.html"), "utf8").catch(() => "");
   const pages = await Promise.all((await readdir(out, { recursive: true })).filter((f) => f.endsWith(".html")).map(async (f) => [f, await readFile(join(out, f), "utf8")]));
+  const privacy = Object.fromEntries(pages)["privacy.html"] ?? "";
   const top = await readdir(out);
   const [tokens, style, builtStyle] = await Promise.all([join(ROOT, "site/tokens.css"), join(ROOT, "site/style.css"), join(out, "_app/style.css")].map((f) => readFile(f, "utf8")));
   const scripts = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1]);
@@ -1471,10 +1471,10 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   // The privacy page: what leaves the browser, one fact a line. Links off this site are https and
   // include Cloudflare's two policies. It names no domain of ours: which zone a target sees in
   // CF-Worker is measured live before a line may name it.
-  const privMain = privDoc.querySelector("main"), offSite = [...(privMain?.querySelectorAll("a[href]") ?? [])].map((a) => a.getAttribute("href")).filter((h) => !h.startsWith("/"));
-  record("web", "privacy", `privacy.html: six lines, off-site links https with Cloudflare's privacy policy and Turnstile addendum, no domain of ours${offSite.length ? ` (${offSite.length} off-site links)` : ""}`,
+  const privMain = privDoc.querySelector("main"), hrefs = [...(privMain?.querySelectorAll("a[href]") ?? [])].map((a) => a.getAttribute("href")), offSite = hrefs.filter((h) => !/^\/(?!\/)/.test(h));
+  record("web", "privacy", `privacy.html: six lines, off-site links https with Cloudflare's privacy policy and Turnstile addendum, no domain of ours, no OG tags${offSite.length ? ` (${offSite.length} off-site links)` : ""}`,
     privMain?.querySelectorAll("li").length === 6 && privMain.querySelector("a.name")?.getAttribute("href") === "/" && offSite.every((h) => h.startsWith("https://")) &&
-    ["https://www.cloudflare.com/privacypolicy/", "https://www.cloudflare.com/turnstile-privacy-policy/"].every((u) => offSite.includes(u)) && !/1mb\.dev|pages\.dev/.test(privMain.textContent));
+    ["https://www.cloudflare.com/privacypolicy/", "https://www.cloudflare.com/turnstile-privacy-policy/"].every((u) => offSite.includes(u)) && !/1mb\.dev|pages\.dev/.test(privMain.textContent + hrefs.join(" ")) && !/property="og:/.test(privacy));
   const hostile = "$&$'$`$$</script><script>x</script>";
   if (splice(`a${MARK}b`, hostile) !== `a${hostile}b`) exBad.push("the splice reads the example as a pattern");
   const notice = await readFile(join(ROOT, "NOTICE"), "utf8");
