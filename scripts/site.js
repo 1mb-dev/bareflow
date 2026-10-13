@@ -5,6 +5,7 @@
 // URL; the home is _app/home.html, served at / by _redirects. The icons are drawn from tokens.css
 // here (scripts/icon.js); the OG card is committed (scripts/card.js needs Chrome) and goes in the
 // home's head only: an unfurler runs no script, so the shell's tags speak for every share URL.
+// privacy.html (served at /privacy) is the shell's head and footer around site/privacy.html.
 import { build } from "esbuild";
 import { copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
@@ -32,6 +33,22 @@ export const cardTags = (alt) => `<meta property="og:image" content="${CARD.url}
 <meta name="twitter:card" content="summary_large_image">
 `;
 
+// The privacy page: the shell's head and footer, so the footer is the same bytes in every document,
+// around its own main. Out of the head: app.js (so no Turnstile), the OG tags (the shell's speak
+// for the site), and the serif preload (every word on the page is bareflow's, in Mono).
+export function privacyPage(shell, main) {
+  const cut = (s, part) => { if (s.split(part).length !== 2) throw new Error(`privacy page: the shell needs ${JSON.stringify(part)} exactly once`); return s.replace(part, ""); };
+  let head = shell.slice(0, shell.indexOf("<body"));
+  for (const line of head.match(/^<meta property="og:[^\n]*\n/gm) ?? []) head = cut(head, line);
+  head = cut(cut(head, '<script type="module" src="/_app/app.js"></script>\n'), '<link rel="preload" href="/_app/fonts/literata-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>\n');
+  const swap = (s, re, to) => { if ((s.match(new RegExp(re, "g")) ?? []).length !== 1) throw new Error(`privacy page: the shell needs ${re} exactly once`); return s.replace(re, () => to); };
+  head = swap(head, /<title>[^<]*<\/title>/, "<title>bareflow: privacy</title>");
+  head = swap(head, /<meta name="description" content="[^"]*">/, '<meta name="description" content="What bareflow and Cloudflare see when you convert a page.">');
+  const foot = shell.match(/^<footer class="foot">.*<\/footer>\n/m)?.[0];
+  if (!foot) throw new Error("privacy page: the shell has no footer line");
+  return `${head}<body>\n${main}${foot}</body>\n</html>\n`;
+}
+
 export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.TURNSTILE_SITEKEY || TEST_SITEKEY) {
   await rm(out, { recursive: true, force: true });
   await mkdir(join(out, "_app"), { recursive: true });
@@ -42,12 +59,14 @@ export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.
   // Awaited here, together: an await inside the array below would hold back every entry after it.
   // One pipeline run feeds the home's example and the card's words.
   const ex = excerpt();
+  const shell = splice(splice(html, ""), "", CARD_MARK);
   const [app, example, alt, worker, css] = await Promise.all([
     build({ entryPoints: [join(ROOT, "site/app.js")], bundle: true, format: "esm", platform: "browser", minify: true, write: false, logLevel: "silent" }),
     exampleHtml(ex), cardWords(ex).then(cardAlt), bundle().then(async (b) => `${b}\n${await readFile(join(ROOT, "site/worker.js"), "utf8")}`), stylesheet(),
   ]);
   await Promise.all([
-    writeFile(join(out, "index.html"), splice(splice(html, ""), "", CARD_MARK)),
+    writeFile(join(out, "index.html"), shell),
+    readFile(join(ROOT, "site/privacy.html"), "utf8").then((main) => writeFile(join(out, "privacy.html"), privacyPage(shell, main))),
     writeFile(join(out, "_app/home.html"), splice(splice(html, `${example}\n`), cardTags(alt), CARD_MARK)),
     writeFile(join(out, "_app/app.js"), app.outputFiles[0].text),
     copyFile(join(ROOT, "site/theme.js"), join(out, "_app/theme.js")),
