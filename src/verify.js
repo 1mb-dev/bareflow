@@ -1247,7 +1247,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     { id: "url (edge) detail cap", code: "url", ...edge(400, "url", big), next: "address", detail: true },
     { id: "blocked", code: "blocked", ...edge(403, "blocked", "blocked address for 10.0.0.1: bareflow fetches public addresses only"), next: "address", host: true },
     { id: "timeout", code: "timeout", ...edge(504, "timeout", "no answer from https://docs.example.com/guide/ within 30000 ms (redirects included); retry, or open it in a browser"), next: "wait", host: true, paste: true },
-    ...[[401, "address", true], [403, "address", true], [404, "address", false], [410, "address", false], [429, "wait", true], [500, "wait", false], [503, "wait", false], [418, "address", true]]
+    ...[[401, "address", true], [403, "address", true], [404, "address", false], [410, "address", false], [429, "wait", true], [500, "wait", true], [503, "wait", true], [418, "address", true]]
       .map(([n, next, paste]) => ({ id: `upstream ${n}`, code: "upstream", ...edge(502, "upstream", `HTTP ${n} from https://docs.example.com/guide/; check the URL (bareflow does not retry)`, n), next, paste, host: true, says: `HTTP ${n}` })),
     { id: "upstream, no status", code: "upstream", ...edge(502, "upstream", "more than 5 redirects from https://docs.example.com/guide/"), next: "original", paste: true, host: true, detail: true },
     { id: "over-cap (edge)", code: "over-cap", ...edge(502, "over-cap", "the page is over 1 MB, this site's limit"), next: "original", paste: true, host: true },

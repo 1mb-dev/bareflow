@@ -12,18 +12,20 @@ const ASK = "Give a page address, like https://docs.example.com/guide/install.";
 // style.css .desktop)]; a phone is never told to paste. h is the host, n the upstream HTTP status.
 const CHECK = "Check the address.", LATER = "Try again later.", RELOAD = "Reload the page to try again.";
 const CHECK_OR_PASTE = "Check the address, or save the page and paste its HTML on the home page.";
+// A site may refuse this site's fetch for longer than "later" while the visitor's browser gets the page.
+const LATER_OR_PASTE = "Try again later, or save the page and paste its HTML on the home page.";
 const OR_PASTE = "Or paste the page's HTML on the home page.";
 const original = (h) => `Open the original at ${h}.`;
 const SAY = {
   url: () => ["This site does not fetch that address.", CHECK],
   blocked: (h) => [`${h} is, or leads to, a private network address; this site fetches public addresses only.`, CHECK],
-  timeout: (h) => [`${h} did not answer within 30 seconds.`, LATER, `${LATER} Or save the page and paste its HTML on the home page.`],
+  timeout: (h) => [`${h} did not answer within 30 seconds.`, LATER, LATER_OR_PASTE],
   upstream: (h, n) => {
     if (!n) return [`This site could not read the page from ${h}.`, original(h), "Save it from your browser and paste its HTML on the home page."];
     if (n === 401 || n === 403) return [`${h} refused the request (HTTP ${n}).`, CHECK, CHECK_OR_PASTE];
     if (n === 404 || n === 410) return [`${h} has no page at that address (HTTP ${n}).`, CHECK];
-    if (n === 429) return [`${h} is limiting requests (HTTP 429).`, LATER, "Try again later, or save the page and paste its HTML on the home page."];
-    if (n >= 500) return [`${h} could not serve the page (HTTP ${n}).`, LATER];
+    if (n === 429) return [`${h} is limiting requests (HTTP 429).`, LATER, LATER_OR_PASTE];
+    if (n >= 500) return [`${h} could not serve the page (HTTP ${n}).`, LATER, LATER_OR_PASTE];
     return [`${h} answered HTTP ${n}, not the page.`, CHECK, CHECK_OR_PASTE];
   },
   "over-cap": (h, _, pasted) => (pasted
@@ -35,7 +37,7 @@ const SAY = {
   "check-slow": () => ["The bot check did not load from challenges.cloudflare.com within 10 seconds; the network may be slow, or a content blocker may stop it.", RELOAD, `${RELOAD} ${OR_PASTE}`],
   limited: () => ["This site has had too many requests from your network.", "Wait a minute, then reload."],
   unavailable: () => ["Fetching is unavailable right now.", LATER, `${LATER} ${OR_PASTE}`],
-  cut: (h) => [`${h}'s page stopped arriving partway.`, "Reload to try again."],
+  cut: (h) => [`${h}'s page stopped arriving partway.`, RELOAD],
   "not-html": (h) => [`${h} returned a binary file, not an HTML page.`, CHECK],
   empty: (h, _, pasted) => [pasted
     ? "No readable text in the pasted HTML: a page that builds itself with JavaScript has no text in its source."
