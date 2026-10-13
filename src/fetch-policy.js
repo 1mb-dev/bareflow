@@ -7,6 +7,7 @@ import { isPrivateIp } from "./ssrf.js";
 
 export const MAX_BYTES = 5 * 1024 * 1024;
 export const MAX_HOPS = 5;
+export const TIMEOUT = 30000; // ms for the whole fetch, redirects included
 export const REQUEST_HEADERS = {
   "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
   "accept": "text/html",
@@ -45,7 +46,7 @@ export function checkTarget(url) {
 // Function's own guards. over: the page did not fit maxBytes; body is at most its first maxBytes.
 // A transport may instead resolve { status, stream, length }: a body handed on unread through a
 // stream that enforces length bytes (the edge Function's response; fetchPage needs bytes).
-export async function fetchBody(url, transport, { timeout = 30000, check, maxBytes = MAX_BYTES } = {}) {
+export async function fetchBody(url, transport, { timeout = TIMEOUT, check, maxBytes = MAX_BYTES } = {}) {
   const deadline = Date.now() + timeout;
   // Serialized as the parser does, so finalUrl has one form with or without a redirect.
   let at = httpUrl(url).href;

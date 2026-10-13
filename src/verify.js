@@ -17,7 +17,7 @@ import { convert } from "./convert.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
 import { decompress, fetchSnapshot, nodeTransport } from "./fetch.js";
-import { fetchBody, fetchPage, MAX_BYTES, snapshot } from "./fetch-policy.js";
+import { fetchBody, fetchPage, MAX_BYTES, snapshot, TIMEOUT } from "./fetch-policy.js";
 import { edgeTransport, handler, SITEVERIFY, WEB_MAX_BYTES } from "./edge.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
@@ -1246,12 +1246,12 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     { id: "url (edge)", code: "url", ...edge(400, "url", "port 8080 in https://docs.example.com:8080/: this site fetches ports 80 and 443 only"), next: "address", detail: true },
     { id: "url (edge) detail cap", code: "url", ...edge(400, "url", big), next: "address", detail: true },
     { id: "blocked", code: "blocked", ...edge(403, "blocked", "blocked address for 10.0.0.1: bareflow fetches public addresses only"), next: "address", host: true },
-    { id: "timeout", code: "timeout", ...edge(504, "timeout", "no answer from https://docs.example.com/guide/ within 30000 ms (redirects included); retry, or open it in a browser"), next: "wait", host: true, paste: true },
+    { id: "timeout", code: "timeout", ...edge(504, "timeout", "no answer from https://docs.example.com/guide/ within 30000 ms (redirects included); retry, or open it in a browser"), next: "wait", host: true, paste: true, says: `within ${TIMEOUT / 1000} seconds` },
     ...[[401, "address", true], [403, "address", true], [404, "address", false], [410, "address", false], [429, "wait", true], [500, "wait", true], [503, "wait", true], [418, "address", true]]
       .map(([n, next, paste]) => ({ id: `upstream ${n}`, code: "upstream", ...edge(502, "upstream", `HTTP ${n} from https://docs.example.com/guide/; check the URL (bareflow does not retry)`, n), next, paste, host: true, says: `HTTP ${n}` })),
     { id: "upstream, no status", code: "upstream", ...edge(502, "upstream", "more than 5 redirects from https://docs.example.com/guide/"), next: "original", paste: true, host: true, detail: true },
-    { id: "over-cap (edge)", code: "over-cap", ...edge(502, "over-cap", "the page is over 1 MB, this site's limit"), next: "original", paste: true, host: true },
-    { id: "over-cap (paste)", code: "over-cap", desktopOnly: true, path: "/", act: submit("paste-form", { "paste-url": `https://${HOST}/guide/`, "paste-html": "<p>a</p>" }), extra: { Worker: replying({ error: "over-cap", message: "the pasted page is over 5 MB" }) }, next: "original", host: true, raw: "the pasted page is over 5 MB" },
+    { id: "over-cap (edge)", code: "over-cap", ...edge(502, "over-cap", "the page is over 1 MB, this site's limit"), next: "original", paste: true, host: true, says: `over ${WEB_MAX_BYTES / 1048576} MB`, desktopSays: `up to ${MAX_BYTES / 1048576} MB` },
+    { id: "over-cap (paste)", code: "over-cap", desktopOnly: true, path: "/", act: submit("paste-form", { "paste-url": `https://${HOST}/guide/`, "paste-html": "<p>a</p>" }), extra: { Worker: replying({ error: "over-cap", message: "the pasted page is over 5 MB" }) }, next: "original", host: true, raw: "the pasted page is over 5 MB", says: `over ${MAX_BYTES / 1048576} MB` },
     { id: "empty (paste)", code: "empty", desktopOnly: true, path: "/", act: submit("paste-form", { "paste-url": `https://${HOST}/guide/`, "paste-html": "<p></p>" }), extra: { Worker: replying({ error: "empty", message: "the page has no readable content; sites that render with JavaScript come back empty", ...emptyPage }) }, next: "original", host: true, shown: true, says: "pasted HTML", not: "came back from", raw: "the page has no readable content; sites that render with JavaScript come back empty" },
     { id: "token", code: "token", ...edge(403, "token", "the Turnstile check failed or expired; reload the page"), next: "reload" },
     { id: "token, empty body", code: "token", ...edge(403, "token", ""), next: "reload" },
@@ -1312,6 +1312,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     if (row.desktopOnly && !NEXT[row.next].test(desk.main)) bad.push(`desktop next step is not ${row.next}`);
     if (row.paste ? !PASTE.test(desk.main) : PASTE.test(desk.main)) bad.push(row.paste ? "desktop offers no paste" : "desktop offers paste");
     if (!row.paste && phone && phone.main !== desk.main) bad.push("phone and desktop differ without paste");
+    if (row.desktopSays && !desk.main.includes(row.desktopSays)) bad.push(`desktop does not say ${row.desktopSays}`);
     if (row.id === "upstream 403" && desk.main !== PIN_403) bad.push(`desktop is not voice.md's: ${JSON.stringify(desk.main)}`);
     record("web", `states: ${row.id}`, `${row.id}: what happened, then ${row.next}${row.paste ? " (desktop: or paste)" : ""}${row.detail ? ", server words as detail" : ""}${bad.length ? `; ${bad.join("; ")}${phone ? ` | phone: ${JSON.stringify(phone.main)}` : ""} | desktop: ${JSON.stringify(desk.main)}` : ""}`,
       !bad.length);

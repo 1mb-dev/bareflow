@@ -124,7 +124,7 @@ async function checkToken(fetchImpl, secret, token, ip) {
 
 // GET /_fetch?url=<target> with the Turnstile token in x-turnstile-token. The target and the
 // visitor are never logged.
-export const handler = (fetchImpl, { timeout = 30000, limit } = {}) => async ({ request, env }) => {
+export const handler = (fetchImpl, { timeout, limit } = {}) => async ({ request, env }) => {
   if (request.method !== "GET") return fail(405, "url", "GET only");
   if (!env?.TURNSTILE_SECRET) return fail(503, "unavailable", "the fetch is not configured (no TURNSTILE_SECRET)");
   const req = new URL(request.url);

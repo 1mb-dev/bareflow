@@ -6,6 +6,7 @@ import { origin, reachable, showView } from "./view.js";
 const $ = (id) => document.getElementById(id);
 const ORIGIN = location.origin;
 const ASK = "Give a page address, like https://docs.example.com/guide/install.";
+const SLOW = 10000; // ms to wait for the bot check's widget
 
 // What a failure says (docs/voice.md): what happened, then what to do. Each entry gives
 // [what happened, the next step, the next step where the home shows the paste form (from 40rem,
@@ -34,7 +35,7 @@ const SAY = {
   token: () => ["The bot check failed or expired.", RELOAD],
   "check-timeout": () => ["The bot check timed out before it was answered.", RELOAD],
   challenge: () => ["The bot check did not load from challenges.cloudflare.com.", "If a content blocker is on, allow that address, then reload.", `If a content blocker is on, allow that address, then reload. ${OR_PASTE}`],
-  "check-slow": () => ["The bot check did not load from challenges.cloudflare.com within 10 seconds; the network may be slow, or a content blocker may stop it.", RELOAD, `${RELOAD} ${OR_PASTE}`],
+  "check-slow": () => [`The bot check did not load from challenges.cloudflare.com within ${SLOW / 1000} seconds; the network may be slow, or a content blocker may stop it.`, RELOAD, `${RELOAD} ${OR_PASTE}`],
   limited: () => ["This site has had too many requests from your network.", "Wait a minute, then reload."],
   unavailable: () => ["Fetching is unavailable right now.", LATER, `${LATER} ${OR_PASTE}`],
   cut: (h) => [`${h}'s page stopped arriving partway.`, RELOAD],
@@ -134,7 +135,7 @@ function token() {
         return;
       }
       // A blocked script fails its load (challenge); no widget yet may only be a slow network.
-      if (Date.now() - start > 10000) return reject(new Error("check-slow"));
+      if (Date.now() - start > SLOW) return reject(new Error("check-slow"));
       setTimeout(ready, 100);
     };
     ready();
