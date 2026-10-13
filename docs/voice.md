@@ -45,7 +45,7 @@ fails on `npx` in anything the web serves or says). Paste is offered only where 
 paste form (from 40rem); a phone's next step is the address, the wait, or the original.
 
 The server's own words (src/edge.js) are a reason, not a sentence: the web shows them only as
-`detail:` under a code that covers several causes (url, upstream without a status, convert).
+`detail:` under a code that covers several causes (url, redirect, upstream without a status, convert).
 
 ## Banned
 

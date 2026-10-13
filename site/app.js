@@ -15,6 +15,7 @@ const CHECK = "Check the address.", LATER = "Try again later.", RELOAD = "Reload
 const CHECK_OR_PASTE = "Check the address, or save the page and paste its HTML on the home page.";
 // A site may refuse this site's fetch for longer than "later" while the visitor's browser gets the page.
 const LATER_OR_PASTE = "Try again later, or save the page and paste its HTML on the home page.";
+const SAVE_AND_PASTE = "Save it from your browser and paste its HTML on the home page.";
 const OR_PASTE = "Or paste the page's HTML on the home page.";
 const original = (h) => `Open the original at ${h}.`;
 const hostOf = (u) => { try { return new URL(u).hostname; } catch { return ""; } };
@@ -25,7 +26,7 @@ const SAY = {
   blocked: (h) => [`${h} is, or leads to, a private network address; this site fetches public addresses only.`, CHECK],
   timeout: (h, _, __, hop) => [`${via(h, hop)} did not answer within 30 seconds.`, LATER, LATER_OR_PASTE],
   upstream: (h, n, _, hop) => {
-    if (!n) return [`This site could not read the page from ${h}.`, original(h), "Save it from your browser and paste its HTML on the home page."];
+    if (!n) return [`This site could not read the page from ${h}.`, original(h), SAVE_AND_PASTE];
     const who = via(h, hop);
     if (n === 401 || n === 403) return [`${who} refused the request (HTTP ${n}).`, CHECK, CHECK_OR_PASTE];
     if (n === 404 || n === 410) return [`${who} has no page at that address (HTTP ${n}).`, CHECK];
@@ -33,7 +34,7 @@ const SAY = {
     if (n >= 500) return [`${who} could not serve the page (HTTP ${n}).`, LATER, LATER_OR_PASTE];
     return [`${who} answered HTTP ${n}, not the page.`, CHECK, CHECK_OR_PASTE];
   },
-  redirect: (h) => [`${h} redirects to an address this site does not fetch.`, original(h), "Save it from your browser and paste its HTML on the home page."],
+  redirect: (h) => [`${h} redirects to an address this site does not fetch.`, original(h), SAVE_AND_PASTE],
   "over-cap": (h, _, pasted) => (pasted
     ? ["The pasted HTML is over 5 MB, this site's limit for a paste.", original(h)]
     : [`${h}'s page is over 1 MB, this site's limit for a fetched page.`, original(h), "Save it and paste its HTML on the home page (up to 5 MB)."]),
