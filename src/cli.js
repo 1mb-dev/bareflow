@@ -7,7 +7,7 @@ export const USAGE = "usage: bareflow <url> [--json]";
 
 // The parse seam's refusals (src/html.js NotHtml), said with the host and the next step.
 function refusal(e, url) {
-  const host = URL.canParse(url) ? new URL(url).host : url;
+  const host = e?.host ?? (URL.canParse(url) ? new URL(url).hostname : url);
   if (e?.code === "blank") return `${host} returned nothing. Open it in a browser to check.`;
   if (e?.code === "not-html") return `${host} did not return an HTML page${e.shape === "json" ? " (it looks like JSON)" : ""}. Fetch it directly.`;
   return null;

@@ -22,49 +22,57 @@ function repairTables(document) {
 }
 
 // The html, head, and body tags are optional; a browser implies them. htmlparser2 does not: with no
-// <html> the first element becomes the root, and with no <body> the content sits beside an empty
-// body, where the extractor and the loss audit never look. So a source whose root is not html is
-// parsed once more with one, and whatever sits beside head and body moves where a browser puts
-// it: metadata before any content into head, the rest into body, in document order.
+// <html> the first element becomes the root, with no <body> the content sits beside the head, and
+// text before the doctype sits beside the root, where the extractor and the loss audit never look.
+// So the page's html element (one is added when the source has none) takes every other top-level
+// node, and whatever sits beside head and body moves where a browser puts it: metadata before any
+// content into head, the rest into body, in document order. head and body are found among the
+// root's children, never through document.head/body: linkedom's getters create them.
 const METADATA = new Set(["TITLE", "META", "LINK", "BASE", "STYLE"]);
-const LEAD = /^﻿?\s*(?:(?:<!--[\s\S]*?-->|<!doctype[^>]*>)\s*)*/i;
+const HEADISH = new Set([...METADATA, "SCRIPT", "NOSCRIPT", "TEMPLATE"]);
+const LEAD = /^(?:\s*(?:<!--[\s\S]*?-->|<!doctype[^>]*>))*\s*/i;
+const element = (n, tag) => n.nodeType === 1 && n.tagName === tag;
 
-function impliedBody({ documentElement: root, head, body }) {
-  if (root.tagName !== "HTML" || !head || !body) return;
-  // A body element with nothing in it is the parser's own, placed ahead of the content it left out.
-  const content = [...head.childNodes].findIndex((n) => n.nodeType === 1 && !METADATA.has(n.tagName) && !["SCRIPT", "NOSCRIPT", "TEMPLATE"].includes(n.tagName));
-  const before = content < 0 ? [] : [...head.childNodes].slice(content);
-  let past = false;
-  for (const n of [...root.childNodes]) {
+function impliedBody(document) {
+  const top = [...document.childNodes].filter((n) => n.nodeType !== 10);
+  const root = top.find((n) => element(n, "HTML"));
+  const kids = [...root.childNodes];
+  let head = kids.find((n) => element(n, "HEAD")), body = kids.find((n) => element(n, "BODY"));
+  if (!head) root.prepend((head = document.createElement("head")));
+  const content = (n) => (n.nodeType === 1 && !HEADISH.has(n.tagName)) || (n.nodeType === 3 && n.textContent.trim() !== "");
+  const at = [...head.childNodes].findIndex(content), tail = at < 0 ? [] : [...head.childNodes].slice(at);
+  const pre = top.slice(0, top.indexOf(root)), before = [...pre, ...tail], after = [];
+  let seen = before.some(content), past = false;
+  for (const n of kids) {
     if (n === head) continue;
-    if (n === body) { past = body.hasChildNodes(); continue; }
-    if (past) body.append(n);
-    else if (!before.length && n.nodeType === 1 && METADATA.has(n.tagName)) head.append(n);
-    else before.push(n);
+    if (n === body) { past = true; continue; }
+    if (past) after.push(n);
+    else if (!seen && n.nodeType === 1 && METADATA.has(n.tagName)) head.append(n);
+    else { seen ||= content(n); before.push(n); }
   }
-  const doc = root.ownerDocument.childNodes;
-  body.append(...[...doc].slice([...doc].indexOf(root) + 1));
+  if (!body) root.append((body = document.createElement("body")));
   body.prepend(...before);
+  body.append(...after, ...top.slice(top.indexOf(root) + 1));
 }
 
-// Raised when the body is no HTML document at all: code "blank" (nothing but whitespace) or
-// "not-html" (text, JSON, CSV: htmlparser2 builds no root). shape "json" when it opens with { or [.
+// Raised when the body is no HTML document: code "blank" (nothing past whitespace, comments, and a
+// doctype) or "not-html" (text, CSV, or JSON, which may carry markup in its strings); shape "json"
+// when it opens with { or [.
 export class NotHtml extends Error {
   constructor(html) {
-    const text = html.replace(/^﻿/, "").trim();
-    super(text ? "the body is not an HTML document" : "the body is empty");
-    this.code = text ? "not-html" : "blank";
-    this.shape = /^[[{]/.test(text) ? "json" : "";
+    const rest = html.slice(html.match(LEAD)[0].length);
+    super(rest ? "the body is not an HTML document" : "the body is empty");
+    this.code = rest ? "not-html" : "blank";
+    this.shape = /^[[{]/.test(rest) ? "json" : "";
   }
 }
 
 export function parseHtml(html) {
+  const rest = html.slice(html.match(LEAD)[0].length);
+  if (/^[[{]/.test(rest)) throw new NotHtml(html);
   let window = parseHTML(html);
   if (!window.document.documentElement) throw new NotHtml(html);
-  if (window.document.documentElement.tagName !== "HTML") {
-    const lead = html.match(LEAD)[0];
-    window = parseHTML(`${lead}<html>${html.slice(lead.length)}`);
-  }
+  if (![...window.document.childNodes].some((n) => element(n, "HTML"))) window = parseHTML(`${html.slice(0, html.length - rest.length)}<html>${rest}`);
   impliedBody(window.document);
   repairTables(window.document);
   return window;

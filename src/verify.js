@@ -910,16 +910,18 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
 
   // The parse seam (src/html.js): a body htmlparser2 builds no root for is refused by name, the
   // same in the CLI and the worker; HTML that leaves out its optional html, head, or body tags
-  // keeps its text, and its title once. Before this, the first group threw a TypeError and the
-  // second came out as its title alone, 0 losses.
+  // keeps its text, and its title once.
   const REFUSED = { json: ['{"a": 1}', "not-html", "json"], array: ["[1, 2]", "not-html", "json"], text: ["hello world\n", "not-html", ""],
     markdown: ["# Title\n\nSome *text*.", "not-html", ""], csv: ["a,b\n1,2\n", "not-html", ""], lt: ["< 5 apples", "not-html", ""], heart: ["<3 you", "not-html", ""],
-    empty: ["", "blank", ""], space: [" \n\t ", "blank", ""], bom: ["﻿ \n", "blank", ""] };
+    empty: ["", "blank", ""], space: [" \n\t ", "blank", ""], bom: ["\uFEFF \n", "blank", ""], doctype: ["<!doctype html>\n<!-- down -->", "blank", ""], "json with markup": ['{"html": "<div><p>hi</p></div>"}', "not-html", "json"] };
   const KEPT = { optional: ["<!doctype html><title>T</title><p>Kept text.</p>", "T"], "no body tag": ["<html><title>T</title><p>Kept text.</p></html>", "T"],
     "head, no body": ["<html><head><title>T</title></head><p>Kept text.</p></html>", "T"], fragment: ["<p>Kept text.</p>", ""], "upper case": ["<BODY><p>Kept text.</p></BODY>", ""],
     "comment holding <body>": ["<html><head><title>T</title><!-- <body> --></head><p>Kept text.</p></html>", "T"],
     "after </html>": ["<!doctype html><html><head><title>T</title></head><body><p>First.</p></body></html>\n<p>Kept text.</p>", "T"],
-    "text before the doctype": ["Warning: x\n<!doctype html><html><head><title>T</title></head><body><p>Kept text.</p></body></html>", "T"] };
+    "text before the doctype": ["Warning: x\n<!doctype html><html><head><title>T</title></head><body><p>Kept text.</p></body></html>", "T", "Warning: x"],
+    "markup before the doctype": ["<br />\n<b>Warning</b>: y<br />\n<!DOCTYPE html><html><head><title>T</title></head><body><p>Kept text.</p></body></html>", "T", "y"],
+    "content before <body>": ["<html><head><title>T</title></head><p>Stray.</p><body><p>Kept text.</p></body></html>", "T", "Stray."],
+    "content before <head>": ["<html><p>Kept text.</p><head><title>T</title></head></html>", "T"] };
   const seam = [];
   const cliSays = async (e) => { let said = ""; const code = await main(["https://p.example/x"], { run: async () => { throw e; }, out: () => {}, err: (s) => { said += s; } }); return [code, said]; };
   for (const [name, [body, code, shape]] of Object.entries(REFUSED)) {
@@ -927,16 +929,19 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     const w = await ask({ input: "edge", url: "https://p.example/x", finalUrl: "https://p.example/x", bytes: new TextEncoder().encode(body).buffer });
     if (thrown?.code !== code || (thrown.shape ?? "") !== shape || w.error !== code) seam.push(`${name}: ${thrown?.code ?? "converted"}/${w.error ?? "converted"}`);
   }
+  // The host is the one that answered (convert sets it from the final URL), without a port.
   const SAID = { blank: "bareflow: p.example returned nothing. Open it in a browser to check.\n", "not-html": "bareflow: p.example did not return an HTML page. Fetch it directly.\n",
     json: "bareflow: p.example did not return an HTML page (it looks like JSON). Fetch it directly.\n" };
-  for (const [want, e] of [["blank", { code: "blank" }], ["not-html", { code: "not-html", shape: "" }], ["json", { code: "not-html", shape: "json" }]]) {
+  const redirected = await convert({ url: "https://a.example:8080/x", finalUrl: "https://p.example/y", html: " ", retrievedAt: "x", input: "fetch" }).then(() => ({}), (e) => e);
+  for (const [want, e] of [["blank", redirected], ["not-html", { code: "not-html", shape: "" }], ["json", { code: "not-html", shape: "json" }]]) {
     const [exit, said] = await cliSays(Object.assign(new Error("x"), e));
     if (exit !== 1 || said !== SAID[want]) seam.push(`cli ${want}: exit ${exit}, ${JSON.stringify(said)}`);
   }
-  for (const [name, [html, title]] of Object.entries(KEPT)) {
+  for (const [name, [html, title, also]] of Object.entries(KEPT)) {
     const md = (await convert({ url: "https://p.example/x", html, retrievedAt: "x", input: "fetch" }).catch((e) => ({ markdown: `threw ${e.message}` }))).markdown;
-    const text = md.split("\n---\n").slice(1).join("\n---\n");
-    if (!text.includes("\nKept text.\n") || (title && (!text.startsWith(`\n# ${title}\n`) || text.split(`\n${title}\n`).length !== 1))) seam.push(`${name}: ${JSON.stringify(text.slice(0, 60))}`);
+    const text = md.split("\n---\n").slice(1).join("\n---\n"), { document: d } = parseHtml(html);
+    const one = ["html", "head", "body"].every((t) => d.querySelectorAll(t).length === 1) && d.documentElement.tagName === "HTML" && (!title || d.querySelector("head > title")?.textContent === title);
+    if (!one || !text.includes("\nKept text.\n") || (also && !text.includes(also)) || (title && (!text.startsWith(`\n# ${title}\n`) || text.split(`\n${title}\n`).length !== 1))) seam.push(`${name}: ${one ? "" : "tree, "}${JSON.stringify(text.slice(0, 60))}`);
   }
   record("web", "seam", `parse seam: ${Object.keys(REFUSED).length} non-HTML bodies refused by name in convert and the worker, the CLI's three sentences exit 1; ${Object.keys(KEPT).length} pages with implied tags keep their text and title once${seam.length ? `: ${seam.join("; ")}` : ""}`, !seam.length);
 }
