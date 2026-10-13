@@ -4,9 +4,9 @@ import { fetchSnapshot } from "./fetch.js";
 import { convert } from "./convert.js";
 import { httpUrl } from "./fetch-policy.js";
 
-export async function run({ url, html, retrievedAt, fetch = fetchSnapshot }) {
+export async function run({ url, html, retrievedAt, fetch = fetchSnapshot, convert: conv = convert }) {
   httpUrl(url);
-  if (html != null) return convert({ url, html, retrievedAt: retrievedAt ?? new Date().toISOString(), input: "fetch" });
+  if (html != null) return conv({ url, html, retrievedAt: retrievedAt ?? new Date().toISOString(), input: "fetch" });
   const snap = await fetch(url);
-  return convert({ url, finalUrl: snap.finalUrl, html: snap.html, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint, input: "fetch" });
+  return conv({ url, finalUrl: snap.finalUrl, html: snap.html, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint, input: "fetch" });
 }

@@ -23,6 +23,7 @@
     cut: () => new Response(new ReadableStream({ start(c) { c.error(new TypeError("network error")); } }), { headers: octet }),
     "not-html": bytes("\0binary"),
     blank: bytes(" "),
+    "too-deep": bytes("<div>".repeat(300)), "too-big": bytes("<p></p>".repeat(50001)), slow: bytes("<p>a</p>"),
     empty: bytes("<html><body></body></html>"),
     convert: bytes("<p>a</p>"), converter: bytes("<p>a</p>"),
     interactive: bytes("<html><head><title>Install</title></head><body><main><h1>Install</h1><p>Run the installer, then open a new terminal.</p></main></body></html>"),
@@ -30,7 +31,9 @@
   const real = window.fetch.bind(window);
   window.fetch = async (u, init) => (String(u).startsWith("/_fetch") && FETCH[state] ? FETCH[state]() : real(u, init));
 
-  // The worker answers for itself, except a conversion that throws and a script that fails to load.
+  // The worker answers for itself, except a conversion that throws, a script that fails to load,
+  // and one that never answers (slow: the app's deadline ends it).
+  if (state === "slow") window.Worker = class { postMessage() {} terminate() {} };
   if (state === "convert" || state === "converter") {
     window.Worker = class {
       postMessage() { setTimeout(() => (state === "converter" ? this.onerror?.({}) : this.onmessage?.({ data: { error: "convert", message: "Cannot read properties of undefined (reading 'blocks')" } })), 200); }

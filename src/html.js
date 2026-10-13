@@ -55,25 +55,76 @@ function impliedBody(document) {
   body.append(...after, ...top.slice(top.indexOf(root) + 1));
 }
 
-// Raised when the body is no HTML document: code "blank" (nothing past whitespace, comments, and a
-// doctype) or "not-html" (text, CSV, or JSON, which may carry markup in its strings); shape "json"
-// when it opens with { or [.
-export class NotHtml extends Error {
+// A page bareflow will not convert, refused by name: the CLI and the worker map `code`, and
+// convert() sets `host` to the host that answered.
+export class Refused extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+// No HTML document: "blank" (nothing past whitespace, comments, and a doctype) or "not-html"
+// (text, CSV, or JSON, which may carry markup in its strings); shape "json" when it opens with { or [.
+export class NotHtml extends Refused {
   constructor(html) {
     const rest = html.slice(html.match(LEAD)[0].length);
-    super(rest ? "the body is not an HTML document" : "the body is empty");
-    this.code = rest ? "not-html" : "blank";
+    super(rest ? "not-html" : "blank", rest ? "the body is not an HTML document" : "the body is empty");
     this.shape = /^[[{]/.test(rest) ? "json" : "";
   }
+}
+
+// Extraction time grows faster than linearly with nesting depth and with element count (Defuddle
+// over linkedom; 2,000 levels took 196 s), and linkedom's own parse is quadratic in depth (100,000
+// levels, 0.5 MB, 4.7 s). The frozen pages reach depth 28 and 6,268 elements. A linear scan of the
+// source refuses depth before linkedom parses; the parsed tree is then measured exactly. Both
+// iterate: a recursive walk would overflow the stack on the inputs it exists to refuse.
+export const MAX_DEPTH = 256, MAX_ELEMENTS = 50000;
+const SCAN_DEPTH = 4096;
+const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
+// An open tag of these closes an open one of the same group, as a browser does with a missing end tag.
+const SIBLING = { p: "p", li: "li", dt: "d", dd: "d", option: "option", tr: "tr", td: "cell", th: "cell" };
+const RAW = /^(?:script|style|textarea|title|xmp|noscript|template)$/;
+
+function scanDepth(html) {
+  const open = [];
+  const tag = /<!--[\s\S]*?(?:-->|$)|<(\/?)([a-zA-Z][\w:-]*)[^>]*?(\/?)>/g;
+  for (let m; (m = tag.exec(html)); ) {
+    if (!m[2]) continue;
+    const name = m[2].toLowerCase();
+    if (m[1]) { const at = open.lastIndexOf(name); if (at >= 0) open.length = at; continue; }
+    if (VOID.has(name) || m[3]) continue;
+    if (SIBLING[name] && SIBLING[open.at(-1)] === SIBLING[name]) open.pop();
+    if (RAW.test(name)) { const close = html.toLowerCase().indexOf(`</${name}`, tag.lastIndex); tag.lastIndex = close < 0 ? html.length : close; continue; }
+    open.push(name);
+    if (open.length > SCAN_DEPTH) return open.length;
+  }
+  return open.length;
+}
+
+function measure(root) {
+  let elements = 0, deepest = 0;
+  for (const stack = [[root, 1]]; stack.length; ) {
+    const [n, d] = stack.pop();
+    elements++;
+    if (d > deepest) deepest = d;
+    if (d > MAX_DEPTH || elements > MAX_ELEMENTS) break;
+    for (let c = n.firstElementChild; c; c = c.nextElementSibling) stack.push([c, d + 1]);
+  }
+  return { elements, deepest };
 }
 
 export function parseHtml(html) {
   const rest = html.slice(html.match(LEAD)[0].length);
   if (/^[[{]/.test(rest)) throw new NotHtml(html);
+  if (scanDepth(html) > SCAN_DEPTH) throw new Refused("too-deep", `the page nests more than ${MAX_DEPTH} levels deep`);
   let window = parseHTML(html);
   if (!window.document.documentElement) throw new NotHtml(html);
   if (![...window.document.childNodes].some((n) => element(n, "HTML"))) window = parseHTML(`${html.slice(0, html.length - rest.length)}<html>${rest}`);
   impliedBody(window.document);
+  const { elements, deepest } = measure(window.document.documentElement);
+  if (deepest > MAX_DEPTH) throw new Refused("too-deep", `the page nests more than ${MAX_DEPTH} levels deep`);
+  if (elements > MAX_ELEMENTS) throw new Refused("too-big", `the page has more than ${MAX_ELEMENTS} elements`);
   repairTables(window.document);
   return window;
 }

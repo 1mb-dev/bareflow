@@ -8,6 +8,7 @@ import { isPrivateIp } from "./ssrf.js";
 export const MAX_BYTES = 5 * 1024 * 1024;
 export const MAX_HOPS = 5;
 export const TIMEOUT = 30000; // ms for the whole fetch, redirects included
+export const CONVERT_TIMEOUT = 20000; // ms for one conversion, CLI (src/bounded.js) and web (site/app.js)
 export const REQUEST_HEADERS = {
   "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
   "accept": "text/html",

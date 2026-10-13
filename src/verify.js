@@ -17,7 +17,7 @@ import { convert } from "./convert.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
 import { decompress, fetchSnapshot, nodeTransport } from "./fetch.js";
-import { fetchBody, fetchPage, MAX_BYTES, snapshot, TIMEOUT } from "./fetch-policy.js";
+import { CONVERT_TIMEOUT, fetchBody, fetchPage, MAX_BYTES, snapshot, TIMEOUT } from "./fetch-policy.js";
 import { edgeTransport, handler, SITEVERIFY, WEB_MAX_BYTES } from "./edge.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
@@ -27,7 +27,8 @@ import { parseHTML } from "linkedom";
 import { main, USAGE } from "./cli.js";
 import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
-import { parseHtml } from "./html.js";
+import { MAX_DEPTH, MAX_ELEMENTS, parseHtml } from "./html.js";
+import { convertBounded } from "./bounded.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
 import { sha256 } from "./sha256.js";
@@ -944,7 +945,37 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     const one = ["html", "head", "body"].every((t) => d.querySelectorAll(t).length === 1) && d.documentElement.tagName === "HTML" && (!title || d.querySelector("head > title")?.textContent === title);
     if (!one || !text.includes("\nKept text.\n") || (also && !text.includes(also)) || (title && (!text.startsWith(`\n# ${title}\n`) || text.split(`\n${title}\n`).length !== 1))) seam.push(`${name}: ${one ? "" : "tree, "}${JSON.stringify(text.slice(0, 60))}`);
   }
-  record("web", "seam", `parse seam: ${Object.keys(REFUSED).length} non-HTML bodies refused by name in convert and the worker, the CLI's three sentences exit 1; ${Object.keys(KEPT).length} pages with implied tags keep their text and title once${seam.length ? `: ${seam.join("; ")}` : ""}`, !seam.length);
+  // Limits at the seam: depth (html is level 1) and element count, each refused one past its cap;
+  // the source scan refuses a depth linkedom would take minutes to parse, without recursing.
+  const chain = (n) => `<html><head></head><body>${"<div>".repeat(n)}x${"</div>".repeat(n)}</body></html>`;
+  const flat = (n) => `<html><head></head><body>${"<p></p>".repeat(n)}</body></html>`;
+  const limited = (html) => { try { parseHtml(html); return "ok"; } catch (e) { return e.code ?? `threw ${e.message}`; } };
+  const LIMITS = [["depth at the cap", chain(MAX_DEPTH - 2), "ok"], ["depth one past", chain(MAX_DEPTH - 1), "too-deep"], ["a million levels, source", "<div>".repeat(1e6), "too-deep"],
+    ["elements at the cap", flat(MAX_ELEMENTS - 3), "ok"], ["elements one past", flat(MAX_ELEMENTS - 2), "too-big"],
+    ["5,000 unclosed li", `<ul>${"<li>x".repeat(5000)}</ul>`, "ok"], ["5,000 unclosed p", "<p>x".repeat(5000), "ok"], ["div in a script string", `<script>${"'<div>'+".repeat(5000)}''</script><p>x</p>`, "ok"]];
+  for (const [name, html, want] of LIMITS) { const got = limited(html); if (got !== want) seam.push(`${name}: ${got}, want ${want}`); }
+  for (const code of ["too-deep", "too-big"]) {
+    const w = await ask({ input: "paste", url: "https://p.example/x", html: code === "too-deep" ? chain(MAX_DEPTH) : flat(MAX_ELEMENTS) });
+    if (w.error !== code) seam.push(`worker ${code}: ${w.error}`);
+  }
+  for (const [code, said] of [["too-deep", `bareflow: p.example's page nests more than ${MAX_DEPTH} levels deep, past bareflow's limit. Open it in a browser.\n`],
+    ["too-big", "bareflow: p.example's page has more than 50,000 elements, past bareflow's limit. Open it in a browser.\n"], ["slow", "bareflow: converting p.example's page took over 20 seconds, bareflow's limit. Open it in a browser.\n"]]) {
+    const [exit, got] = await cliSays(Object.assign(new Error("x"), { code, host: "p.example" }));
+    if (exit !== 1 || got !== said) seam.push(`cli ${code}: exit ${exit}, ${JSON.stringify(got)}`);
+  }
+  // The CLI's conversion runs in a thread it stops at CONVERT_TIMEOUT: the same result as convert(),
+  // a refusal keeps its code and host, and a conversion past a short deadline is "slow", named.
+  const base = { url: "https://p.example/x", finalUrl: "https://q.example/y", retrievedAt: "2026-10-13T00:00:00.000Z", input: "fetch" };
+  const page = `<html><head><title>T</title></head><body><main><h1>T</h1><p>${"Thread text. ".repeat(20)}</p></main></body></html>`;
+  const [direct, threaded] = await Promise.all([convert({ ...base, html: page }), convertBounded({ ...base, html: page })]);
+  if (threaded.markdown !== direct.markdown) seam.push("thread: differs from convert()");
+  const refusedIn = await convertBounded({ ...base, html: "{}" }).then(() => ({}), (e) => e);
+  if (refusedIn.code !== "not-html" || refusedIn.host !== "q.example") seam.push(`thread refusal: ${refusedIn.code} ${refusedIn.host}`);
+  const late = await convertBounded({ ...base, html: flat(30000) }, 50).then(() => ({}), (e) => e);
+  if (late.code !== "slow" || late.host !== "q.example") seam.push(`thread deadline: ${late.code} ${late.host}`);
+  const appSrcText = await readFile(join(ROOT, "site/app.js"), "utf8");
+  if (Number(appSrcText.match(/const CONVERT_TIMEOUT = (\d+);/)?.[1]) !== CONVERT_TIMEOUT) seam.push("site/app.js CONVERT_TIMEOUT differs from the policy's");
+  record("web", "seam", `parse seam: ${Object.keys(REFUSED).length} non-HTML bodies refused by name in convert and the worker, the CLI's three sentences exit 1; ${Object.keys(KEPT).length} pages with implied tags keep their text and title once; depth and element caps at their boundaries; the CLI's conversion thread and its deadline${seam.length ? `: ${seam.join("; ")}` : ""}`, !seam.length);
 }
 
 // FixedLengthStream's contract (Workers only): the stream errors past, or short of, n bytes. The
@@ -1225,7 +1256,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     const ctx = {
       document: w.document, location: { href: `https://bareflow.1mb.dev${path}`, origin: "https://bareflow.1mb.dev", assign: (u) => did.push(`assign ${u}`) },
       history: { replaceState() {}, pushState() {} }, fetch: (u) => { did.push(`fetch ${u}`); return new Promise(() => {}); },
-      Worker: class { postMessage() { did.push("worker"); } terminate() {} }, setTimeout: (f) => timers.push(f), clearTimeout() {}, URL, URLSearchParams,
+      Worker: class { postMessage() { did.push("worker"); } terminate() {} }, setTimeout: (f) => (timers.push(f), f), clearTimeout: (f) => { const i = timers.indexOf(f); if (i >= 0) timers.splice(i, 1); }, URL, URLSearchParams,
       ...extra,
     };
     ctx.window = ctx;
@@ -1329,6 +1360,9 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     { id: "not-html", code: "not-html", ...converted({ error: "not-html", message: "the address returned a binary file, not an HTML page" }), next: "original", host: true },
     { id: "not-html, text", code: "not-html", ...converted({ error: "not-html", message: "the body is not an HTML document" }), next: "original", host: true },
     { id: "blank", code: "blank", ...converted({ error: "blank", message: "the body is empty" }), next: "original", host: true },
+    { id: "too-deep", code: "too-deep", ...converted({ error: "too-deep", message: "the page nests more than 256 levels deep" }), next: "original", host: true },
+    { id: "too-big", code: "too-big", ...converted({ error: "too-big", message: "the page has more than 50000 elements" }), next: "original", host: true },
+    { id: "slow", code: "slow", ...fetched({ fetch: answer({}), Worker: class { postMessage() {} terminate() {} } }), next: "original", host: true },
     { id: "empty", code: "empty", ...converted({ error: "empty", message: "the page has no readable content; sites that render with JavaScript come back empty", ...emptyPage }), next: "original", host: true, shown: true },
     { id: "convert", code: "convert", ...converted({ error: "convert", message: "Cannot read properties of undefined (reading 'x')" }), next: "original", host: true, detail: true },
     { id: "convert, empty message", code: "convert", ...converted({ error: "convert", message: "" }), next: "original", host: true },
@@ -1342,9 +1376,10 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   // run, and any one fails the record that ran it.
   const flush = async (run) => {
     run.thrown ??= [];
+    // Settled work first: no timer here is shorter than a reply already on its way.
     for (let i = 0; i < 20; i++) {
-      run.timers.splice(0).forEach((f) => { try { f(); } catch (e) { run.thrown.push(String(e?.message || e)); } });
       for (let j = 0; j < 3; j++) await new Promise((r) => setImmediate(r));
+      run.timers.splice(0).forEach((f) => { try { f(); } catch (e) { run.thrown.push(String(e?.message || e)); } });
     }
   };
   const failure = async (row, wide) => {

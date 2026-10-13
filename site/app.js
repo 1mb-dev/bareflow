@@ -7,6 +7,7 @@ const $ = (id) => document.getElementById(id);
 const ORIGIN = location.origin;
 const ASK = "Give a page address, like https://docs.example.com/guide/install.";
 const SLOW = 10000; // ms to wait for the bot check's widget
+const CONVERT_TIMEOUT = 20000; // ms for one conversion; equals src/fetch-policy.js CONVERT_TIMEOUT
 
 // What a failure says (docs/voice.md): what happened, then what to do. Each entry gives
 // [what happened, the next step, the next step where the home shows the paste form (from 40rem,
@@ -46,6 +47,9 @@ const SAY = {
   cut: (h) => [`${h}'s page stopped arriving partway.`, RELOAD],
   "not-html": (h, _, pasted) => [pasted ? "The pasted text is not an HTML page." : `${h} did not return an HTML page.`, original(h)],
   blank: (h, _, pasted) => [pasted ? "The paste is empty." : `${h} returned nothing.`, original(h)],
+  "too-deep": (h, _, pasted) => [pasted ? "The pasted page nests too deeply for this site to read." : `${h}'s page nests too deeply for this site to read.`, original(h)],
+  "too-big": (h, _, pasted) => [pasted ? "The pasted page has too many elements for this site to read." : `${h}'s page has too many elements for this site to read.`, original(h)],
+  slow: (h, _, pasted) => [pasted ? "The pasted page took too long to convert here." : `${h}'s page took too long to convert here.`, original(h)],
   empty: (h, _, pasted) => [pasted
     ? "No readable text in the pasted HTML: a page that builds itself with JavaScript has no text in its source."
     : `No readable text came back from ${h}: a page that builds itself with JavaScript arrives empty.`, original(h)],
@@ -90,11 +94,14 @@ function fail(code, { host, n, hop, detail, pasted, said } = {}) {
 }
 
 const worker = () => new Worker("/_app/worker.js");
+// A conversion is synchronous work in the worker; only terminating the worker stops one that runs on.
 const convertIn = (msg, transfer) => new Promise((resolve) => {
   const w = worker();
-  w.onmessage = ({ data }) => { w.terminate(); resolve(data); };
+  const done = (r) => { clearTimeout(timer); w.terminate(); resolve(r); };
+  const timer = setTimeout(() => done({ error: "slow" }), CONVERT_TIMEOUT);
+  w.onmessage = ({ data }) => done(data);
   // worker.js answers every message, errors included: onerror is the script failing to load.
-  w.onerror = () => { w.terminate(); resolve({ error: "converter" }); };
+  w.onerror = () => done({ error: "converter" });
   w.postMessage(msg, transfer);
 });
 

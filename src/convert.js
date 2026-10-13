@@ -2,7 +2,7 @@
 // url, retrievedAt, fingerprint, and input, same version -> same document. The fingerprint is the
 // fetched bytes' when a fetch made them, else the HTML's. Nothing on this path may need Node: the
 // browser bundle runs it, and verify's parity check fails on a node: import, Buffer, or process.
-import { NotHtml } from "./html.js";
+import { Refused } from "./html.js";
 import { extract, EXTRACTOR } from "./extract.js";
 import { contentToBlocks } from "./to-ir.js";
 import { auditSourceLoss, restoreCodeLayout, sourceTitle } from "./loss-audit.js";
@@ -43,7 +43,7 @@ export async function convert({ url, finalUrl = url, html, retrievedAt, fingerpr
   if (!INPUTS.has(input)) throw new Error(`input is one of ${[...INPUTS].join(", ")}`);
   fingerprint ??= sha256(html).slice(0, 16);
   // A refusal from the parse seam names the host that answered.
-  const ex = await extract(html, finalUrl).catch((e) => { if (e instanceof NotHtml) e.host = new URL(finalUrl).hostname; throw e; });
+  const ex = await extract(html, finalUrl).catch((e) => { if (e instanceof Refused) e.host = new URL(finalUrl).hostname; throw e; });
   const { title, blocks, losses } = separateLosses(contentToBlocks(ex.contentHtml), html, ex.title);
 
   // Nav targets are recorded, never fetched: one run reads one page.
