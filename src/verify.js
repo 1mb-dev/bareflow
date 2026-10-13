@@ -907,6 +907,38 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   const big = await ask({ input: "paste", url: "https://p.example/big", html: "a".repeat(MAX_BYTES + 1) });
   record("web", "worker", `site worker = bundle + glue: CLI-equal Markdown and IR from /_fetch bytes; paste, binary, empty, oversized named${off.length ? `; differ: ${off.join(", ")}` : ""}`,
     !off.length && paste.markdown?.includes("\ninput: paste\n") && paste.doc?.source.input === "paste" && binary.error === "not-html" && empty.error === "empty" && typeof empty.markdown === "string" && empty.doc?.sections && big.error === "over-cap");
+
+  // The parse seam (src/html.js): a body htmlparser2 builds no root for is refused by name, the
+  // same in the CLI and the worker; HTML that leaves out its optional html, head, or body tags
+  // keeps its text, and its title once. Before this, the first group threw a TypeError and the
+  // second came out as its title alone, 0 losses.
+  const REFUSED = { json: ['{"a": 1}', "not-html", "json"], array: ["[1, 2]", "not-html", "json"], text: ["hello world\n", "not-html", ""],
+    markdown: ["# Title\n\nSome *text*.", "not-html", ""], csv: ["a,b\n1,2\n", "not-html", ""], lt: ["< 5 apples", "not-html", ""], heart: ["<3 you", "not-html", ""],
+    empty: ["", "blank", ""], space: [" \n\t ", "blank", ""], bom: ["﻿ \n", "blank", ""] };
+  const KEPT = { optional: ["<!doctype html><title>T</title><p>Kept text.</p>", "T"], "no body tag": ["<html><title>T</title><p>Kept text.</p></html>", "T"],
+    "head, no body": ["<html><head><title>T</title></head><p>Kept text.</p></html>", "T"], fragment: ["<p>Kept text.</p>", ""], "upper case": ["<BODY><p>Kept text.</p></BODY>", ""],
+    "comment holding <body>": ["<html><head><title>T</title><!-- <body> --></head><p>Kept text.</p></html>", "T"],
+    "after </html>": ["<!doctype html><html><head><title>T</title></head><body><p>First.</p></body></html>\n<p>Kept text.</p>", "T"],
+    "text before the doctype": ["Warning: x\n<!doctype html><html><head><title>T</title></head><body><p>Kept text.</p></body></html>", "T"] };
+  const seam = [];
+  const cliSays = async (e) => { let said = ""; const code = await main(["https://p.example/x"], { run: async () => { throw e; }, out: () => {}, err: (s) => { said += s; } }); return [code, said]; };
+  for (const [name, [body, code, shape]] of Object.entries(REFUSED)) {
+    const thrown = await convert({ url: "https://p.example/x", html: body, retrievedAt: "x", input: "fetch" }).then(() => null, (e) => e);
+    const w = await ask({ input: "edge", url: "https://p.example/x", finalUrl: "https://p.example/x", bytes: new TextEncoder().encode(body).buffer });
+    if (thrown?.code !== code || (thrown.shape ?? "") !== shape || w.error !== code) seam.push(`${name}: ${thrown?.code ?? "converted"}/${w.error ?? "converted"}`);
+  }
+  const SAID = { blank: "bareflow: p.example returned nothing. Open it in a browser to check.\n", "not-html": "bareflow: p.example did not return an HTML page. Fetch it directly.\n",
+    json: "bareflow: p.example did not return an HTML page (it looks like JSON). Fetch it directly.\n" };
+  for (const [want, e] of [["blank", { code: "blank" }], ["not-html", { code: "not-html", shape: "" }], ["json", { code: "not-html", shape: "json" }]]) {
+    const [exit, said] = await cliSays(Object.assign(new Error("x"), e));
+    if (exit !== 1 || said !== SAID[want]) seam.push(`cli ${want}: exit ${exit}, ${JSON.stringify(said)}`);
+  }
+  for (const [name, [html, title]] of Object.entries(KEPT)) {
+    const md = (await convert({ url: "https://p.example/x", html, retrievedAt: "x", input: "fetch" }).catch((e) => ({ markdown: `threw ${e.message}` }))).markdown;
+    const text = md.split("\n---\n").slice(1).join("\n---\n");
+    if (!text.includes("\nKept text.\n") || (title && (!text.startsWith(`\n# ${title}\n`) || text.split(`\n${title}\n`).length !== 1))) seam.push(`${name}: ${JSON.stringify(text.slice(0, 60))}`);
+  }
+  record("web", "seam", `parse seam: ${Object.keys(REFUSED).length} non-HTML bodies refused by name in convert and the worker, the CLI's three sentences exit 1; ${Object.keys(KEPT).length} pages with implied tags keep their text and title once${seam.length ? `: ${seam.join("; ")}` : ""}`, !seam.length);
 }
 
 // FixedLengthStream's contract (Workers only): the stream errors past, or short of, n bytes. The
@@ -1288,7 +1320,9 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     { id: "unavailable, widget will not render", code: "unavailable", path: TARGET, late: { turnstile: { render() { throw new Error("Invalid sitekey"); } } }, next: "wait", paste: true },
     { id: "unavailable, no code (the shell for /_fetch)", code: "unavailable", ...fetched({ fetch: answer({ type: "text/html" }) }), next: "wait", paste: true },
     { id: "cut", code: "cut", ...fetched({ fetch: answer({ cut: true }) }), next: "reload", host: true },
-    { id: "not-html", code: "not-html", ...converted({ error: "not-html", message: "the address returned a binary file, not an HTML page" }), next: "address", host: true },
+    { id: "not-html", code: "not-html", ...converted({ error: "not-html", message: "the address returned a binary file, not an HTML page" }), next: "original", host: true },
+    { id: "not-html, text", code: "not-html", ...converted({ error: "not-html", message: "the body is not an HTML document" }), next: "original", host: true },
+    { id: "blank", code: "blank", ...converted({ error: "blank", message: "the body is empty" }), next: "original", host: true },
     { id: "empty", code: "empty", ...converted({ error: "empty", message: "the page has no readable content; sites that render with JavaScript come back empty", ...emptyPage }), next: "original", host: true, shown: true },
     { id: "convert", code: "convert", ...converted({ error: "convert", message: "Cannot read properties of undefined (reading 'x')" }), next: "original", host: true, detail: true },
     { id: "convert, empty message", code: "convert", ...converted({ error: "convert", message: "" }), next: "original", host: true },

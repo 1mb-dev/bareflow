@@ -44,7 +44,8 @@ const SAY = {
   limited: () => ["This site has had too many requests from your network.", "Wait a minute, then reload."],
   unavailable: () => ["Fetching is unavailable right now.", LATER, `${LATER} ${OR_PASTE}`],
   cut: (h) => [`${h}'s page stopped arriving partway.`, RELOAD],
-  "not-html": (h) => [`${h} returned a binary file, not an HTML page.`, CHECK],
+  "not-html": (h, _, pasted) => [pasted ? "The pasted text is not an HTML page." : `${h} did not return an HTML page.`, original(h)],
+  blank: (h, _, pasted) => [pasted ? "The paste is empty." : `${h} returned nothing.`, original(h)],
   empty: (h, _, pasted) => [pasted
     ? "No readable text in the pasted HTML: a page that builds itself with JavaScript has no text in its source."
     : `No readable text came back from ${h}: a page that builds itself with JavaScript arrives empty.`, original(h)],

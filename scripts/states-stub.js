@@ -22,6 +22,7 @@
     unavailable: edge(503, "unavailable", "the bot check service did not answer"),
     cut: () => new Response(new ReadableStream({ start(c) { c.error(new TypeError("network error")); } }), { headers: octet }),
     "not-html": bytes("\0binary"),
+    blank: bytes(" "),
     empty: bytes("<html><body></body></html>"),
     convert: bytes("<p>a</p>"), converter: bytes("<p>a</p>"),
     interactive: bytes("<html><head><title>Install</title></head><body><main><h1>Install</h1><p>Run the installer, then open a new terminal.</p></main></body></html>"),

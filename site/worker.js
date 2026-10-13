@@ -3,7 +3,7 @@
 //   { input: "edge", url, finalUrl, bytes }  bytes from /_fetch (ArrayBuffer)
 //   { input: "paste", url, html }            a page a person gave; url is their assertion
 // -> { markdown, doc, losses, flattened } or { error, message } with error one of not-html,
-//    over-cap, empty (with markdown and doc), convert. `doc` is the IR the result view renders.
+//    blank, over-cap, empty (with markdown and doc), convert. `doc` is the IR the result view renders.
 /* global bareflow */
 const fail = (error, message, extra) => ({ error, message, ...extra });
 
@@ -27,5 +27,10 @@ async function work(m) {
 }
 
 self.onmessage = async ({ data }) => {
-  try { self.postMessage(await work(data)); } catch (e) { self.postMessage(fail("convert", String(e?.message || e))); }
+  try { self.postMessage(await work(data)); } catch (e) {
+    // The parse seam's refusals (src/html.js NotHtml) keep their code; any other throw is bareflow's.
+    if (e?.code === "blank") self.postMessage(fail("blank", e.message));
+    else if (e?.code === "not-html") self.postMessage(fail("not-html", e.message));
+    else self.postMessage(fail("convert", String(e?.message || e)));
+  }
 };
