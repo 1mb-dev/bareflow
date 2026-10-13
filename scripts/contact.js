@@ -1,7 +1,9 @@
 // Contact sheet: every frozen page (test/fixtures and test/pages) in the site's real result view,
 // for a person to review the design. `npm run contact` writes dist/contact/ and serves it on
 // localhost; the sheet takes ?w=375|1280, ?theme=light|dark|auto, and ?page=<n> (6 per page), and each frame is view.html?i=<n>
-// (add &mode=markdown for the raw view).
+// (add &mode=markdown for the raw view). /states.html (same ?w= and ?theme=) shows every failure
+// state in the real shell and app.js, answered by scripts/states-stub.js; any address with
+// ?bf-state=<id> is that shell.
 import { build } from "esbuild";
 import { createServer } from "node:http";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -47,6 +49,43 @@ const viewer = await build({ stdin: { contents: entry, resolveDir: ROOT, loader:
 const shell = (await readFile(join(OUT, "index.html"), "utf8"))
   .replace('<script src="/_app/theme.js"></script>\n', "") // the sheet sets the theme from ?theme=
   .replace('<script type="module" src="/_app/app.js"></script>', '<script>{ const t = new URLSearchParams(location.search).get("theme") || "light"; if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }</script>\n<script type="module" src="/viewer.js"></script>');
+// The shell as served, with the stand-ins ahead of app.js. The interactive state gets Cloudflare's
+// dummy sitekey that always shows a challenge (it works from any host, localhost included).
+const states = shell.replace('<script type="module" src="/viewer.js"></script>', '<script src="/states-stub.js"></script>\n<script type="module" src="/_app/app.js"></script>');
+const FORCED = "3x00000000000000000000FF";
+const TARGET = "https://docs.example.com/guide/";
+// [id, path before ?bf-state, desktop only]; the real widget first, before the others load.
+const STATES = [
+  ["interactive", `/${TARGET}`],
+  ["route-scheme", "/javascript:alert(1)"], ["route-encoding", "/https%3a%zz"], ["route-no-dot", "/intranet"], ["route-not-url", "/http://[x]/"],
+  ...["url-edge", "url-edge-long", "blocked", "timeout", "upstream-403", "upstream-404", "upstream-429", "upstream-503", "upstream-418", "upstream-none", "over-cap"].map((id) => [id, `/${TARGET}`]),
+  ["long-host", "/https://a-subdomain-label-that-runs-on-without-any-break-at-all.docs.example.com/guide/"],
+  ["paste-over-cap", "/", true],
+  ...["token", "check-timeout", "challenge", "limited", "unavailable", "cut", "not-html", "empty", "convert", "converter"].map((id) => [id, `/${TARGET}`]),
+];
+const statesSheet = `<!doctype html>
+<html><head><meta charset="utf-8"><title>bareflow states</title>
+<style>body { font: 14px/1.4 ui-monospace, monospace; margin: 16px; } nav a { margin-right: 12px; } #sheet { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; } figure { margin: 0; }
+figcaption { margin: 0 0 4px; } iframe { border: 1px solid #888; display: block; }</style></head>
+<body><nav>${["375 light", "375 dark", "1280 light", "1280 dark"].map((v) => { const [w, t] = v.split(" "); return `<a href="?w=${w}&theme=${t}">${v}</a>`; }).join("")}</nav>
+<main id="sheet"></main>
+<script>
+const q = new URLSearchParams(location.search), w = Number(q.get("w")) || 375, theme = q.get("theme") || "light";
+const scale = w > 800 ? 0.6 : 1;
+for (const [id, path, wide] of ${JSON.stringify(STATES)}) {
+  if (wide && w < 640) continue;
+  const tall = id === "empty" || id === "interactive" ? 640 : 320;
+  const src = path + (path.includes("?") ? "&" : "?") + "bf-state=" + id + "&theme=" + theme;
+  const f = document.createElement("figure"), cap = document.createElement("figcaption"), open = document.createElement("a"), frame = document.createElement("iframe");
+  open.href = src; open.target = "_blank"; open.textContent = id;
+  cap.append(open, " " + w + "px " + theme);
+  frame.src = src;
+  frame.style.width = w + "px"; frame.style.height = tall + "px";
+  if (scale < 1) { frame.style.transform = "scale(" + scale + ")"; frame.style.transformOrigin = "0 0"; f.style.height = (tall * scale + 24) + "px"; f.style.width = (w * scale) + "px"; }
+  f.append(cap, frame);
+  document.getElementById("sheet").append(f);
+}
+</script></body></html>`;
 const sheet = `<!doctype html>
 <html><head><meta charset="utf-8"><title>bareflow contact sheet</title>
 <style>body { font: 14px/1.4 ui-monospace, monospace; margin: 16px; } nav a { margin-right: 12px; } #sheet { display: flex; flex-wrap: wrap; gap: 32px 24px; align-items: flex-start; } figure { margin: 0; }
@@ -79,13 +118,21 @@ await Promise.all([
   ...cases.map((c, i) => writeFile(join(OUT, "cases", `${i}.json`), JSON.stringify(c))),
   writeFile(join(OUT, "cases", "index.json"), JSON.stringify(cases.map(({ name, losses }) => ({ name, losses })))),
   writeFile(join(OUT, "sheet.html"), sheet),
+  writeFile(join(OUT, "states.html"), statesSheet),
+  readFile(join(ROOT, "scripts/states-stub.js")).then((b) => writeFile(join(OUT, "states-stub.js"), b)),
 ]);
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".json": "application/json", ".css": "text/css", ".woff2": "font/woff2" };
 createServer(async (req, res) => {
-  const path = normalize(new URL(req.url, "http://localhost").pathname.replace(/^\/$/, "/sheet.html"));
+  const asked = new URL(req.url, "http://localhost");
+  const state = asked.searchParams.get("bf-state");
+  if (state) {
+    res.writeHead(200, { "content-type": TYPES[".html"], "cache-control": "no-store" });
+    return res.end(state === "interactive" ? states.replace('data-sitekey="contact-sheet"', `data-sitekey="${FORCED}"`) : states);
+  }
+  const path = normalize(asked.pathname.replace(/^\/$/, "/sheet.html"));
   const file = join(OUT, path);
   if (!file.startsWith(OUT + "/") || !TYPES[extname(file)]) { res.writeHead(404); return res.end(); }
   try { const body = await readFile(file); res.writeHead(200, { "content-type": TYPES[extname(file)], "cache-control": "no-store" }); res.end(body); }
   catch { res.writeHead(404); res.end(); }
-}).listen(PORT, "127.0.0.1", () => console.log(`contact: ${cases.length} pages; open http://localhost:${PORT}/ (?w=375|1280&theme=light|dark|auto; Ctrl-C to stop)`));
+}).listen(PORT, "127.0.0.1", () => console.log(`contact: ${cases.length} pages; open http://localhost:${PORT}/ (?w=375|1280&theme=light|dark|auto), states at /states.html; Ctrl-C to stop`));
