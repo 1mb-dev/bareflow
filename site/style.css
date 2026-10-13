@@ -45,7 +45,7 @@ summary { cursor: pointer; font-size: var(--t-small); color: var(--ink-2); }
   border-bottom: 1px solid var(--tape-edge); font: var(--t-small)/1.5 var(--mono); }
 .tape { position: sticky; top: 0; z-index: 1; }
 .tape-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-1) var(--s-3); }
-#status { min-width: 0; color: var(--tape-ink-2); }
+#status { min-width: 0; overflow-wrap: anywhere; color: var(--tape-ink-2); }
 :is(.tape, .exhibit-tape) .chip, #fold { white-space: nowrap; }
 .tape-from { display: flex; margin: 0; color: var(--tape-ink-2); white-space: pre; }
 .tape-from > #origin { min-width: 0; overflow-x: auto; scrollbar-width: none; }
