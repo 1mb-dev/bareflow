@@ -1177,7 +1177,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     vm.runInNewContext(appCode, ctx);
     act?.(w.document, w.Event);
     const said = [...w.document.querySelectorAll("script")].map((e) => e.getAttribute("src")).filter((u) => !u.startsWith("/_app/")).concat(did).join(" ");
-    return Object.assign(new String(said), { d: w.document, timers });
+    return Object.assign(new String(said), { d: w.document, timers, ctx });
     } finally {
       if (wide) for (const [k, d] of layout) { if (d) Object.defineProperty(proto, k, d); else delete proto[k]; }
     }
@@ -1262,6 +1262,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     { id: "unavailable, unknown code", code: "unavailable", ...edge(500, "weird", "something new"), next: "wait", paste: true },
     { id: "unavailable, inherited name as code", code: "unavailable", ...edge(500, "constructor", "something new"), next: "wait", paste: true },
     { id: "unavailable, fetch threw", code: "unavailable", ...fetched({ fetch: async () => { throw new TypeError("Failed to fetch"); } }), next: "wait", paste: true },
+    { id: "unavailable, widget will not render", code: "unavailable", path: TARGET, late: { turnstile: { render() { throw new Error("Invalid sitekey"); } } }, next: "wait", paste: true },
     { id: "unavailable, no code (the shell for /_fetch)", code: "unavailable", ...fetched({ fetch: answer({ type: "text/html" }) }), next: "wait", paste: true },
     { id: "cut", code: "cut", ...fetched({ fetch: answer({ cut: true }) }), next: "reload", host: true },
     { id: "not-html", code: "not-html", ...converted({ error: "not-html", message: "the address returned a binary file, not an HTML page" }), next: "address", host: true },
@@ -1274,10 +1275,12 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const uncovered = [...emitted].filter((c) => !rowCodes.has(c)), orphaned = [...rowCodes].filter((c) => !emitted.has(c));
   record("web", "states: codes", `every code src/edge.js, site/worker.js, and site/app.js emit has a row, and every row's code is emitted (${emitted.size} codes)${uncovered.length ? `; no row: ${uncovered.join(", ")}` : ""}${orphaned.length ? `; emitted by nothing: ${orphaned.join(", ")}` : ""}`,
     !uncovered.length && !orphaned.length && emitted.size >= 12);
-  const flush = async (run) => { for (let i = 0; i < 20; i++) { run.timers.splice(0).forEach((f) => f()); for (let j = 0; j < 3; j++) await new Promise((r) => setImmediate(r)); } };
+  // A throw in a timer is logged by a browser, not fatal: the page simply stops there.
+  const flush = async (run) => { for (let i = 0; i < 20; i++) { run.timers.splice(0).forEach((f) => { try { f(); } catch { /* as a browser */ } }); for (let j = 0; j < 3; j++) await new Promise((r) => setImmediate(r)); } };
   const failure = async (row, wide) => {
     const run = runApp(row.path, row.act, html, false, { ...row.extra, ...(wide ? desktopMedia : {}) });
     if (row.blockScript) run.d.querySelector(`script[src="${TURNSTILE}"]`)?.onerror?.();
+    if (row.late) Object.assign(run.ctx, row.late); // after the first poll: the widget arrives from a timer
     await flush(run);
     const st = run.d.getElementById("status"), det = st.querySelector(".detail");
     const main = [...st.childNodes].filter((n) => n !== det).map((n) => n.textContent).join("").trim();

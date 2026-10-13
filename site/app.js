@@ -113,12 +113,17 @@ function token() {
     const ready = () => {
       if (blocked) return reject(new Error("challenge"));
       if (window.turnstile) {
-        return window.turnstile.render($("challenge"), {
-          sitekey: document.body.dataset.sitekey,
-          callback: (t) => { $("challenge").hidden = true; resolve(t); },
-          "error-callback": () => reject(new Error("token")),
-          "timeout-callback": () => reject(new Error("check-timeout")),
-        });
+        // ready() also runs from a timer, where a throw would escape the promise. A widget that
+        // will not render is this site's fault (its sitekey), not the visitor's.
+        try {
+          window.turnstile.render($("challenge"), {
+            sitekey: document.body.dataset.sitekey,
+            callback: (t) => { $("challenge").hidden = true; resolve(t); },
+            "error-callback": () => reject(new Error("token")),
+            "timeout-callback": () => reject(new Error("check-timeout")),
+          });
+        } catch { reject(new Error("unavailable")); }
+        return;
       }
       // A blocked script fails its load (challenge); no widget yet may only be a slow network.
       if (Date.now() - start > 10000) return reject(new Error("check-slow"));
