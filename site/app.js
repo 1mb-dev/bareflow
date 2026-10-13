@@ -17,17 +17,20 @@ const CHECK_OR_PASTE = "Check the address, or save the page and paste its HTML o
 const LATER_OR_PASTE = "Try again later, or save the page and paste its HTML on the home page.";
 const OR_PASTE = "Or paste the page's HTML on the home page.";
 const original = (h) => `Open the original at ${h}.`;
+const hostOf = (u) => { try { return new URL(u).hostname; } catch { return ""; } };
 const SAY = {
   url: () => ["This site does not fetch that address.", CHECK],
   blocked: (h) => [`${h} is, or leads to, a private network address; this site fetches public addresses only.`, CHECK],
   timeout: (h) => [`${h} did not answer within 30 seconds.`, LATER, LATER_OR_PASTE],
-  upstream: (h, n) => {
+  // hop: the host that answered, when a redirect led away from h.
+  upstream: (h, n, _, hop) => {
     if (!n) return [`This site could not read the page from ${h}.`, original(h), "Save it from your browser and paste its HTML on the home page."];
-    if (n === 401 || n === 403) return [`${h} refused the request (HTTP ${n}).`, CHECK, CHECK_OR_PASTE];
-    if (n === 404 || n === 410) return [`${h} has no page at that address (HTTP ${n}).`, CHECK];
-    if (n === 429) return [`${h} is limiting requests (HTTP 429).`, LATER, LATER_OR_PASTE];
-    if (n >= 500) return [`${h} could not serve the page (HTTP ${n}).`, LATER, LATER_OR_PASTE];
-    return [`${h} answered HTTP ${n}, not the page.`, CHECK, CHECK_OR_PASTE];
+    const who = hop && hop !== h ? `${h} redirects to ${hop}, which` : h;
+    if (n === 401 || n === 403) return [`${who} refused the request (HTTP ${n}).`, CHECK, CHECK_OR_PASTE];
+    if (n === 404 || n === 410) return [`${who} has no page at that address (HTTP ${n}).`, CHECK];
+    if (n === 429) return [`${who} is limiting requests (HTTP 429).`, LATER, LATER_OR_PASTE];
+    if (n >= 500) return [`${who} could not serve the page (HTTP ${n}).`, LATER, LATER_OR_PASTE];
+    return [`${who} answered HTTP ${n}, not the page.`, CHECK, CHECK_OR_PASTE];
   },
   "over-cap": (h, _, pasted) => (pasted
     ? ["The pasted HTML is over 5 MB, this site's limit for a paste.", original(h)]
@@ -74,9 +77,9 @@ function write(text, detail) {
 function status(text, detail) { if (fresh) pending = [text, detail]; else write(text, detail); }
 
 // An unknown code says what unavailable says. `said` is a sentence already in voice (url.js).
-function fail(code, { host, n, detail, pasted, said } = {}) {
+function fail(code, { host, n, hop, detail, pasted, said } = {}) {
   if (!said && !Object.hasOwn(SAY, code)) code = "unavailable";
-  const [what, next, wide] = said ? [said] : SAY[code](host, n, pasted);
+  const [what, next, wide] = said ? [said] : SAY[code](host, n, pasted, hop);
   const desktop = wide && globalThis.matchMedia?.("(min-width: 40rem)").matches;
   const shown = DETAIL.has(code) && !(code === "upstream" && n) ? detail : "";
   status([what, desktop ? wide : next].filter(Boolean).join(" "), shown);
@@ -156,7 +159,7 @@ async function fetchAndConvert(url) {
   try { res = await fetch(`/_fetch?url=${encodeURIComponent(url)}`, { headers: { "x-turnstile-token": t } }); } catch { return fail("unavailable"); }
   if (res.status === 429) return fail("limited");
   const code = res.headers.get("x-bareflow-error");
-  if (code) return fail(code, { host, n: Number(res.headers.get("x-bareflow-status")) || 0, detail: await res.text().catch(() => "") });
+  if (code) return fail(code, { host, n: Number(res.headers.get("x-bareflow-status")) || 0, hop: hostOf(res.headers.get("x-final-url")), detail: await res.text().catch(() => "") });
   // Out of Function quota, Pages serves the shell for /_fetch instead.
   if (!res.ok || res.headers.get("content-type") !== "application/octet-stream") return fail("unavailable");
   status(`Converting ${host}...`);

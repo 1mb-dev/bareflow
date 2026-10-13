@@ -988,6 +988,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const server = createServer((req, res) => {
     if (req.url === "/page") { res.writeHead(200, { "content-type": "text/html", "set-cookie": "s=1", "x-upstream": "1" }); return res.end("<p>page</p>"); }
     if (req.url === "/%E6%97%A5") { res.writeHead(200, { "content-type": "text/html" }); return res.end("<p>ri</p>"); }
+    if (req.url === "/to-missing") { res.writeHead(302, { location: "https://b.example/missing" }); return res.end(); }
     if (req.url === "/to-own") { res.writeHead(302, { location: "https://bareflow.1mb.dev/" }); return res.end(); }
     if (req.url === "/to-port") { res.writeHead(302, { location: "http://b.example:8080/" }); return res.end(); }
     if (req.url === "/declared") { res.writeHead(200, { "content-type": "text/html", "content-length": 15 }); return res.end("<p>declared</p>"); }
@@ -1031,6 +1032,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const toOwn = await ask("https://a.example/to-own");
   const toPort = await ask("https://a.example/to-port");
   const missing = await ask("https://a.example/missing");
+  const movedMissing = await ask("https://a.example/to-missing");
   const big = await ask("https://a.example/big");
   const exact = await ask("https://a.example/exact");
   piped = 0;
@@ -1047,10 +1049,11 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     testSecret.every((r) => r.status === 503 && r.code === "unavailable" && r.calls.length === 0) && testLocal.every((r) => r.status === 200 && r.calls[0] === SITEVERIFY));
   record("edge", "guards", "credentials, port 8080, IPv4 and IPv6 literals, 1mb.dev, *.1mb.dev, *.pages.dev (trailing dots too), localhost, single-label names, file:, javascript: refused before Turnstile; private literal 403; a redirect to our zone or another port refused",
     guards.every(Boolean) && priv.status === 403 && priv.code === "blocked" && priv.calls.length === 0 && toOwn.code === "url" && toPort.code === "url");
-  record("edge", "response", "a page: inert octet-stream bytes, final URL (ASCII for a non-ASCII target), no upstream headers; 404 upstream with its status, a refusal and a private literal with none; no url, POST named",
+  record("edge", "response", "a page: inert octet-stream bytes, final URL (ASCII for a non-ASCII target), no upstream headers; 404 upstream with its status and the address that answered (after a redirect too), a refusal and a private literal with none; no url, POST named",
     ok.status === 200 && new TextDecoder().decode(ok.body) === "<p>page</p>" && h.get("content-type") === "application/octet-stream" && h.get("x-content-type-options") === "nosniff" &&
     h.get("content-disposition") === "attachment" && h.get("content-security-policy") === "sandbox; default-src 'none'" && h.get("x-final-url") === "https://a.example/page" &&
     !h.has("set-cookie") && !h.has("x-upstream") && wide.status === 200 && wide.headers.get("x-final-url") === "https://a.example/%E6%97%A5" && missing.status === 502 && missing.code === "upstream" && missing.headers.get("x-bareflow-status") === "404" &&
+    missing.headers.get("x-final-url") === "https://a.example/missing" && movedMissing.headers.get("x-bareflow-status") === "404" && movedMissing.headers.get("x-final-url") === "https://b.example/missing" &&
     !ok.headers.has("x-bareflow-status") && !toOwn.headers.has("x-bareflow-status") && !priv.headers.has("x-bareflow-status") && noUrl.status === 400 && post.status === 405);
   // Pass-through: a declared, uncompressed length within the web cap reaches the response unread,
   // through the limiter; a compressed, undeclared, or malformed one is read. After the 200, a body
@@ -1225,15 +1228,15 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const CAP = 120, capped = (s) => (s.length > CAP ? `${s.slice(0, CAP - 3)}...` : s);
   const desktopMedia = { matchMedia: (q) => ({ matches: q === "(min-width: 40rem)" }) };
   const passed = { render: (el, o) => o.callback("t") };
-  const answer = ({ status = 200, code, body = "", upstream, type = "application/octet-stream", cut = false }) => async () => ({
+  const answer = ({ status = 200, code, body = "", upstream, final, type = "application/octet-stream", cut = false }) => async () => ({
     status, ok: status < 400, text: async () => body,
-    headers: { get: (k) => ({ "x-bareflow-error": code, "x-bareflow-status": upstream && String(upstream), "content-type": code ? "text/plain; charset=utf-8" : type })[k] ?? null },
+    headers: { get: (k) => ({ "x-bareflow-error": code, "x-bareflow-status": upstream && String(upstream), "x-final-url": final, "content-type": code ? "text/plain; charset=utf-8" : type })[k] ?? null },
     arrayBuffer: async () => { if (cut) throw new TypeError("network error"); return new ArrayBuffer(8); },
   });
   const replying = (reply) => class { postMessage() { Promise.resolve().then(() => (reply === "load" ? this.onerror({ message: "" }) : this.onmessage({ data: reply }))); } terminate() {} };
   const emptyPage = await convert({ url: `https://${HOST}/guide/`, html: "<html><body></body></html>", retrievedAt: "2026-10-13T00:00:00Z", input: "paste" });
   const fetched = (extra) => ({ path: TARGET, extra: { turnstile: passed, Worker: replying({ markdown: "", doc: null }), ...extra } });
-  const edge = (status, code, body, upstream) => ({ ...fetched({ fetch: answer({ status, code, body, upstream }) }), raw: body });
+  const edge = (status, code, body, upstream, final) => ({ ...fetched({ fetch: answer({ status, code, body, upstream, final }) }), raw: body });
   const converted = (reply) => ({ ...fetched({ fetch: answer({}), Worker: replying(reply) }), raw: reply.message });
   const big = "x".repeat(300);
   // next: the phone's last sentence; paste: the desktop line adds the paste form (only then may the
@@ -1248,7 +1251,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     { id: "blocked", code: "blocked", ...edge(403, "blocked", "blocked address for 10.0.0.1: bareflow fetches public addresses only"), next: "address", host: true },
     { id: "timeout", code: "timeout", ...edge(504, "timeout", "no answer from https://docs.example.com/guide/ within 30000 ms (redirects included); retry, or open it in a browser"), next: "wait", host: true, paste: true, says: `within ${TIMEOUT / 1000} seconds` },
     ...[[401, "address", true], [403, "address", true], [404, "address", false], [410, "address", false], [429, "wait", true], [500, "wait", true], [503, "wait", true], [418, "address", true]]
-      .map(([n, next, paste]) => ({ id: `upstream ${n}`, code: "upstream", ...edge(502, "upstream", `HTTP ${n} from https://docs.example.com/guide/; check the URL (bareflow does not retry)`, n), next, paste, host: true, says: `HTTP ${n}` })),
+      .map(([n, next, paste]) => ({ id: `upstream ${n}`, code: "upstream", ...edge(502, "upstream", `HTTP ${n} from https://docs.example.com/guide/; check the URL (bareflow does not retry)`, n, `https://${HOST}/guide/`), next, paste, host: true, says: `HTTP ${n}`, not: "redirects to" })),
+    { id: "upstream 403 after a redirect", code: "upstream", ...edge(502, "upstream", "HTTP 403 from https://sso.vendor.example/login; check the URL (bareflow does not retry)", 403, "https://sso.vendor.example/login"), next: "address", paste: true, host: true, says: `${HOST} redirects to sso.vendor.example, which refused the request (HTTP 403)` },
     { id: "upstream, no status", code: "upstream", ...edge(502, "upstream", "more than 5 redirects from https://docs.example.com/guide/"), next: "original", paste: true, host: true, detail: true },
     { id: "over-cap (edge)", code: "over-cap", ...edge(502, "over-cap", "the page is over 1 MB, this site's limit"), next: "original", paste: true, host: true, says: `over ${WEB_MAX_BYTES / 1048576} MB`, desktopSays: `up to ${MAX_BYTES / 1048576} MB` },
     { id: "over-cap (paste)", code: "over-cap", desktopOnly: true, path: "/", act: submit("paste-form", { "paste-url": `https://${HOST}/guide/`, "paste-html": "<p>a</p>" }), extra: { Worker: replying({ error: "over-cap", message: "the pasted page is over 5 MB" }) }, next: "original", host: true, raw: "the pasted page is over 5 MB", says: `over ${MAX_BYTES / 1048576} MB` },

@@ -104,13 +104,14 @@ const INERT = { "x-content-type-options": "nosniff", "content-security-policy": 
 const fail = (status, code, message, extra) => new Response(message, { status, headers: { ...INERT, "content-type": "text/plain; charset=utf-8", "x-bareflow-error": code, ...extra } });
 
 // The code the app maps to a named error: token, unavailable, url, blocked, timeout, upstream,
-// over-cap. An upstream HTTP error also carries its status, which picks the app's next step.
+// over-cap. An upstream HTTP error also carries its status, which picks the app's next step, and
+// the address that answered (after redirects), which the app names.
 function failure(e) {
   const m = String(e?.message || e);
   if (e?.code === "url" || m.startsWith("not a URL") || m.startsWith("unsupported protocol")) return fail(400, "url", m);
   if (m.startsWith("blocked address")) return fail(403, "blocked", m);
   if (m.startsWith("no answer")) return fail(504, "timeout", m);
-  return fail(502, "upstream", m, e?.status ? { "x-bareflow-status": String(e.status) } : undefined);
+  return fail(502, "upstream", m, e?.status ? { "x-bareflow-status": String(e.status), "x-final-url": e.url } : undefined);
 }
 
 // "ok", "bad" (Turnstile said no), or "down" (siteverify did not answer usably: not the visitor's fault).
