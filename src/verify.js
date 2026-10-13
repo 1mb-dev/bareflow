@@ -954,14 +954,14 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     ["elements at the cap", flat(MAX_ELEMENTS - 3), "ok"], ["elements one past", flat(MAX_ELEMENTS - 2), "too-big"],
     ["5,000 unclosed li", `<ul>${"<li>x".repeat(5000)}</ul>`, "ok"], ["5,000 unclosed p", "<p>x".repeat(5000), "ok"],
     ["5,000 rows without end tags", `<table>${"<tr><td>a<td>b".repeat(5000)}</table>`, "ok"], ["3,000 optgroups without end tags", `<select>${"<optgroup><option>a".repeat(3000)}</select>`, "ok"],
-    ["5,000 unclosed p before blocks", "<p>x<div>y</div>".repeat(5000), "ok"], ["div in a script string", `<script>${"'<div>'+".repeat(5000)}''</script><p>x</p>`, "ok"]];
+    ["5,000 unclosed p before blocks", "<p>x<div>y</div>".repeat(5000), "ok"], ["div in a script string", `<script>${"'<div>'+".repeat(5000)}''</script><p>x</p>`, "ok"], ["5,000 self-closing paths in an svg", `<svg>${"<path/>".repeat(5000)}</svg>`, "ok"]];
   for (const [name, html, want] of LIMITS) { const got = limited(html); if (got !== want) seam.push(`${name}: ${got}, want ${want}`); }
   // The scan refuses before linkedom parses (linkedom is quadratic in depth): nesting through tags
   // it must count, values holding "<", and an apostrophe outside a quoted value.
   const scanned = (html) => { try { parseHtml(html); return "converted"; } catch (e) { return e.scanned ? "scan" : e.code; } };
   const DEEP = 5000, BYPASS = { ...Object.fromEntries(["html", "head", "body", "thead", "tfoot", "colgroup", "caption", "rb", "rtc", "div"].map((t) => [`<${t}> x${DEEP}`, `<${t}>`.repeat(DEEP)])),
     ...Object.fromEntries(["noscript", "template", "plaintext"].map((t) => [`<${t}> then divs`, `<${t}>${"<div>".repeat(DEEP)}`])),
-    "values holding <": '<div a="<">'.repeat(DEEP), "spaced = before a quote": "<div a = '<'>".repeat(DEEP), "apostrophe in an unquoted value": `<div a=x'>${"<div>".repeat(DEEP)}'` };
+    "values holding <": '<div a="<">'.repeat(DEEP), "spaced = before a quote": "<div a = '<'>".repeat(DEEP), "apostrophe in an unquoted value": `<div a=x'>${"<div>".repeat(DEEP)}'`, "self-closing outside svg": "<div/>".repeat(DEEP) };
   for (const [name, html] of Object.entries(BYPASS)) { const got = scanned(html); if (got !== "scan") seam.push(`scan ${name}: ${got}`); }
   // End tags: a stray one closes nothing; a matching one closes back to its element.
   if (scanned(`${"<div>".repeat(1000)}${"</span>".repeat(1000)}${"<div>".repeat(100)}`) !== "scan") seam.push("scan: stray end tags closed open elements");

@@ -120,7 +120,8 @@ function scanDepth(html) {
       continue;
     }
     if (SCAN_RAW.has(name)) { const end = lower.indexOf(`</${name}`, i); if (end < 0) break; i = end; continue; }
-    if (VOID.has(name) || SCAN_FLAT.has(name) || lower[j - 1] === "/") continue;
+    // htmlparser2 honors "/>" only inside svg (measured: <div/> and math's <mi/> nest).
+    if (VOID.has(name) || SCAN_FLAT.has(name) || (lower[j - 1] === "/" && count.get("svg"))) continue;
     open.push(name);
     count.set(name, (count.get(name) ?? 0) + 1);
     if (open.length > SCAN_DEPTH) return open.length;
