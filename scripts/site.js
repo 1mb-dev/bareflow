@@ -38,6 +38,7 @@ export const cardTags = (alt) => `<meta property="og:image" content="${CARD.url}
 // for the site), and the serif preload (every word on the page is bareflow's, in Mono).
 export function privacyPage(shell, main) {
   const cut = (s, part) => { if (s.split(part).length !== 2) throw new Error(`privacy page: the shell needs ${JSON.stringify(part)} exactly once`); return s.replace(part, ""); };
+  if (shell.split("<body").length !== 2) throw new Error("privacy page: the shell needs one <body");
   let head = shell.slice(0, shell.indexOf("<body"));
   for (const line of head.match(/^\s*<meta\b[^>]*\bproperty="og:[^>]*>\n/gm) ?? []) head = cut(head, line);
   head = cut(cut(head, '<script type="module" src="/_app/app.js"></script>\n'), '<link rel="preload" href="/_app/fonts/literata-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>\n');
