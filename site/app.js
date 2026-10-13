@@ -119,8 +119,12 @@ function token() {
           window.turnstile.render($("challenge"), {
             sitekey: document.body.dataset.sitekey,
             callback: (t) => { $("challenge").hidden = true; resolve(t); },
-            "error-callback": () => reject(new Error("token")),
-            "timeout-callback": () => reject(new Error("check-timeout")),
+            // The status says reload: Turnstile's own retry and refresh would put a live widget
+            // under it whose answer nothing waits for.
+            retry: "never",
+            "refresh-timeout": "never",
+            "error-callback": () => { $("challenge").hidden = true; reject(new Error("token")); },
+            "timeout-callback": () => { $("challenge").hidden = true; reject(new Error("check-timeout")); },
           });
         } catch { reject(new Error("unavailable")); }
         return;

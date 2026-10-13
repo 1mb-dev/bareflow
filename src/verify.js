@@ -1314,6 +1314,21 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     record("web", `states: ${row.id}`, `${row.id}: what happened, then ${row.next}${row.paste ? " (desktop: or paste)" : ""}${row.detail ? ", server words as detail" : ""}${bad.length ? `; ${bad.join("; ")}${phone ? ` | phone: ${JSON.stringify(phone.main)}` : ""} | desktop: ${JSON.stringify(desk.main)}` : ""}`,
       !bad.length);
   }
+  // The widget, failed or timed out, leaves the page: no retry or refresh of its own, hidden, and a
+  // late answer neither fetches nor moves the status.
+  const widget = async (fire) => {
+    let opts;
+    const run = runApp(TARGET, null, html, false, { turnstile: { render: (el, o) => { el.textContent = "widget"; opts = o; fire(o); } } });
+    await flush(run);
+    const said = run.d.getElementById("status").textContent, hidden = run.d.getElementById("challenge").hidden;
+    opts.callback("late"); // its own handler hides the widget, so hidden is read before
+    await flush(run);
+    return { opts, said, still: run.d.getElementById("status").textContent === said, hidden, fetched: String(run).includes("fetch") };
+  };
+  const widgets = { error: await widget((o) => o["error-callback"]()), timeout: await widget((o) => o["timeout-callback"]()) };
+  const widgetBad = Object.entries(widgets).filter(([, w]) => w.opts?.retry !== "never" || w.opts?.["refresh-timeout"] !== "never" || !w.hidden || !w.still || w.fetched).map(([k, w]) => `${k}: ${JSON.stringify({ retry: w.opts?.retry, refresh: w.opts?.["refresh-timeout"], hidden: w.hidden, still: w.still, fetched: w.fetched })}`);
+  record("web", "states: widget", `Turnstile renders with retry and refresh-timeout "never"; on error or timeout the widget hides, and a late answer neither fetches nor changes the status${widgetBad.length ? `: ${widgetBad.join(" | ")}` : ""}`,
+    !widgetBad.length);
   // #status is the live region, inside #result, which is hidden until a route shows it: a write in
   // the same task as the unhide can go unannounced, so the first write waits a task.
   const liveRoute = runApp("/javascript:alert(1)"), livePaste = runApp("/", submit("paste-form", { "paste-url": `https://${HOST}/a`, "paste-html": "<p>a</p>" }));
