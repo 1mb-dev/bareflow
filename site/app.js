@@ -6,7 +6,10 @@ import { origin, reachable, showView } from "./view.js";
 const $ = (id) => document.getElementById(id);
 const ORIGIN = location.origin;
 const ASK = "Give a page address, like https://docs.example.com/guide/install.";
-const UNAVAILABLE = "Fetching is unavailable right now. Try again later.";
+const UNAVAILABLE = "Fetching is unavailable right now.";
+const LATER = "Try again later.";
+// Offered only where the home shows the paste form: from 40rem (style.css .desktop).
+const PASTE = "Or paste the page's HTML on the home page.";
 
 // For failures that arrive without a message of their own.
 const NAMED = {
@@ -24,7 +27,10 @@ function status(text) { $("status").textContent = text; }
 
 function fail(code, message) {
   const said = sentence(message);
-  status(code === "unavailable" ? [said, UNAVAILABLE].filter(Boolean).join(" ") : said || NAMED[code]);
+  if (code === "unavailable") {
+    const what = said || UNAVAILABLE;
+    status([what, /try again later/i.test(what) ? "" : LATER, globalThis.matchMedia?.("(min-width: 40rem)").matches ? PASTE : ""].filter(Boolean).join(" "));
+  } else status(said || NAMED[code]);
   $("result").classList.add("failed");
 }
 

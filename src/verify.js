@@ -1159,7 +1159,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   // Turnstile's script loads only to fetch a page: the built app.js, run on the built shell, adds
   // exactly that script on a target route, and none on the home, a paste, or a refused address.
   const TURNSTILE = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-  const runApp = (path, act, page = html, wide = false) => {
+  const runApp = (path, act, page = html, wide = false, extra = {}) => {
     const w = parseHTML(page), did = [], timers = [];
     // linkedom lays nothing out; wide makes every block overflow, as code does on a phone. Every
     // linkedom document shares one HTMLElement prototype, so the stand-ins come off after this run.
@@ -1170,6 +1170,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
       document: w.document, location: { href: `https://bareflow.1mb.dev${path}`, origin: "https://bareflow.1mb.dev", assign: (u) => did.push(`assign ${u}`) },
       history: { replaceState() {}, pushState() {} }, fetch: (u) => { did.push(`fetch ${u}`); return new Promise(() => {}); },
       Worker: class { postMessage() { did.push("worker"); } terminate() {} }, setTimeout: (f) => timers.push(f), clearTimeout() {}, URL, URLSearchParams,
+      ...extra,
     };
     ctx.window = ctx;
     vm.runInNewContext(appCode, ctx);
@@ -1197,14 +1198,17 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     focusable.length === 4 && focusable.every((t) => t === "0") && String(homeRun) === "" && canary.scrollWidth === undefined && canary.clientWidth === undefined);
   const want = { home: "", query: "", go: "assign https://bareflow.1mb.dev/https://docs.example.com/a", paste: "worker", refused: "", target: TURNSTILE, bare: TURNSTILE };
   const wrong = Object.keys(want).filter((k) => String(loads[k]) !== want[k]);
-  // A blocked script fails the fetch at the next check, not after the 10 s wait.
-  const { d: blockedDoc, timers } = runApp("/https://docs.example.com/guide/");
-  blockedDoc.querySelector(`script[src="${TURNSTILE}"]`)?.onerror?.();
-  timers.splice(0).forEach((f) => f());
-  await new Promise((r) => setImmediate(r));
-  const blockedSaid = blockedDoc.getElementById("status").textContent;
-  record("web", "turnstile", `Turnstile's script is added on a target route only, once, from its one address; the home, a submit, a paste, and a refused address make no request; a blocked script fails at the next check${wrong.map((k) => ` ${k}: ${JSON.stringify(String(loads[k]))}`).join("")}${blockedSaid === "Fetching is unavailable right now. Try again later." ? "" : `; blocked: ${JSON.stringify(blockedSaid)}`}`,
-    !wrong.length && blockedSaid === "Fetching is unavailable right now. Try again later.");
+  // A blocked script fails the fetch at the next check, not after the 10 s wait. The message says
+  // to try later once, and offers the paste form only where the home shows it (from 40rem).
+  const settle = async (run) => { run.timers.splice(0).forEach((f) => f()); for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); return run.d.getElementById("status").textContent; };
+  const blockedRun = (extra) => { const run = runApp("/https://docs.example.com/guide/", null, html, false, extra); run.d.querySelector(`script[src="${TURNSTILE}"]`)?.onerror?.(); return settle(run); };
+  const desktop = { matchMedia: (q) => ({ matches: q === "(min-width: 40rem)" }) };
+  const answered = { turnstile: { render: (el, o) => o.callback("t") }, fetch: async () => ({ status: 503, headers: { get: (k) => (k === "x-bareflow-error" ? "unavailable" : null) }, text: async () => "the bot check service did not answer; try again later" }) };
+  const UNAVAILABLE_SAID = "Fetching is unavailable right now. Try again later.";
+  const said = { phone: await blockedRun(), desktop: await blockedRun(desktop), served: await settle(runApp("/https://docs.example.com/guide/", null, html, false, answered)) };
+  const saidWrong = Object.entries({ phone: UNAVAILABLE_SAID, desktop: `${UNAVAILABLE_SAID} Or paste the page's HTML on the home page.`, served: "The bot check service did not answer; try again later." }).filter(([k, v]) => said[k] !== v).map(([k]) => `${k}: ${JSON.stringify(said[k])}`);
+  record("web", "turnstile", `Turnstile's script is added on a target route only, once, from its one address; the home, a submit, a paste, and a refused address make no request; a blocked script fails at the next check${wrong.map((k) => ` ${k}: ${JSON.stringify(String(loads[k]))}`).join("")}${saidWrong.length ? `; ${saidWrong.join(" | ")}` : ""}`,
+    !wrong.length && !saidWrong.length);
   record("web", "claims", `no npx in site/, the built site, or the Function's messages (${served.length} files)${npx.length ? `: ${npx.join(", ")}` : ""}`,
     !npx.length && served.some((f) => f.endsWith(join("_app", "app.js"))) && served.some((f) => f.endsWith("index.html")));
   // The theme: theme.js is a classic script in <head> before the stylesheet, so it sets data-theme
