@@ -16,7 +16,7 @@ export const REQUEST_HEADERS = {
 };
 export const REDIRECT = new Set([301, 302, 303, 307, 308]);
 
-export const noAnswer = (url, budget) => new Error(`no answer from ${url} within ${budget} ms (redirects included); retry, or open it in a browser`);
+export const noAnswer = (url, budget) => Object.assign(new Error(`no answer from ${url} within ${budget} ms (redirects included); retry, or open it in a browser`), { url });
 export const blocked = (host) => new Error(`blocked address for ${host}: bareflow fetches public addresses only`);
 
 // The one URL check: parsed, and http(s). Both the fetch and a pasted page's asserted URL go

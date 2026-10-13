@@ -104,14 +104,14 @@ const INERT = { "x-content-type-options": "nosniff", "content-security-policy": 
 const fail = (status, code, message, extra) => new Response(message, { status, headers: { ...INERT, "content-type": "text/plain; charset=utf-8", "x-bareflow-error": code, ...extra } });
 
 // The code the app maps to a named error: token, unavailable, url, blocked, timeout, upstream,
-// over-cap. An upstream HTTP error also carries its status, which picks the app's next step, and
-// the address that answered (after redirects), which the app names.
+// over-cap, redirect. An upstream HTTP error also carries its status, which picks the app's next
+// step; it and a timeout carry the address reached last (after redirects), which the app names.
 const isUrl = (e, m = String(e?.message || e)) => e?.code === "url" || m.startsWith("not a URL") || m.startsWith("unsupported protocol");
 function failure(e) {
   const m = String(e?.message || e);
   if (isUrl(e)) return fail(400, "url", m);
   if (m.startsWith("blocked address")) return fail(403, "blocked", m);
-  if (m.startsWith("no answer")) return fail(504, "timeout", m);
+  if (m.startsWith("no answer")) return fail(504, "timeout", m, e?.url ? { "x-final-url": e.url } : undefined);
   return fail(502, "upstream", m, e?.status ? { "x-bareflow-status": String(e.status), "x-final-url": e.url } : undefined);
 }
 

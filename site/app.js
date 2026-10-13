@@ -18,14 +18,15 @@ const LATER_OR_PASTE = "Try again later, or save the page and paste its HTML on 
 const OR_PASTE = "Or paste the page's HTML on the home page.";
 const original = (h) => `Open the original at ${h}.`;
 const hostOf = (u) => { try { return new URL(u).hostname; } catch { return ""; } };
+// The subject of a sentence about the host that answered: hop, when a redirect led away from h.
+const via = (h, hop) => (hop && hop !== h ? `${h} redirects to ${hop}, which` : h);
 const SAY = {
   url: () => ["This site does not fetch that address.", CHECK],
   blocked: (h) => [`${h} is, or leads to, a private network address; this site fetches public addresses only.`, CHECK],
-  timeout: (h) => [`${h} did not answer within 30 seconds.`, LATER, LATER_OR_PASTE],
-  // hop: the host that answered, when a redirect led away from h.
+  timeout: (h, _, __, hop) => [`${via(h, hop)} did not answer within 30 seconds.`, LATER, LATER_OR_PASTE],
   upstream: (h, n, _, hop) => {
     if (!n) return [`This site could not read the page from ${h}.`, original(h), "Save it from your browser and paste its HTML on the home page."];
-    const who = hop && hop !== h ? `${h} redirects to ${hop}, which` : h;
+    const who = via(h, hop);
     if (n === 401 || n === 403) return [`${who} refused the request (HTTP ${n}).`, CHECK, CHECK_OR_PASTE];
     if (n === 404 || n === 410) return [`${who} has no page at that address (HTTP ${n}).`, CHECK];
     if (n === 429) return [`${who} is limiting requests (HTTP 429).`, LATER, LATER_OR_PASTE];
