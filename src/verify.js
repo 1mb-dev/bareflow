@@ -1154,7 +1154,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     fontFiles.length === 3 && fontTotal <= FONT_CAP && Object.keys(sourced).length === fontFiles.length && !unsourced.length &&
     linked.length >= 5 && !unlinked.length && (ofl.match(/SIL OPEN FONT LICENSE Version 1\.1/g) ?? []).length === 2);
   record("web", "shell", "the shell's text for curl and agents names no command that does not exist yet; sitekey set; scripts from self only",
-    visible === "bareflow converts this page in your browser. The CLI and MCP server ship on npm with 0.5.0. Source: github.com/1mb-dev/bareflow." && html.includes('data-sitekey="test-sitekey"') &&
+    visible === "bareflow converts this page in your browser. The CLI and MCP server ship on npm. Source: github.com/1mb-dev/bareflow." && html.includes('data-sitekey="test-sitekey"') &&
     scripts.length === 2 && scripts.every((s) => s.startsWith("/_app/")));
   // Turnstile's script loads only to fetch a page: the built app.js, run on the built shell, adds
   // exactly that script on a target route, and none on the home, a paste, or a refused address.
@@ -1270,7 +1270,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     }
   }
   // The home's words: the door, the why pair quoted from its records, and a footer that says only
-  // what exists (no privacy page yet, nothing "soon"), with this build's version.
+  // what exists (no privacy page yet, nothing "soon"), opening with bareflow, with this build's version.
   const wordsBad = [];
   const say = (sel) => homeDoc.querySelector(sel)?.textContent.replace(/\s+/g, " ").trim();
   const wBytes = await readFile(join(ROOT, "usage/seed/runs/S1/W.md")), w = wBytes.toString("utf8").trim(), readme = await readFile(join(ROOT, "README.md"), "utf8");
@@ -1281,8 +1281,11 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   if (quotes.length !== 2 || !w.endsWith(quoted(0) ?? "\0") || why[1] !== `Claude Code's WebFetch on deno add (${wBytes.length} bytes) ends:` || why[2] !== "The Deno docs end:" ||
     !readme.includes(quoted(1) ?? "\0") || !readme.includes("\n## Why\n")) wordsBad.push("why pair");
   const foot = [...homeDoc.querySelector(".foot").children].map((e) => e.textContent);
-  if (JSON.stringify(foot) !== JSON.stringify(["source on GitHub", "code: MIT", `v${VERSION}`, "theme: auto"]) || JSON.stringify([...shellDoc.querySelector(".foot").children].map((e) => e.textContent)) !== JSON.stringify(foot)) wordsBad.push(`footer: ${foot.join(" | ")}`);
+  if (JSON.stringify(foot) !== JSON.stringify(["bareflow", `v${VERSION}`, "code: MIT", "source on GitHub", "theme: auto"]) || homeDoc.querySelector(".foot > a.name")?.getAttribute("href") !== "/" || JSON.stringify([...shellDoc.querySelector(".foot").children].map((e) => e.textContent)) !== JSON.stringify(foot)) wordsBad.push(`footer: ${foot.join(" | ")}`);
   if (/\b(privacy|soon)\b/i.test(homeDoc.body.textContent)) wordsBad.push("privacy or soon");
+  // The version lives in the footer only; the prose states the end posture without one.
+  const prose = [homeDoc, shellDoc].map((d) => { const b = d.body.cloneNode(true); b.querySelector(".foot")?.remove(); return b.textContent; }).join(" ");
+  if (prose.includes(VERSION)) wordsBad.push("a version in the prose");
   record("web", "words", `the home's door, its why pair quoted from usage/ and the README, a footer of only what exists with v${VERSION}${wordsBad.length ? `: ${wordsBad.join(" | ")}` : ""}`, !wordsBad.length);
   const hostile = "$&$'$`$$</script><script>x</script>";
   if (splice(`a${MARK}b`, hostile) !== `a${hostile}b`) exBad.push("the splice reads the example as a pattern");
