@@ -79,26 +79,50 @@ export class NotHtml extends Refused {
 // (100,000 levels, 0.5 MB: 4.7 s), so a linear scan of the source refuses extreme depth before it
 // parses; the parsed tree is then measured exactly. Both iterate: a recursive walk would overflow
 // the stack on the inputs it exists to refuse.
-const SCAN_DEPTH = 4096;
+// 4x the tree's cap and 36x the frozen pages' deepest scan (28): htmlparser2 checks each end tag
+// against its open stack, so the open depth it is handed bounds the cost of stray end tags too.
+const SCAN_DEPTH = 1024;
 const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
-// Elements whose end tag is optional, or implied by a sibling, are not counted: a page that leaves
-// them open is valid and nests no deeper for it. Nesting through them needs a counted container
-// (table, ul, div), so the scan still sees it, at worst a few times shallower than it is.
-const OPTIONAL_END = new Set(["html", "head", "body", "p", "li", "dt", "dd", "option", "optgroup", "tr", "td", "th", "thead", "tbody", "tfoot", "colgroup", "caption", "rb", "rt", "rp", "rtc"]);
-const RAW = new Set(["script", "style", "textarea", "title", "xmp", "noscript", "template", "plaintext"]);
+// Not counted: the elements htmlparser2 closes when the next one opens (measured: repeated 3,000
+// times each, linkedom builds them flat), and the raw-text elements it does not parse inside. The
+// rest of the optional-end set (html, head, body, thead, tfoot, colgroup, caption, rb, rtc) and
+// noscript, template, plaintext nest in linkedom, so they count. A list here is a claim about the
+// parser: verify checks each entry against linkedom.
+export const SCAN_FLAT = new Set(["p", "li", "dt", "dd", "option", "optgroup", "tr", "td", "th", "tbody", "rt", "rp"]);
+export const SCAN_RAW = new Set(["script", "style", "textarea", "title", "xmp"]);
+const NAME = /[a-zA-Z][\w:-]*/y;
 
-// The depth of counted containers in the source, linear: a tag cannot cross "<", and raw-text
-// content is skipped with one search of the lowercased source.
+// The depth of counted elements in the source, in one pass: each "<" is read once, a quoted
+// attribute value is skipped whole (it may hold "<" or ">"), and raw text is skipped to its end tag.
+// An end tag searches the open list only when its name is open (counted per name), and the search
+// stops at what it then removes, so stray end tags cost nothing and the whole scan stays linear.
 function scanDepth(html) {
-  const lower = html.toLowerCase(), open = [];
-  const tag = /<!--[\s\S]*?(?:-->|$)|<(\/?)([a-z][\w:-]*)[^<>]*>/g;
-  for (let m; (m = tag.exec(lower)); ) {
-    if (!m[2]) continue;
-    const name = m[2];
-    if (m[1]) { const at = open.lastIndexOf(name); if (at >= 0) open.length = at; continue; }
-    if (RAW.has(name)) { const close = lower.indexOf(`</${name}`, tag.lastIndex); tag.lastIndex = close < 0 ? lower.length : close; continue; }
-    if (VOID.has(name) || OPTIONAL_END.has(name) || m[0].endsWith("/>")) continue;
+  const lower = html.toLowerCase(), open = [], count = new Map(), n = html.length;
+  for (let i = lower.indexOf("<"); i >= 0 && i < n; i = lower.indexOf("<", i)) {
+    if (lower.startsWith("<!--", i)) { const end = lower.indexOf("-->", i + 4); if (end < 0) break; i = end + 3; continue; }
+    const close = lower[i + 1] === "/";
+    NAME.lastIndex = i + (close ? 2 : 1);
+    const name = NAME.exec(lower)?.[0];
+    if (!name) { i++; continue; }
+    let j = NAME.lastIndex;
+    // A quote opens a value only after "=" (whitespace between allowed); elsewhere it is text.
+    for (let eq = false; j < n && lower[j] !== ">"; j++) {
+      const c = lower[j];
+      if ((c === '"' || c === "'") && eq) { j = lower.indexOf(c, j + 1); if (j < 0) return open.length; eq = false; continue; }
+      if (c === "=") eq = true;
+      else if (c !== " " && c !== "\t" && c !== "\n" && c !== "\r" && c !== "\f") eq = false;
+    }
+    if (j >= n) break;
+    i = j + 1;
+    if (close) {
+      if (!count.get(name)) continue;
+      for (let at = open.length - 1, top; at >= 0; at--) { top = open.pop(); count.set(top, count.get(top) - 1); if (top === name) break; }
+      continue;
+    }
+    if (SCAN_RAW.has(name)) { const end = lower.indexOf(`</${name}`, i); if (end < 0) break; i = end; continue; }
+    if (VOID.has(name) || SCAN_FLAT.has(name) || lower[j - 1] === "/") continue;
     open.push(name);
+    count.set(name, (count.get(name) ?? 0) + 1);
     if (open.length > SCAN_DEPTH) return open.length;
   }
   return open.length;
@@ -119,7 +143,7 @@ function measure(root) {
 export function parseHtml(html) {
   const rest = html.slice(html.match(LEAD)[0].length);
   if (/^[[{]/.test(rest)) throw new NotHtml(html);
-  if (scanDepth(html) > SCAN_DEPTH) throw new Refused("too-deep", `the page nests more than ${MAX_DEPTH} levels deep`);
+  if (scanDepth(html) > SCAN_DEPTH) throw Object.assign(new Refused("too-deep", `the page nests more than ${MAX_DEPTH} levels deep`), { scanned: true });
   let window = parseHTML(html);
   if (!window.document.documentElement) throw new NotHtml(html);
   if (![...window.document.childNodes].some((n) => element(n, "HTML"))) window = parseHTML(`${html.slice(0, html.length - rest.length)}<html>${rest}`);
