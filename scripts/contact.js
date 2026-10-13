@@ -61,7 +61,7 @@ const STATES = [
   ...["url-edge", "url-edge-long", "blocked", "timeout", "upstream-403", "upstream-404", "upstream-429", "upstream-503", "upstream-418", "upstream-none", "over-cap"].map((id) => [id, `/${TARGET}`]),
   ["long-host", "/https://a-subdomain-label-that-runs-on-without-any-break-at-all.docs.example.com/guide/"],
   ["paste-over-cap", "/", true],
-  ...["token", "check-timeout", "challenge", "limited", "unavailable", "cut", "not-html", "empty", "convert", "converter"].map((id) => [id, `/${TARGET}`]),
+  ...["token", "check-timeout", "challenge", "check-slow", "limited", "unavailable", "cut", "not-html", "empty", "convert", "converter"].map((id) => [id, `/${TARGET}`]),
 ];
 const statesSheet = `<!doctype html>
 <html><head><meta charset="utf-8"><title>bareflow states</title>

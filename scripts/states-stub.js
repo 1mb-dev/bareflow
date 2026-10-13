@@ -42,10 +42,10 @@
     document.head.append = (...nodes) => {
       for (const n of nodes) {
         if (!String(n.src || "").startsWith("https://challenges.cloudflare.com/")) append(n);
-        else if (state === "challenge") setTimeout(() => n.onerror?.(), 300);
+        else if (state === "challenge") setTimeout(() => n.onerror?.(), 300); // else dropped unanswered: check-slow waits out the 10 s
       }
     };
-    if (state !== "challenge") {
+    if (state !== "challenge" && state !== "check-slow") {
       window.turnstile = { render: (_, o) => setTimeout(() => (state === "check-timeout" ? o["timeout-callback"]?.() : o.callback("stub")), 300) };
     }
   }
