@@ -18,7 +18,10 @@ const flat = (t) => t.replace(/\s+/g, " ").trim();
 
 // The IR and the excerpt of it the home shows: blocks 2-5 of the one section (the first heading,
 // its paragraph, the Options API code, and the remains of the Composition API code that L1 marks).
-export async function excerpt() {
+// One run per process: the build and verify ask for it several times. Callers only read it.
+let once;
+export const excerpt = () => (once ??= cut());
+async function cut() {
   const { doc } = await run({ url: EXAMPLE.url, html: await readFile(join(ROOT, EXAMPLE.fixture), "utf8"), retrievedAt: FIXED });
   const [s] = doc.sections, b = s.blocks, skipped = b.slice(0, 2), shown = b.slice(2, 6);
   const fits = doc.sections.length === 1 && !s.children.length && s.losses.length === 2 &&

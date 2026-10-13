@@ -31,6 +31,9 @@ export const cardTags = (alt) => `<meta property="og:image" content="${CARD.url}
 <meta name="twitter:card" content="summary_large_image">
 `;
 
+// _app/style.css: the tokens first (verify's design check reads them there), then the rules.
+export const stylesheet = async () => (await Promise.all(["site/tokens.css", "site/style.css"].map((f) => readFile(join(ROOT, f), "utf8")))).join("\n");
+
 export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.TURNSTILE_SITEKEY || TEST_SITEKEY) {
   await rm(out, { recursive: true, force: true });
   await mkdir(join(out, "_app"), { recursive: true });
@@ -39,17 +42,19 @@ export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.
   const html = (await readFile(join(ROOT, "site/index.html"), "utf8")).replace("__SITEKEY__", () => sitekey).replace("__VERSION__", () => VERSION)
     .replace("__PAPER__", () => light.paper).replace("__PAPER_DARK__", () => dark.paper);
   for (const m of [MARK, CARD_MARK]) if (html.split(m).length !== 2) throw new Error(`site/index.html: needs ${JSON.stringify(m)} exactly once`);
+  // Awaited here, together: an await inside the array below would hold back every entry after it.
+  const [example, alt, worker, css] = await Promise.all([exampleHtml(), cardWords().then(cardAlt), bundle().then(async (b) => `${b}\n${await readFile(join(ROOT, "site/worker.js"), "utf8")}`), stylesheet()]);
   await Promise.all([
     writeFile(join(out, "index.html"), splice(splice(html, ""), "", CARD_MARK)),
-    writeFile(join(out, "_app/home.html"), splice(splice(html, `${await exampleHtml()}\n`), cardTags(cardAlt(await cardWords())), CARD_MARK)),
+    writeFile(join(out, "_app/home.html"), splice(splice(html, `${example}\n`), cardTags(alt), CARD_MARK)),
     writeFile(join(out, "_app/app.js"), app.outputFiles[0].text),
     copyFile(join(ROOT, "site/theme.js"), join(out, "_app/theme.js")),
     writeFile(join(out, "_app/icon.svg"), iconSvg(tokens)),
     writeFile(join(out, "_app/touch.png"), iconPng(tokens, 180, 9)),
     writeFile(join(out, "favicon.ico"), iconIco(tokens)),
     copyFile(join(ROOT, CARD.file), join(out, "_app/card.png")),
-    writeFile(join(out, "_app/worker.js"), `${await bundle()}\n${await readFile(join(ROOT, "site/worker.js"), "utf8")}`),
-    writeFile(join(out, "_app/style.css"), (await Promise.all(["site/tokens.css", "site/style.css"].map((f) => readFile(join(ROOT, f), "utf8")))).join("\n")),
+    writeFile(join(out, "_app/worker.js"), worker),
+    writeFile(join(out, "_app/style.css"), css),
     cp(join(ROOT, "site/fonts"), join(out, "_app/fonts"), { recursive: true }),
     copyFile(join(ROOT, "site/_headers"), join(out, "_headers")),
     copyFile(join(ROOT, "site/_routes.json"), join(out, "_routes.json")),

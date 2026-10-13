@@ -14,6 +14,7 @@ import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { excerpt, exampleHtml } from "./example.js";
 import { chunk, chunks } from "./icon.js";
+import { stylesheet } from "./site.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const CARD = { file: "site/card.png", url: "https://bareflow.1mb.dev/_app/card.png", width: 1200, height: 630, key: "bareflow-card" };
@@ -45,7 +46,7 @@ async function render() {
   const dir = await mkdtemp(join(tmpdir(), "bareflow-card-"));
   try {
     await mkdir(join(dir, "_app"));
-    await writeFile(join(dir, "_app/style.css"), (await Promise.all(["site/tokens.css", "site/style.css"].map((f) => readFile(join(ROOT, f), "utf8")))).join("\n"));
+    await writeFile(join(dir, "_app/style.css"), await stylesheet());
     await cp(join(ROOT, "site/fonts"), join(dir, "_app/fonts"), { recursive: true });
     // The crop: the tape full-bleed at the top, then the page; no captions, box, or losses.
     await writeFile(join(dir, "card.html"), `<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8">
