@@ -34,7 +34,7 @@ async function cut() {
 
 // The example as an element of document d: a heading and a figure holding a still tape, the
 // excerpt, the losses with L1 open, and the attribution; bareflow says nothing inside the page's
-// area but the elisions (huddle-2026-10-13-preview: no captions). No ids (a paste renders a page into the
+// area but the elisions. No ids (a paste renders a page into the
 // same document), no controls.
 export async function example(d) {
   const { doc, part, skipped } = await excerpt();

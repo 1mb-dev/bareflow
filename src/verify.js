@@ -1153,7 +1153,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("web", "fonts", `${fontFiles.length} fonts, ${fontTotal} bytes (cap ${FONT_CAP}), each equal to its SOURCE sha256; every url() and preload resolves; OFL.txt ships${[...unsourced, ...unlinked].length ? `: ${[...unsourced, ...unlinked].join(", ")}` : ""}`,
     fontFiles.length === 3 && fontTotal <= FONT_CAP && Object.keys(sourced).length === fontFiles.length && !unsourced.length &&
     linked.length >= 5 && !unlinked.length && (ofl.match(/SIL OPEN FONT LICENSE Version 1\.1/g) ?? []).length === 2);
-  record("web", "shell", "the shell's text for curl and agents names no command that does not exist yet; sitekey set; scripts from self only",
+  record("web", "shell", "the shell's visible text for curl and agents equals the pinned sentence (CLI and MCP server as end posture, no version); sitekey set; scripts from self only",
     visible === "bareflow converts this page in your browser. The CLI and MCP server ship on npm. Source: github.com/1mb-dev/bareflow." && html.includes('data-sitekey="test-sitekey"') &&
     scripts.length === 2 && scripts.every((s) => s.startsWith("/_app/")));
   // Turnstile's script loads only to fetch a page: the built app.js, run on the built shell, adds
