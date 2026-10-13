@@ -116,6 +116,18 @@ function loadTurnstile() {
   document.head.append(s);
 }
 
+// Turnstile's error codes (its client-side error-codes page): a sitekey or domain fault is this
+// site's; an iframe that could not load is a blocked check; a timed-out challenge times out; the
+// rest (300*, 600*, a wrong clock) failed the check.
+const SITE_FAULT = new Set(["110100", "110110", "110200", "400020", "400021", "400070"]);
+function widgetError(code) {
+  const c = String(code);
+  if (SITE_FAULT.has(c)) return "unavailable";
+  if (c === "200500") return "challenge";
+  if (c === "110600" || c === "110620") return "check-timeout";
+  return "token";
+}
+
 // One Turnstile token per fetch; tokens are single-use.
 function token() {
   return new Promise((resolve, reject) => {
@@ -133,7 +145,7 @@ function token() {
             // under it whose answer nothing waits for.
             retry: "never",
             "refresh-timeout": "never",
-            "error-callback": () => { $("challenge").hidden = true; reject(new Error("token")); },
+            "error-callback": (code) => { $("challenge").hidden = true; reject(new Error(widgetError(code))); },
             "timeout-callback": () => { $("challenge").hidden = true; reject(new Error("check-timeout")); },
           });
         } catch { reject(new Error("unavailable")); }

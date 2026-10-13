@@ -1265,6 +1265,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     { id: "empty (paste)", code: "empty", desktopOnly: true, path: "/", act: submit("paste-form", { "paste-url": `https://${HOST}/guide/`, "paste-html": "<p></p>" }), extra: { Worker: replying({ error: "empty", message: "the page has no readable content; sites that render with JavaScript come back empty", ...emptyPage }) }, next: "original", host: true, shown: true, says: "pasted HTML", not: "came back from", raw: "the page has no readable content; sites that render with JavaScript come back empty" },
     { id: "token", code: "token", ...edge(403, "token", "the Turnstile check failed or expired; reload the page"), next: "reload" },
     { id: "token, empty body", code: "token", ...edge(403, "token", ""), next: "reload" },
+    ...[["110200", "unavailable", "wait", true], ["400070", "unavailable", "wait", true], ["200500", "challenge", "reload", true], ["110620", "check-timeout", "reload", false], ["300030", "token", "reload", false]]
+      .map(([c, code, next, paste]) => ({ id: `widget error ${c}`, code, path: TARGET, extra: { turnstile: { render: (_, o) => o["error-callback"](c) } }, next, paste })),
     { id: "check-timeout", code: "check-timeout", path: TARGET, extra: { turnstile: { render: (el, o) => o["timeout-callback"]?.() } }, next: "reload" },
     { id: "challenge", code: "challenge", path: TARGET, blockScript: true, next: "reload", paste: true },
     { id: "check-slow", code: "check-slow", path: TARGET, extra: { Date: { now: ((t) => () => (t += 2000))(0) } }, next: "reload", paste: true },
