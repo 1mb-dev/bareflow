@@ -26,7 +26,7 @@
 <section id="landing">
   <a class="name" href="/">bareflow</a>
   <h1>Remove the website. Preserve the document.</h1>
-  <p class="lede">Your agent gets the docs page itself, not a summary, with every loss marked.</p>
+  <p class="lede">Read a docs page in its own words, without the site around it. Each part bareflow could not keep is listed.</p>
   <form id="go">
     <label for="target">Docs page address</label>
     <div class="row"><input id="target" name="target" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://docs.example.com/guide/install" required><button type="submit">Convert</button></div>
@@ -35,9 +35,11 @@
 <!-- example -->
   <section class="why">
     <h2>why</h2>
-    <p>A summarizing fetch hands your agent a model's paraphrase of the page and says nothing about what it left out. bareflow hands it the page's own words, with a note for each part it could not keep.</p>
-    <p>Claude Code's WebFetch on deno add (457 bytes) ends: "This flag strips the scope prefix, allowing you to import the package using only its base name rather than the full scoped identifier."</p>
-    <p>The Deno docs end: "Packages given an explicit alias are unaffected."</p>
+    <p>A summarizing fetch returns a model's paraphrase of the page and says nothing about what it left out. bareflow keeps the page's own words and lists each part it could not keep.</p>
+    <p>Claude Code's WebFetch on deno add (457 bytes) ends:</p>
+    <blockquote>This flag strips the scope prefix, allowing you to import the package using only its base name rather than the full scoped identifier.</blockquote>
+    <p>The Deno docs end:</p>
+    <blockquote>Packages given an explicit alias are unaffected.</blockquote>
     <p><a href="https://github.com/1mb-dev/bareflow#why">How this was measured</a></p>
   </section>
   <section class="use">
@@ -56,7 +58,7 @@
         </form>
       </details>
     </div>
-    <p><span class="use-where">agents:</span> A CLI (<code>bareflow &lt;url&gt; --json</code>) and an MCP server ship on npm with 0.5.0.</p>
+    <p><span class="use-where">agents:</span> a CLI (<code>bareflow &lt;url&gt; --json</code>) and an MCP server ship on npm with 0.5.0.</p>
   </section>
 </section>
 

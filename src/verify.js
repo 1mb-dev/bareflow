@@ -1253,14 +1253,14 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     lost.querySelector("details").setAttribute("open", "");
     if (ex.querySelector(".losses")?.outerHTML !== lost.outerHTML) exBad.push("the losses are not renderLosses with L1 open");
     if (ex.querySelector("[id]")) exBad.push("an id in the example");
-    const words = [...ex.querySelectorAll(":scope > h2, .exhibit-tape p, .caption, .elision, .exhibit > figcaption")].map((e) => e.textContent);
-    if (JSON.stringify(words) !== JSON.stringify(["example", "where it came from", "bareflow 2 losses", "from vuejs.org, not 1mb.dev", "nothing paraphrased",
-      "not shown here: 2 links to Vue School lessons", "not shown here: the rest of the page. Convert it now", "what bareflow could not keep",
+    const words = [...ex.querySelectorAll(":scope > h2, .exhibit-tape p, .elision, .exhibit > figcaption")].map((e) => e.textContent);
+    if (JSON.stringify(words) !== JSON.stringify(["example", "bareflow 2 losses", "from vuejs.org, not 1mb.dev",
+      "not shown here: 2 links to Vue School lessons", "not shown here: the rest of the page. Convert it now",
       '"Computed Properties" (c) 2019-present Yuxi (Evan) You and Vue documentation contributors. CC BY 4.0. Excerpt, converted by bareflow; changes marked above.'])) exBad.push(`words: ${JSON.stringify(words)}`);
     const hrefs = [...ex.querySelectorAll("a")].map((a) => a.getAttribute("href"));
     if (JSON.stringify(hrefs) !== JSON.stringify([`/${EXAMPLE.url}`, EXAMPLE.url, LICENSE])) exBad.push(`links: ${hrefs.join(" ")}`);
     const EX_TAGS = new Set(["SECTION", "H1", "H2", "FIGURE", "FIGCAPTION", "DIV", "P", "SPAN", "A", "ARTICLE", "PRE", "CODE", "OL", "LI", "DETAILS", "SUMMARY"]);
-    const EX_CLASSES = new Set(["example", "exhibit", "exhibit-part", "exhibit-tape", "tape-line", "tape-from", "name", "chip", "caption", "elision", "page", "code", "losses", "loss-n"]);
+    const EX_CLASSES = new Set(["example", "exhibit", "exhibit-part", "exhibit-tape", "tape-line", "tape-from", "name", "chip", "elision", "page", "code", "losses", "loss-n"]);
     for (const e of [ex, ...ex.querySelectorAll("*")]) {
       if (!EX_TAGS.has(e.tagName)) exBad.push(`<${e.tagName}>`);
       for (const { name, value } of e.attributes) {
@@ -1274,10 +1274,12 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const wordsBad = [];
   const say = (sel) => homeDoc.querySelector(sel)?.textContent.replace(/\s+/g, " ").trim();
   const wBytes = await readFile(join(ROOT, "usage/seed/runs/S1/W.md")), w = wBytes.toString("utf8").trim(), readme = await readFile(join(ROOT, "README.md"), "utf8");
-  const why = [...homeDoc.querySelectorAll(".why p")].map((p) => p.textContent);
-  const quoted = (p) => p?.match(/"([^"]+)"$/)?.[1];
+  // why: bareflow's lines (Mono) and the two quotes (serif blockquotes), each after its lead-in.
+  const why = [...homeDoc.querySelectorAll(".why > p")].map((p) => p.textContent), quotes = [...homeDoc.querySelectorAll(".why > blockquote")];
+  const quoted = (i) => (quotes[i]?.previousElementSibling?.matches(".why > p") ? quotes[i].textContent : undefined);
   if (say("label[for=target]") !== "Docs page address" || say("#go button") !== "Convert" || say("#landing > h1") !== "Remove the website. Preserve the document.") wordsBad.push("door");
-  if (!w.endsWith(quoted(why[1]) ?? "\0") || !why[1].includes(`(${wBytes.length} bytes)`) || !readme.includes(quoted(why[2]) ?? "\0") || !readme.includes("\n## Why\n")) wordsBad.push("why pair");
+  if (quotes.length !== 2 || !w.endsWith(quoted(0) ?? "\0") || why[1] !== `Claude Code's WebFetch on deno add (${wBytes.length} bytes) ends:` || why[2] !== "The Deno docs end:" ||
+    !readme.includes(quoted(1) ?? "\0") || !readme.includes("\n## Why\n")) wordsBad.push("why pair");
   const foot = [...homeDoc.querySelector(".foot").children].map((e) => e.textContent);
   if (JSON.stringify(foot) !== JSON.stringify(["source on GitHub", "code: MIT", `v${VERSION}`, "theme: auto"]) || JSON.stringify([...shellDoc.querySelector(".foot").children].map((e) => e.textContent)) !== JSON.stringify(foot)) wordsBad.push(`footer: ${foot.join(" | ")}`);
   if (/\b(privacy|soon)\b/i.test(homeDoc.body.textContent)) wordsBad.push("privacy or soon");

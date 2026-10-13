@@ -50,7 +50,7 @@ async function render() {
     // The crop: the tape full-bleed at the top, then the page; no captions, box, or losses.
     await writeFile(join(dir, "card.html"), `<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8">
 <link rel="stylesheet" href="/_app/style.css"><style>
-body { width: ${CARD.width / SCALE}px; overflow: hidden; } /* headless Chrome lays out wider than a small window */ .example > h2, .exhibit .caption, .exhibit > figcaption, .exhibit-part:nth-child(3), .elision { display: none; }
+body { width: ${CARD.width / SCALE}px; overflow: hidden; } /* headless Chrome lays out wider than a small window */ .example > h2, .exhibit > figcaption, .exhibit-part:nth-child(3), .elision { display: none; }
 .exhibit { border: 0; } .exhibit-part:first-child { padding: 0; }
 </style></head><body>${await exampleHtml()}</body></html>`);
     const types = { ".html": "text/html", ".css": "text/css", ".woff2": "font/woff2" };

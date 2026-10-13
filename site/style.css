@@ -15,14 +15,16 @@ input, textarea { width: 100%; padding: var(--s-2); border: 1px solid var(--ink-
 button { padding: var(--s-1) var(--s-2); border: 1px solid var(--ink-2); border-radius: var(--radius); background: var(--paper); color: var(--ink); font-size: var(--t-small); cursor: pointer; }
 button:hover { background: var(--code-wash); }
 .row { display: flex; gap: var(--s-2); }
-/* The home: the claim, the door, the example, then why and how, in bareflow's voice (Mono) where it
-   speaks about itself. */
+/* The home: the claim, the door, the example, then why and how. Serif is the page's words (the
+   example, the quotes in why) and the slogan; everything else bareflow says is Mono. */
+.lede, .why p, .use p { font: 1rem/1.6 var(--mono); }
 .lede { max-width: var(--measure); }
+.why blockquote { margin: var(--s-2) 0 var(--s-3) var(--s-3); }
 .try { margin: var(--s-2) 0 0; font: var(--t-small)/1.5 var(--mono); color: var(--ink-2); }
 .try a { color: var(--ink); }
 .why, .use { max-width: var(--measure); }
 .why h2, .use h2 { font: 600 var(--t-small)/1.5 var(--mono); color: var(--ink-2); margin: var(--s-4) 0 var(--s-2); }
-.use-where { font: 600 var(--t-small) var(--mono); }
+.use-where { font-weight: 600; }
 @media (max-width: 39.99rem) { .desktop { display: none; } }
 #paste-form button { margin-top: var(--s-3); }
 .bookmarklet { padding: 0 var(--s-2); border: 1px dashed var(--ink-2); border-radius: var(--radius); font-family: var(--mono); font-size: var(--t-small); }
@@ -135,21 +137,13 @@ pre code { background: none; padding: 0; font-size: inherit; }
 .losses details { margin: var(--s-1) 0 0; }
 .losses pre { background: var(--code-wash); color: var(--ink); max-height: 16rem; overflow: auto; }
 
-/* The home's example: a still copy of the view in a ruled box, the tape without controls; captions
-   in bareflow's voice above each part, beside it from 76rem. What the excerpt leaves out is said in
-   bareflow's voice too, never in the loss hue. */
+/* The home's example: a still copy of the view in a box edged in ink-2, the tape without controls.
+   Inside it bareflow says only what the excerpt leaves out, never in the loss hue. */
 .example > h2 { font: 600 var(--t-small)/1.5 var(--mono); color: var(--ink-2); margin: var(--s-4) 0 var(--s-2); }
-.exhibit { margin: 0; padding-bottom: var(--s-3); border: 1px solid var(--rule); border-radius: var(--radius); }
+.exhibit { max-width: calc(var(--measure) + 2 * var(--s-3) + 2px); margin: 0; padding-bottom: var(--s-3); border: 1px solid var(--ink-2); border-radius: var(--radius); }
 .exhibit-part { padding: 0 var(--s-3); }
 .exhibit-tape p { margin: 0; }
-.exhibit .caption, .elision, .exhibit > figcaption, .exhibit .losses { font: var(--t-small)/1.5 var(--mono); color: var(--ink-2); }
-.exhibit .caption { margin: var(--s-3) 0 var(--s-1); }
+.elision, .exhibit > figcaption, .exhibit .losses { font: var(--t-small)/1.5 var(--mono); color: var(--ink-2); }
 .exhibit .page { max-width: var(--measure); }
 .exhibit .page h1 { margin-top: var(--s-2); }
 .exhibit > figcaption { margin-top: var(--s-3); padding: var(--s-3) var(--s-3) 0; border-top: 1px solid var(--rule); }
-@media (min-width: 76rem) {
-  /* Each caption level with its part's first line: the space between parts is the row's, not theirs. */
-  .exhibit-part { display: grid; grid-template-columns: minmax(0, var(--measure)) minmax(0, 1fr); column-gap: var(--s-4); align-items: start; margin-top: var(--s-3); }
-  .exhibit-part > .caption { grid-column: 2; grid-row: 1; margin: 0; }
-  .exhibit .page > h1:first-child { margin-top: 0; }
-}

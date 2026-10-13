@@ -30,7 +30,8 @@ export async function excerpt() {
 }
 
 // The example as an element of document d: a heading and a figure holding a still tape, the
-// excerpt, the losses with L1 open, and the attribution. No ids (a paste renders a page into the
+// excerpt, the losses with L1 open, and the attribution; bareflow says nothing inside the page's
+// area but the elisions (huddle-2026-10-13-preview: no captions). No ids (a paste renders a page into the
 // same document), no controls.
 export async function example(d) {
   const { doc, part, skipped } = await excerpt();
@@ -59,9 +60,9 @@ export async function example(d) {
     link(LICENSE, "CC BY 4.0"), ". Excerpt, converted by bareflow; changes marked above.");
 
   const figure = el("figure", "exhibit");
-  for (const [caption, partEl] of [["where it came from", tape], ["nothing paraphrased", article], ["what bareflow could not keep", lost]]) {
+  for (const partEl of [tape, article, lost]) {
     const row = el("div", "exhibit-part");
-    row.append(el("p", "caption", caption), partEl);
+    row.append(partEl);
     figure.append(row);
   }
   figure.append(credit);
