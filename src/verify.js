@@ -1164,8 +1164,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     // linkedom lays nothing out; wide makes every block overflow, as code does on a phone. Every
     // linkedom document shares one HTMLElement prototype, so the stand-ins come off after this run.
     const proto = w.HTMLElement.prototype, layout = ["scrollWidth", "clientWidth"].map((k) => [k, Object.getOwnPropertyDescriptor(proto, k)]);
-    if (wide) for (const [k, v] of [["scrollWidth", 400], ["clientWidth", 300]]) Object.defineProperty(proto, k, { get: () => v, configurable: true });
     try {
+    if (wide) for (const [k, v] of [["scrollWidth", 400], ["clientWidth", 300]]) Object.defineProperty(proto, k, { get: () => v, configurable: true });
     const ctx = {
       document: w.document, location: { href: `https://bareflow.1mb.dev${path}`, origin: "https://bareflow.1mb.dev", assign: (u) => did.push(`assign ${u}`) },
       history: { replaceState() {}, pushState() {} }, fetch: (u) => { did.push(`fetch ${u}`); return new Promise(() => {}); },
@@ -1193,9 +1193,10 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   // The home's pre-rendered example: a block that scrolls takes focus, as in the view.
   const homeRun = runApp("/", null, home, true);
   const focusable = [...homeRun.d.querySelectorAll(".exhibit pre")].map((e) => e.getAttribute("tabindex"));
+  const fitting = [...runApp("/", null, home).d.querySelectorAll(".exhibit pre")].filter((e) => e.hasAttribute("tabindex") || e.hasAttribute("role"));
   const canary = parseHTML("<pre>x</pre>").document.querySelector("pre");
-  record("web", "example-reach", `the home's example: every block that scrolls takes focus (${focusable.length} blocks); the layout stand-ins come off after (linkedom has no layout: a fresh pre reports ${canary.scrollWidth}/${canary.clientWidth})`,
-    focusable.length === 4 && focusable.every((t) => t === "0") && String(homeRun) === "" && canary.scrollWidth === undefined && canary.clientWidth === undefined);
+  record("web", "example-reach", `the home's example: every block that scrolls takes focus (${focusable.length} blocks), none that fits (${fitting.length} marked); the layout stand-ins come off after (linkedom has no layout: a fresh pre reports ${canary.scrollWidth}/${canary.clientWidth})`,
+    focusable.length === 4 && focusable.every((t) => t === "0") && String(homeRun) === "" && !fitting.length && canary.scrollWidth === undefined && canary.clientWidth === undefined);
   const want = { home: "", query: "", go: "assign https://bareflow.1mb.dev/https://docs.example.com/a", paste: "worker", refused: "", target: TURNSTILE, bare: TURNSTILE };
   const wrong = Object.keys(want).filter((k) => String(loads[k]) !== want[k]);
   // A blocked script fails the fetch at the next check, not after the 10 s wait. The message says
