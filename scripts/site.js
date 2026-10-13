@@ -3,7 +3,8 @@
 // TURNSTILE_SITEKEY sets the widget's key; unset, it is Cloudflare's always-pass test key.
 // Pages serves index.html for every path that is not a file, so it is the shell of every share
 // URL; the home is _app/home.html, served at / by _redirects. The icons are drawn from tokens.css
-// here (scripts/icon.js).
+// here (scripts/icon.js); the OG card is committed (scripts/card.js needs Chrome) and goes in the
+// home's head only: an unfurler runs no script, so the shell's tags speak for every share URL.
 import { build } from "esbuild";
 import { copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
@@ -12,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { bundle } from "./bundle.js";
 import { exampleHtml } from "./example.js";
 import { iconIco, iconPng, iconSvg, palette } from "./icon.js";
+import { CARD, cardAlt, cardWords } from "./card.js";
 import { VERSION } from "../src/version.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -19,7 +21,15 @@ export const TEST_SITEKEY = "1x00000000000000000000AA";
 // Where the home's example goes in the template; the shell gets nothing there. A function, not a
 // string: a replacement string reads $&, $', and $` in third-party text as patterns.
 export const MARK = "<!-- example -->\n";
-export const splice = (html, chunk) => html.replace(MARK, () => chunk);
+export const splice = (html, chunk, mark = MARK) => html.replace(mark, () => chunk);
+export const CARD_MARK = "<!-- card -->\n";
+const attr = (t) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+export const cardTags = (alt) => `<meta property="og:image" content="${CARD.url}">
+<meta property="og:image:width" content="${CARD.width}">
+<meta property="og:image:height" content="${CARD.height}">
+<meta property="og:image:alt" content="${attr(alt)}">
+<meta name="twitter:card" content="summary_large_image">
+`;
 
 export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.TURNSTILE_SITEKEY || TEST_SITEKEY) {
   await rm(out, { recursive: true, force: true });
@@ -28,15 +38,16 @@ export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.
   const tokens = await readFile(join(ROOT, "site/tokens.css"), "utf8"), { light, dark } = palette(tokens);
   const html = (await readFile(join(ROOT, "site/index.html"), "utf8")).replace("__SITEKEY__", () => sitekey).replace("__VERSION__", () => VERSION)
     .replace("__PAPER__", () => light.paper).replace("__PAPER_DARK__", () => dark.paper);
-  if (html.split(MARK).length !== 2) throw new Error(`site/index.html: needs ${JSON.stringify(MARK)} exactly once`);
+  for (const m of [MARK, CARD_MARK]) if (html.split(m).length !== 2) throw new Error(`site/index.html: needs ${JSON.stringify(m)} exactly once`);
   await Promise.all([
-    writeFile(join(out, "index.html"), splice(html, "")),
-    writeFile(join(out, "_app/home.html"), splice(html, `${await exampleHtml()}\n`)),
+    writeFile(join(out, "index.html"), splice(splice(html, ""), "", CARD_MARK)),
+    writeFile(join(out, "_app/home.html"), splice(splice(html, `${await exampleHtml()}\n`), cardTags(cardAlt(await cardWords())), CARD_MARK)),
     writeFile(join(out, "_app/app.js"), app.outputFiles[0].text),
     copyFile(join(ROOT, "site/theme.js"), join(out, "_app/theme.js")),
     writeFile(join(out, "_app/icon.svg"), iconSvg(tokens)),
     writeFile(join(out, "_app/touch.png"), iconPng(tokens, 180, 9)),
     writeFile(join(out, "favicon.ico"), iconIco(tokens)),
+    copyFile(join(ROOT, CARD.file), join(out, "_app/card.png")),
     writeFile(join(out, "_app/worker.js"), `${await bundle()}\n${await readFile(join(ROOT, "site/worker.js"), "utf8")}`),
     writeFile(join(out, "_app/style.css"), (await Promise.all(["site/tokens.css", "site/style.css"].map((f) => readFile(join(ROOT, f), "utf8")))).join("\n")),
     cp(join(ROOT, "site/fonts"), join(out, "_app/fonts"), { recursive: true }),

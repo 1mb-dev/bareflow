@@ -32,9 +32,10 @@ import { scoreLoss, scoreNav } from "./truth.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
 import { sha256 } from "./sha256.js";
 import { bundle } from "../scripts/bundle.js";
-import { MARK, site, splice } from "../scripts/site.js";
+import { CARD_MARK, MARK, cardTags, site, splice } from "../scripts/site.js";
 import { EXAMPLE, LICENSE, excerpt } from "../scripts/example.js";
 import { EDGE, chunks } from "../scripts/icon.js";
+import { CARD, cardAlt, cardText, cardWords } from "../scripts/card.js";
 import { parseShare } from "../site/url.js";
 import { parseInline, renderDoc, renderLosses } from "../site/render.js";
 
@@ -1146,7 +1147,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const unlinked = (await Promise.all(linked.map((u) => readFile(join(out, u)).then(() => [], () => [u])))).flat();
   const ofl = await readFile(join(fontDir, "OFL.txt"), "utf8").catch(() => "");
   const appCode = await readFile(join(out, "_app/app.js"), "utf8");
-  const [iconSvgText, touchPng, faviconIco] = await Promise.all([join(out, "_app/icon.svg"), join(out, "_app/touch.png"), join(out, "favicon.ico")]
+  const [iconSvgText, touchPng, faviconIco, builtCard, card] = await Promise.all([join(out, "_app/icon.svg"), join(out, "_app/touch.png"), join(out, "favicon.ico"), join(out, "_app/card.png"), join(ROOT, CARD.file)]
     .map((f, i) => readFile(f, i ? undefined : "utf8").catch(() => (i ? Buffer.alloc(0) : ""))));
   await rm(out, { recursive: true, force: true });
   record("web", "fonts", `${fontFiles.length} fonts, ${fontTotal} bytes (cap ${FONT_CAP}), each equal to its SOURCE sha256; every url() and preload resolves; OFL.txt ships${[...unsourced, ...unlinked].length ? `: ${[...unsourced, ...unlinked].join(", ")}` : ""}`,
@@ -1234,11 +1235,12 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   // The home's example (scripts/example.js): in the home only, once, with no ids. Its page and
   // losses are the view's own renders of the frozen IR, read back from the built home, so the
   // serializer and the splice are checked too; its own words and links are exactly these.
-  const exStart = home.indexOf('<section class="example">'), exEnd = home.indexOf("</section>\n", exStart) + "</section>\n".length;
+  const words = await cardWords(), tags = cardTags(cardAlt(words)), bare = home.replace(tags, "");
+  const exStart = bare.indexOf('<section class="example">'), exEnd = bare.indexOf("</section>\n", exStart) + "</section>\n".length;
   const homeDoc = parseHTML(home).document, shellDoc = parseHTML(html).document, fresh = parseHTML("<!doctype html><html><body></body></html>").document;
   const ex = homeDoc.querySelector("section.example"), exBad = [];
-  if (homeDoc.querySelectorAll("section.example, .exhibit").length !== 2 || shellDoc.querySelector(".example, .exhibit") || html.includes(MARK) || home.includes(MARK)) exBad.push("placement");
-  if (exStart < 0 || home.slice(0, exStart) + home.slice(exEnd) !== html) exBad.push("the home less the example is not the shell");
+  if (homeDoc.querySelectorAll("section.example, .exhibit").length !== 2 || shellDoc.querySelector(".example, .exhibit") || [MARK, CARD_MARK].some((m) => html.includes(m) || home.includes(m))) exBad.push("placement");
+  if (exStart < 0 || !home.includes(tags) || bare.slice(0, exStart) + bare.slice(exEnd) !== html) exBad.push("the home less the example and the card is not the shell");
   for (const [name, d] of [["home", homeDoc], ["shell", shellDoc]]) { const ids = [...d.querySelectorAll("[id]")].map((e) => e.id); if (new Set(ids).size !== ids.length) exBad.push(`${name}: duplicate id`); }
   if (ex) {
     const { doc, part } = await excerpt();
@@ -1285,7 +1287,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const notice = await readFile(join(ROOT, "NOTICE"), "utf8");
   if (!notice.replace(/\s+/g, " ").includes(`${EXAMPLE.fixture} (${new URL(EXAMPLE.url).hostname}, CC BY 4.0)`) ||
     Object.values(inventory).find((p) => `test/fixtures/${p.fixture}` === EXAMPLE.fixture)?.url !== EXAMPLE.url) exBad.push("NOTICE does not name the example's page and license");
-  record("web", "home", "_redirects rewrites / alone, to _app/home; no 404.html; the home is the shell plus the example",
+  record("web", "home", "_redirects rewrites / alone, to _app/home; no 404.html; the home is the shell plus the example and the card",
     redirects === "/ /_app/home 200\n" && !top.includes("404.html") && !exBad.some((b) => /placement|not the shell/.test(b)));
   record("web", "example", `the example: in the home once, no ids; its page and losses equal the view's renders of the frozen IR with L1 open; its words, links, tags, and attributes exactly its own; the splice takes text as text; NOTICE names it${exBad.length ? `: ${exBad.slice(0, 4).join(" | ")}` : ""}`, !exBad.length);
 
@@ -1340,6 +1342,22 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     ico.w !== 32 || ico.h !== 32 || ico.colors !== onPaper) iconBad.push(`favicon.ico ${JSON.stringify(ico)}`);
   if (paperMetas[0]?.[2] !== light.paper || paperMetas[1]?.[2] !== dark.paper) iconBad.push("theme-color is not the paper");
   record("web", "icons", `icon.svg, touch.png, favicon.ico, and theme-color from the tokens; bar and edge at 3:1 or more on ${TABS.light.length + TABS.dark.length} tab grounds, the notch on the bar; the notch inside the bar; the PNGs opaque${iconBad.length ? `: ${iconBad.join(" | ")}` : ""}`, !iconBad.length);
+
+  // The OG card (scripts/card.js): committed, shipped as is, 1200x630, showing the example's words
+  // in today's light tokens (its tEXt chunk; a mismatch means run the script again). The home's head
+  // points at it; the shell's names no image, since its tags speak for every share URL.
+  const cardIhdr = chunks(card)[0]?.[1], cardBad = [];
+  const meta = (d, k) => d.querySelector(`meta[property="${k}"], meta[name="${k}"]`)?.getAttribute("content");
+  if (!card.length || !card.equals(builtCard)) cardBad.push("the build does not ship site/card.png");
+  if (!notice.replace(/\s+/g, " ").includes(`${CARD.file}, is a crop of that excerpt`)) cardBad.push("NOTICE does not name the card");
+  if (cardIhdr?.readUInt32BE(0) !== CARD.width || cardIhdr?.readUInt32BE(4) !== CARD.height) cardBad.push(`not ${CARD.width}x${CARD.height}`);
+  let shown = null;
+  try { shown = cardText(card); } catch { /* unreadable: reported below */ }
+  if (JSON.stringify(shown) !== JSON.stringify(words)) cardBad.push(`it shows ${JSON.stringify(shown)}, the example ${JSON.stringify(words)}: node scripts/card.js`);
+  const og = { "og:title": "bareflow: a docs page as Markdown, every loss marked", "og:image": CARD.url, "og:image:width": String(CARD.width), "og:image:height": String(CARD.height), "og:image:alt": cardAlt(words), "twitter:card": "summary_large_image" };
+  const offHead = [...Object.keys(og).filter((k) => meta(homeDoc, k) !== og[k]), ...Object.keys(og).filter((k) => meta(shellDoc, k) !== (k === "og:title" ? og[k] : undefined)).map((k) => `shell ${k}`)];
+  if (offHead.length || !CARD.url.startsWith("https://bareflow.1mb.dev/")) cardBad.push(`head: ${offHead.join(", ")}`);
+  record("web", "card", `the OG card: ${CARD.width}x${CARD.height}, shipped as committed, its words and tokens the example's; on the home only, og:image absolute, its size and alt with it${cardBad.length ? `: ${cardBad.join(" | ")}` : ""}`, !cardBad.length);
 }
 
 // The result view (site/render.js). Its inline reader agrees with marked on every prose field of
