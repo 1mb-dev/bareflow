@@ -55,7 +55,8 @@ summary { cursor: pointer; font-size: var(--t-small); color: var(--ink-2); }
 .tape button { padding: 0; border: 0; background: none; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.15em; }
 .tape button:hover { background: none; }
 :is(.tape, .exhibit-tape) .chip { padding: 0 var(--s-1); border: 1px solid transparent; border-radius: var(--radius); background: var(--mark); color: var(--mark-ink); font-weight: 600; text-decoration: none; }
-.failed #status { color: var(--tape-ink); }
+#result[data-failed] #status { color: var(--tape-ink); }
+#status .detail { display: block; color: var(--tape-ink-2); }
 #contents { margin: 0; }
 #contents[open] { flex-basis: 100%; }
 #contents ol { margin: var(--s-1) 0 var(--s-1); padding-left: 2.5em; max-height: 60vh; overflow: auto; }

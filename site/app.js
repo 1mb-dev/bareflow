@@ -6,46 +6,94 @@ import { origin, reachable, showView } from "./view.js";
 const $ = (id) => document.getElementById(id);
 const ORIGIN = location.origin;
 const ASK = "Give a page address, like https://docs.example.com/guide/install.";
-const UNAVAILABLE = "Fetching is unavailable right now.";
-const LATER = "Try again later.";
-// Offered only where the home shows the paste form: from 40rem (style.css .desktop).
-const PASTE = "Or paste the page's HTML on the home page.";
 
-// For failures that arrive without a message of their own.
-const NAMED = {
-  token: "The bot check failed or expired. Reload the page to try again.",
-  limited: "Too many requests from here. Wait a minute and reload.",
+// What a failure says (docs/voice.md): what happened, then what to do. Each entry gives
+// [what happened, the next step, the next step where the home shows the paste form (from 40rem,
+// style.css .desktop)]; a phone is never told to paste. h is the host, n the upstream HTTP status.
+const CHECK = "Check the address.", LATER = "Try again later.", RELOAD = "Reload the page to try again.";
+const CHECK_OR_PASTE = "Check the address, or save the page and paste its HTML on the home page.";
+const OR_PASTE = "Or paste the page's HTML on the home page.";
+const original = (h) => `Open the original at ${h}.`;
+const SAY = {
+  url: () => ["This site does not fetch that address.", CHECK],
+  blocked: (h) => [`${h} is, or leads to, a private network address; this site fetches public addresses only.`, CHECK],
+  timeout: (h) => [`${h} did not answer within 30 seconds.`, LATER, `${LATER} Or save the page and paste its HTML on the home page.`],
+  upstream: (h, n) => {
+    if (!n) return [`This site could not read the page from ${h}.`, original(h), "Save it from your browser and paste its HTML on the home page."];
+    if (n === 401 || n === 403) return [`${h} refused the request (HTTP ${n}).`, CHECK, CHECK_OR_PASTE];
+    if (n === 404 || n === 410) return [`${h} has no page at that address (HTTP ${n}).`, CHECK];
+    if (n === 429) return [`${h} is limiting requests (HTTP 429).`, LATER, "Try again later, or save the page and paste its HTML on the home page."];
+    if (n >= 500) return [`${h} could not serve the page (HTTP ${n}).`, LATER];
+    return [`${h} answered HTTP ${n}, not the page.`, CHECK, CHECK_OR_PASTE];
+  },
+  "over-cap": (h, _, pasted) => (pasted
+    ? ["The pasted HTML is over 5 MB, this site's limit for a paste.", original(h)]
+    : [`${h}'s page is over 1 MB, this site's limit for a fetched page.`, original(h), "Save it and paste its HTML on the home page (up to 5 MB)."]),
+  token: () => ["The bot check failed or expired.", RELOAD],
+  "check-timeout": () => ["The bot check timed out before it was answered.", RELOAD],
+  challenge: () => ["The bot check did not load from challenges.cloudflare.com.", "If a content blocker is on, allow that address, then reload.", `If a content blocker is on, allow that address, then reload. ${OR_PASTE}`],
+  limited: () => ["This site has had too many requests from your network.", "Wait a minute, then reload."],
+  unavailable: () => ["Fetching is unavailable right now.", LATER, `${LATER} ${OR_PASTE}`],
+  cut: (h) => [`${h}'s page stopped arriving partway.`, "Reload to try again."],
+  "not-html": (h) => [`${h} returned a binary file, not an HTML page.`, CHECK],
+  empty: (h) => [`No readable text came back from ${h}: a page that builds itself with JavaScript arrives empty.`, original(h)],
+  convert: (h) => [`bareflow could not convert ${h}'s page; the fault is bareflow's, not the page's.`, original(h)],
+  converter: () => ["The converter did not load.", RELOAD],
 };
-const sentence = (m) => m && `${m[0].toUpperCase()}${m.slice(1)}${/[.?!]$/.test(m) ? "" : "."}`;
+// Codes that cover causes the sentence cannot name: the server's words show beneath, capped.
+const DETAIL = new Set(["url", "upstream", "convert"]);
+const CAP = 120;
 
+// #status is the live region inside #result: a write in the task that unhides #result can go
+// unannounced, so writes wait for the task after show().
+let fresh = false, pending = null;
 function show(section) {
   $("landing").hidden = section !== "landing";
   $("result").hidden = section !== "result";
+  fresh = true;
+  setTimeout(() => { fresh = false; if (pending) write(...pending); pending = null; });
 }
 
-function status(text) { $("status").textContent = text; }
+function write(text, detail) {
+  const el = $("status");
+  el.textContent = text;
+  if (detail) {
+    const d = document.createElement("span");
+    d.className = "detail";
+    d.textContent = `detail: ${detail.length > CAP ? `${detail.slice(0, CAP - 3)}...` : detail}`;
+    el.append(d);
+  }
+}
 
-function fail(code, message) {
-  const said = sentence(message);
-  if (code === "unavailable") {
-    const what = said || UNAVAILABLE;
-    status([what, /try again later/i.test(what) ? "" : LATER, globalThis.matchMedia?.("(min-width: 40rem)").matches ? PASTE : ""].filter(Boolean).join(" "));
-  } else status(said || NAMED[code]);
-  $("result").classList.add("failed");
+function status(text, detail) { if (fresh) pending = [text, detail]; else write(text, detail); }
+
+// An unknown code says what unavailable says. `said` is a sentence already in voice (url.js).
+function fail(code, { host, n, detail, pasted, said } = {}) {
+  if (!said && !Object.hasOwn(SAY, code)) code = "unavailable";
+  const [what, next, wide] = said ? [said] : SAY[code](host, n, pasted);
+  const desktop = wide && globalThis.matchMedia?.("(min-width: 40rem)").matches;
+  const shown = DETAIL.has(code) && !(code === "upstream" && n) ? detail : "";
+  status([what, desktop ? wide : next].filter(Boolean).join(" "), shown);
+  $("result").dataset.failed = code;
 }
 
 const worker = () => new Worker("/_app/worker.js");
 const convertIn = (msg, transfer) => new Promise((resolve) => {
   const w = worker();
   w.onmessage = ({ data }) => { w.terminate(); resolve(data); };
-  w.onerror = (e) => { w.terminate(); resolve({ error: "convert", message: e.message || "the converter failed to load" }); };
+  // worker.js answers every message, errors included: onerror is the script failing to load.
+  w.onerror = () => { w.terminate(); resolve({ error: "converter" }); };
   w.postMessage(msg, transfer);
 });
 
-function showResult(r, url) {
-  if (r.error && !r.markdown) return fail(r.error, r.message);
+function showResult(r, url, pasted) {
+  const said = { host: new URL(url).hostname, detail: r.message, pasted };
+  // The view writes the tally itself; a progress line still waiting would overwrite it.
+  fresh = false;
+  pending = null;
+  if (r.error && !r.markdown) return fail(r.error, said);
   showView(r, url);
-  if (r.error) fail(r.error, r.message);
+  if (r.error) fail(r.error, said);
 }
 
 // Turnstile's script loads only to fetch a page: the home and a paste make no third-party request.
@@ -62,15 +110,16 @@ function token() {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     const ready = () => {
-      if (blocked) return reject(new Error("unavailable"));
+      if (blocked) return reject(new Error("challenge"));
       if (window.turnstile) {
         return window.turnstile.render($("challenge"), {
           sitekey: document.body.dataset.sitekey,
           callback: (t) => { $("challenge").hidden = true; resolve(t); },
           "error-callback": () => reject(new Error("token")),
+          "timeout-callback": () => reject(new Error("check-timeout")),
         });
       }
-      if (Date.now() - start > 10000) return reject(new Error("unavailable"));
+      if (Date.now() - start > 10000) return reject(new Error("challenge"));
       setTimeout(ready, 100);
     };
     ready();
@@ -85,18 +134,18 @@ async function fetchAndConvert(url) {
   $("note").hidden = false;
   status("Checking you are not a bot...");
   let t;
-  try { t = await token(); } catch (e) { return fail(e.message === "token" ? "token" : "unavailable"); }
+  try { t = await token(); } catch (e) { return fail(e.message); }
   status(`Fetching ${host}...`);
   let res;
   try { res = await fetch(`/_fetch?url=${encodeURIComponent(url)}`, { headers: { "x-turnstile-token": t } }); } catch { return fail("unavailable"); }
   if (res.status === 429) return fail("limited");
   const code = res.headers.get("x-bareflow-error");
-  if (code) return fail(code, await res.text().catch(() => ""));
+  if (code) return fail(code, { host, n: Number(res.headers.get("x-bareflow-status")) || 0, detail: await res.text().catch(() => "") });
   // Out of Function quota, Pages serves the shell for /_fetch instead.
   if (!res.ok || res.headers.get("content-type") !== "application/octet-stream") return fail("unavailable");
   status(`Converting ${host}...`);
   let bytes;
-  try { bytes = await res.arrayBuffer(); } catch { return fail("unavailable", "The page stopped arriving partway."); }
+  try { bytes = await res.arrayBuffer(); } catch { return fail("cut", { host }); }
   showResult(await convertIn({ input: "edge", url, finalUrl: res.headers.get("x-final-url") || url, bytes }, [bytes]), url);
 }
 
@@ -107,7 +156,7 @@ async function convertPasted(url, html) {
   origin(p.url, true);
   $("original").href = p.url;
   status("Converting the pasted page...");
-  showResult(await convertIn({ input: "paste", url: p.url, html }), p.url);
+  showResult(await convertIn({ input: "paste", url: p.url, html }), p.url, true);
 }
 
 function alertIn(id, message) {
@@ -153,7 +202,7 @@ $("pointer").hidden = true;
 if (route.kind === "landing") landing();
 else {
   show("result");
-  if (route.kind === "error") fail("url", route.message);
+  if (route.kind === "error") fail("url", { said: route.message });
   else {
     history.replaceState(null, "", `/${route.url}`);
     fetchAndConvert(route.url);

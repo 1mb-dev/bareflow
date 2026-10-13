@@ -1200,17 +1200,131 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     focusable.length === 4 && focusable.every((t) => t === "0") && String(homeRun) === "" && !fitting.length && canary.scrollWidth === undefined && canary.clientWidth === undefined);
   const want = { home: "", query: "", go: "assign https://bareflow.1mb.dev/https://docs.example.com/a", paste: "worker", refused: "", target: TURNSTILE, bare: TURNSTILE };
   const wrong = Object.keys(want).filter((k) => String(loads[k]) !== want[k]);
-  // A blocked script fails the fetch at the next check, not after the 10 s wait. The message says
-  // to try later once, and offers the paste form only where the home shows it (from 40rem).
-  const settle = async (run) => { run.timers.splice(0).forEach((f) => f()); for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r)); return run.d.getElementById("status").textContent; };
-  const blockedRun = (extra) => { const run = runApp("/https://docs.example.com/guide/", null, html, false, extra); run.d.querySelector(`script[src="${TURNSTILE}"]`)?.onerror?.(); return settle(run); };
-  const desktop = { matchMedia: (q) => ({ matches: q === "(min-width: 40rem)" }) };
-  const answered = { turnstile: { render: (el, o) => o.callback("t") }, fetch: async () => ({ status: 503, headers: { get: (k) => (k === "x-bareflow-error" ? "unavailable" : null) }, text: async () => "the bot check service did not answer; try again later" }) };
-  const UNAVAILABLE_SAID = "Fetching is unavailable right now. Try again later.";
-  const said = { phone: await blockedRun(), desktop: await blockedRun(desktop), served: await settle(runApp("/https://docs.example.com/guide/", null, html, false, answered)) };
-  const saidWrong = Object.entries({ phone: UNAVAILABLE_SAID, desktop: `${UNAVAILABLE_SAID} Or paste the page's HTML on the home page.`, served: "The bot check service did not answer; try again later." }).filter(([k, v]) => said[k] !== v).map(([k]) => `${k}: ${JSON.stringify(said[k])}`);
-  record("web", "turnstile", `Turnstile's script is added on a target route only, once, from its one address; the home, a submit, a paste, and a refused address make no request; a blocked script fails at the next check${wrong.map((k) => ` ${k}: ${JSON.stringify(String(loads[k]))}`).join("")}${saidWrong.length ? `; ${saidWrong.join(" | ")}` : ""}`,
-    !wrong.length && !saidWrong.length);
+  record("web", "turnstile", `Turnstile's script is added on a target route only, once, from its one address; the home, a submit, a paste, and a refused address make no request${wrong.map((k) => ` ${k}: ${JSON.stringify(String(loads[k]))}`).join("")}`,
+    !wrong.length);
+  // Every failure the visitor can meet, as the shell shows it (todos: huddle-2026-10-13-u2). The
+  // codes come from the source, so a new code with no row fails, and a row whose code nothing
+  // emits fails. Each row runs the built app.js at phone and desktop width and must say what
+  // happened, then what to do, in docs/voice.md's terms; the server's own words only in detail.
+  // app.js names each code as a literal: fail("x"), new Error("x"), or error: "x".
+  const [edgeSrc, workerSrc, appSrc, voice] = await Promise.all(["src/edge.js", "site/worker.js", "site/app.js", "docs/voice.md"].map((f) => readFile(join(ROOT, f), "utf8")));
+  const codesIn = (src, ...res) => res.flatMap((re) => [...src.matchAll(re)].map((m) => m[1]));
+  const emitted = new Set([...codesIn(edgeSrc, /\bfail\(\d+, "([a-z-]+)"/g), ...codesIn(workerSrc, /\bfail\("([a-z-]+)"/g),
+    ...codesIn(appSrc, /\bfail\("([a-z-]+)"/g, /new Error\("([a-z-]+)"\)/g, /\berror: "([a-z-]+)"/g)]);
+  const BANNED = (voice.split("## Banned\n\n")[1] ?? "").split("\n\n")[0].replace(/\s+/g, " ").replace(/\.\s*$/, "").split(/,\s*/)
+    .map((w) => (w === "emoji" ? /\p{Extended_Pictographic}/u : w === "exclamation marks" ? /!/ : new RegExp(`\\b${w.replace(/-/g, "\\-")}\\b`, "i")));
+  const PIN_403 = voice.match(/\| `<host> refused the request \(HTTP 403\)\.([^`]+)` \|/)?.[0].match(/`(<host>[^`]+)`/)[1].replace("<host>", "docs.example.com");
+  const HOST = "docs.example.com", TARGET = `/https://${HOST}/guide/`;
+  const PASTE = /\bpaste (its|the page's) HTML\b/i;
+  const NEXT = {
+    address: /(Check the address|Give one like https:\/\/\S+)\.$/,
+    wait: /(Try again later|Wait a minute, then reload)\.$/,
+    reload: /\breload\b[^.]*\.$/i,
+    original: new RegExp(`Open the original at ${HOST.replace(/\./g, "\\.")}\\.$`),
+  };
+  const CAP = 120, capped = (s) => (s.length > CAP ? `${s.slice(0, CAP - 3)}...` : s);
+  const desktopMedia = { matchMedia: (q) => ({ matches: q === "(min-width: 40rem)" }) };
+  const passed = { render: (el, o) => o.callback("t") };
+  const answer = ({ status = 200, code, body = "", upstream, type = "application/octet-stream", cut = false }) => async () => ({
+    status, ok: status < 400, text: async () => body,
+    headers: { get: (k) => ({ "x-bareflow-error": code, "x-bareflow-status": upstream && String(upstream), "content-type": code ? "text/plain; charset=utf-8" : type })[k] ?? null },
+    arrayBuffer: async () => { if (cut) throw new TypeError("network error"); return new ArrayBuffer(8); },
+  });
+  const replying = (reply) => class { postMessage() { Promise.resolve().then(() => (reply === "load" ? this.onerror({ message: "" }) : this.onmessage({ data: reply }))); } terminate() {} };
+  const emptyPage = await convert({ url: `https://${HOST}/guide/`, html: "<html><body></body></html>", retrievedAt: "2026-10-13T00:00:00Z", input: "paste" });
+  const fetched = (extra) => ({ path: TARGET, extra: { turnstile: passed, Worker: replying({ markdown: "", doc: null }), ...extra } });
+  const edge = (status, code, body, upstream) => ({ ...fetched({ fetch: answer({ status, code, body, upstream }) }), raw: body });
+  const converted = (reply) => ({ ...fetched({ fetch: answer({}), Worker: replying(reply) }), raw: reply.message });
+  const big = "x".repeat(300);
+  // next: the phone's last sentence; paste: the desktop line adds the paste form (only then may the
+  // widths differ); detail: the server's text shown beneath; host: the sentence names the host.
+  const ROWS = [
+    { id: "url (route) scheme", code: "url", path: "/javascript:alert(1)", next: "address" },
+    { id: "url (route) encoding", code: "url", path: "/https%3a%zz", next: "address" },
+    { id: "url (route) no dot", code: "url", path: "/intranet", next: "address" },
+    { id: "url (route) not a URL", code: "url", path: "/http://[x]/", next: "address" },
+    { id: "url (edge)", code: "url", ...edge(400, "url", "port 8080 in https://docs.example.com:8080/: this site fetches ports 80 and 443 only"), next: "address", detail: true },
+    { id: "url (edge) detail cap", code: "url", ...edge(400, "url", big), next: "address", detail: true },
+    { id: "blocked", code: "blocked", ...edge(403, "blocked", "blocked address for 10.0.0.1: bareflow fetches public addresses only"), next: "address", host: true },
+    { id: "timeout", code: "timeout", ...edge(504, "timeout", "no answer from https://docs.example.com/guide/ within 30000 ms (redirects included); retry, or open it in a browser"), next: "wait", host: true, paste: true },
+    ...[[401, "address", true], [403, "address", true], [404, "address", false], [410, "address", false], [429, "wait", true], [500, "wait", false], [503, "wait", false], [418, "address", true]]
+      .map(([n, next, paste]) => ({ id: `upstream ${n}`, code: "upstream", ...edge(502, "upstream", `HTTP ${n} from https://docs.example.com/guide/; check the URL (bareflow does not retry)`, n), next, paste, host: true, says: `HTTP ${n}` })),
+    { id: "upstream, no status", code: "upstream", ...edge(502, "upstream", "more than 5 redirects from https://docs.example.com/guide/"), next: "original", paste: true, host: true, detail: true },
+    { id: "over-cap (edge)", code: "over-cap", ...edge(502, "over-cap", "the page is over 1 MB, this site's limit"), next: "original", paste: true, host: true },
+    { id: "over-cap (paste)", code: "over-cap", desktopOnly: true, path: "/", act: submit("paste-form", { "paste-url": `https://${HOST}/guide/`, "paste-html": "<p>a</p>" }), extra: { Worker: replying({ error: "over-cap", message: "the pasted page is over 5 MB" }) }, next: "original", host: true, raw: "the pasted page is over 5 MB" },
+    { id: "token", code: "token", ...edge(403, "token", "the Turnstile check failed or expired; reload the page"), next: "reload" },
+    { id: "token, empty body", code: "token", ...edge(403, "token", ""), next: "reload" },
+    { id: "check-timeout", code: "check-timeout", path: TARGET, extra: { turnstile: { render: (el, o) => o["timeout-callback"]?.() } }, next: "reload" },
+    { id: "challenge", code: "challenge", path: TARGET, blockScript: true, next: "reload", paste: true },
+    { id: "limited", code: "limited", ...fetched({ fetch: answer({ status: 429 }) }), next: "wait" },
+    { id: "unavailable", code: "unavailable", ...edge(503, "unavailable", "the bot check service did not answer"), next: "wait", paste: true },
+    { id: "unavailable, unknown code", code: "unavailable", ...edge(500, "weird", "something new"), next: "wait", paste: true },
+    { id: "unavailable, inherited name as code", code: "unavailable", ...edge(500, "constructor", "something new"), next: "wait", paste: true },
+    { id: "unavailable, fetch threw", code: "unavailable", ...fetched({ fetch: async () => { throw new TypeError("Failed to fetch"); } }), next: "wait", paste: true },
+    { id: "unavailable, no code (the shell for /_fetch)", code: "unavailable", ...fetched({ fetch: answer({ type: "text/html" }) }), next: "wait", paste: true },
+    { id: "cut", code: "cut", ...fetched({ fetch: answer({ cut: true }) }), next: "reload", host: true },
+    { id: "not-html", code: "not-html", ...converted({ error: "not-html", message: "the address returned a binary file, not an HTML page" }), next: "address", host: true },
+    { id: "empty", code: "empty", ...converted({ error: "empty", message: "the page has no readable content; sites that render with JavaScript come back empty", ...emptyPage }), next: "original", host: true, shown: true },
+    { id: "convert", code: "convert", ...converted({ error: "convert", message: "Cannot read properties of undefined (reading 'x')" }), next: "original", host: true, detail: true },
+    { id: "convert, empty message", code: "convert", ...converted({ error: "convert", message: "" }), next: "original", host: true },
+    { id: "converter", code: "converter", ...fetched({ fetch: answer({}), Worker: replying("load") }), next: "reload" },
+  ];
+  const rowCodes = new Set(ROWS.map((r) => r.code));
+  const uncovered = [...emitted].filter((c) => !rowCodes.has(c)), orphaned = [...rowCodes].filter((c) => !emitted.has(c));
+  record("web", "states: codes", `every code src/edge.js, site/worker.js, and site/app.js emit has a row, and every row's code is emitted (${emitted.size} codes)${uncovered.length ? `; no row: ${uncovered.join(", ")}` : ""}${orphaned.length ? `; emitted by nothing: ${orphaned.join(", ")}` : ""}`,
+    !uncovered.length && !orphaned.length && emitted.size >= 12);
+  const flush = async (run) => { for (let i = 0; i < 20; i++) { run.timers.splice(0).forEach((f) => f()); for (let j = 0; j < 3; j++) await new Promise((r) => setImmediate(r)); } };
+  const failure = async (row, wide) => {
+    const run = runApp(row.path, row.act, html, false, { ...row.extra, ...(wide ? desktopMedia : {}) });
+    if (row.blockScript) run.d.querySelector(`script[src="${TURNSTILE}"]`)?.onerror?.();
+    await flush(run);
+    const st = run.d.getElementById("status"), det = st.querySelector(".detail");
+    const main = [...st.childNodes].filter((n) => n !== det).map((n) => n.textContent).join("").trim();
+    return { main, detail: det?.textContent ?? null, code: run.d.getElementById("result").dataset.failed, view: !run.d.getElementById("view").hidden };
+  };
+  for (const row of ROWS) {
+    const phone = row.desktopOnly ? null : await failure(row, false), desk = await failure(row, true);
+    const raw = row.raw;
+    const bad = [];
+    for (const [w, s] of [["phone", phone], ["desktop", desk]]) {
+      if (!s) continue;
+      const all = `${s.main} ${s.detail ?? ""}`;
+      if (s.code !== row.code) bad.push(`${w} code ${s.code}`);
+      if (!s.main || !s.main.endsWith(".") || s.main.endsWith("...")) bad.push(`${w} does not end in one period`);
+      if (row.host && !s.main.includes(HOST)) bad.push(`${w} does not name ${HOST}`);
+      if (row.says && !s.main.includes(row.says)) bad.push(`${w} does not say ${row.says}`);
+      const banned = BANNED.filter((re) => re.test(all));
+      if (banned.length) bad.push(`${w} banned ${banned.join(" ")}`);
+      if (/\bnpx\b/.test(all) || /\bBareflow\b/.test(all)) bad.push(`${w} npx or Bareflow`);
+      if (raw && s.main.includes(raw)) bad.push(`${w} the server's words as the sentence`);
+      const want = row.detail && raw ? `detail: ${capped(raw)}` : null;
+      if (s.detail !== want) bad.push(`${w} detail ${JSON.stringify(s.detail)}`);
+      if (row.shown && !s.view) bad.push(`${w} result not shown`);
+    }
+    if (phone && PASTE.test(phone.main)) bad.push("phone offers paste");
+    if (phone && !NEXT[row.next].test(phone.main)) bad.push(`phone next step is not ${row.next}`);
+    if (row.desktopOnly && !NEXT[row.next].test(desk.main)) bad.push(`desktop next step is not ${row.next}`);
+    if (row.paste ? !PASTE.test(desk.main) : PASTE.test(desk.main)) bad.push(row.paste ? "desktop offers no paste" : "desktop offers paste");
+    if (!row.paste && phone && phone.main !== desk.main) bad.push("phone and desktop differ without paste");
+    if (row.id === "upstream 403" && desk.main !== PIN_403) bad.push(`desktop is not voice.md's: ${JSON.stringify(desk.main)}`);
+    record("web", `states: ${row.id}`, `${row.id}: what happened, then ${row.next}${row.paste ? " (desktop: or paste)" : ""}${row.detail ? ", server words as detail" : ""}${bad.length ? `; ${bad.join("; ")}${phone ? ` | phone: ${JSON.stringify(phone.main)}` : ""} | desktop: ${JSON.stringify(desk.main)}` : ""}`,
+      !bad.length);
+  }
+  // #status is the live region, inside #result, which is hidden until a route shows it: a write in
+  // the same task as the unhide can go unannounced, so the first write waits a task.
+  const liveRoute = runApp("/javascript:alert(1)"), livePaste = runApp("/", submit("paste-form", { "paste-url": `https://${HOST}/a`, "paste-html": "<p>a</p>" }));
+  const sameTick = [liveRoute, livePaste].map((r) => r.d.getElementById("status").textContent);
+  await Promise.all([flush(liveRoute), flush(livePaste)]);
+  const later = [liveRoute, livePaste].map((r) => r.d.getElementById("status").textContent);
+  record("web", "states: live region", `a refused address and a paste write #status a task after #result is shown (same task: ${JSON.stringify(sameTick)})`,
+    sameTick.every((t) => t === "") && later.every(Boolean));
+  // A conversion that answers before the deferred progress line is written still ends on the tally.
+  const quick = runApp("/", submit("paste-form", { "paste-url": `https://${HOST}/a`, "paste-html": "<p>a</p>" }), html, false, { ...desktopMedia, Worker: replying({ ...emptyPage, losses: 0, flattened: false }) });
+  for (let j = 0; j < 3; j++) await new Promise((r) => setImmediate(r)); // the reply lands first, as it can in a browser
+  await flush(quick);
+  const tallied = quick.d.getElementById("status").textContent;
+  record("web", "states: result", `a result keeps the view's tally over a progress line still waiting (${JSON.stringify(tallied)})`,
+    tallied === "no losses marked" && !quick.d.getElementById("result").dataset.failed);
   record("web", "claims", `no npx in site/, the built site, or the Function's messages (${served.length} files)${npx.length ? `: ${npx.join(", ")}` : ""}`,
     !npx.length && served.some((f) => f.endsWith(join("_app", "app.js"))) && served.some((f) => f.endsWith("index.html")));
   // The theme: theme.js is a classic script in <head> before the stylesheet, so it sets data-theme

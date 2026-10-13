@@ -36,12 +36,16 @@ no exclamation mark. A label or control is lowercase and says the action (`copy 
 
 | Before | After |
 |---|---|
-| `credentials in <url>: the web fetches no URL with a user or password` | `<url> holds a user name or password. This site fetches no address with credentials: remove them and try again.` |
+| `credentials in <url>: the web fetches no URL with a user or password` | `This site does not fetch that address. Check the address.` with `detail: credentials in the address: this site fetches no address with a user name or password` beneath |
 | `HTTP 403 from <host>; check the URL (bareflow does not retry)` | `<host> refused the request (HTTP 403). Check the address, or save the page and paste its HTML on the home page.` |
 | `3 losses marked.` | `3 losses: parts of the page bareflow could not keep, listed after it.` |
 
 An instruction must work when it is read: no `npx bareflow` until the package is on npm (verify
-fails on `npx` in anything the web serves or says).
+fails on `npx` in anything the web serves or says). Paste is offered only where the home shows the
+paste form (from 40rem); a phone's next step is the address, the wait, or the original.
+
+The server's own words (src/edge.js) are a reason, not a sentence: the web shows them only as
+`detail:` under a code that covers several causes (url, upstream without a status, convert).
 
 ## Banned
 
