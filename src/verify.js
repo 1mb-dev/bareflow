@@ -1203,8 +1203,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   timers.splice(0).forEach((f) => f());
   await new Promise((r) => setImmediate(r));
   const blockedSaid = blockedDoc.getElementById("status").textContent;
-  record("web", "turnstile", `Turnstile's script is added on a target route only, once, from its one address; the home, a submit, a paste, and a refused address make no request; a blocked script fails at the next check${wrong.map((k) => ` ${k}: ${JSON.stringify(String(loads[k]))}`).join("")}${blockedSaid.startsWith("Fetching is unavailable") ? "" : `; blocked: ${JSON.stringify(blockedSaid)}`}`,
-    !wrong.length && blockedSaid.startsWith("Fetching is unavailable"));
+  record("web", "turnstile", `Turnstile's script is added on a target route only, once, from its one address; the home, a submit, a paste, and a refused address make no request; a blocked script fails at the next check${wrong.map((k) => ` ${k}: ${JSON.stringify(String(loads[k]))}`).join("")}${blockedSaid === "Fetching is unavailable right now. Try again later." ? "" : `; blocked: ${JSON.stringify(blockedSaid)}`}`,
+    !wrong.length && blockedSaid === "Fetching is unavailable right now. Try again later.");
   record("web", "claims", `no npx in site/, the built site, or the Function's messages (${served.length} files)${npx.length ? `: ${npx.join(", ")}` : ""}`,
     !npx.length && served.some((f) => f.endsWith(join("_app", "app.js"))) && served.some((f) => f.endsWith("index.html")));
   // The theme: theme.js is a classic script in <head> before the stylesheet, so it sets data-theme
@@ -1502,7 +1502,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
       $("contents").hidden !== (h2.length < 4) || $("rail").querySelectorAll(".loss-n").length !== losses || $("fold").hidden || !folded() || !shut) tapeBad.push(where);
   }
   if (!$("colophon").contains($("print")) || $("tape").contains($("bars")) || $("print").nextElementSibling !== $("rail") || $("print").previousElementSibling !== $("header") ||
-    $("bars").getAttribute("aria-hidden") !== "true" || $("print").querySelector(".caption")?.textContent !== "fingerprint" || $("print").textContent !== "fingerprint") barsBad.push("placement");
+    $("print").getAttribute("aria-hidden") !== "true" || $("print").querySelector(".caption")?.textContent !== "fingerprint" || $("print").textContent !== "fingerprint") barsBad.push("placement");
   // The colophon: a details after the page, holding the losses; the tape's link opens it.
   if ($("colophon").tagName !== "DETAILS" || !$("colophon").contains($("rail")) || all.indexOf($("colophon")) < all.indexOf($("frame"))) tapeBad.push("colophon placement");
   const entry = $("contents-list").querySelector("a"), margin = $("toc-list").querySelector("a");

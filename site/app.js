@@ -6,7 +6,7 @@ import { origin, reachable, showView } from "./view.js";
 const $ = (id) => document.getElementById(id);
 const ORIGIN = location.origin;
 const ASK = "Give a page address, like https://docs.example.com/guide/install.";
-const UNAVAILABLE = "Fetching is unavailable right now. Try again later, or paste the page's HTML on the home page.";
+const UNAVAILABLE = "Fetching is unavailable right now. Try again later.";
 
 // For failures that arrive without a message of their own.
 const NAMED = {
