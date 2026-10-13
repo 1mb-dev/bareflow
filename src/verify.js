@@ -870,6 +870,8 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     ["/a.example:8443/x", "redirect https://a.example:8443/x"],
     ["/javascript:alert(1)", "error"], ["/data:text/html,x", "error"], ["/ftp://a.example/", "error"],
     ["/localhost", "error"], ["/https%3A%2F%2F%E0%A4%A", "error"],
+    ["/privacy.html", "error"], ["/random.html", "error"], ["/favicon.ico", "error"], ["/robots.txt", "error"], ["/llms.txt?x=1", "error"],
+    ["/a.example/x.html", "redirect https://a.example/x.html"], ["/a.md", "redirect https://a.md/"],
   ];
   const got = (p) => { const r = parseShare(o + p, o); return r.kind === "target" || r.kind === "redirect" ? `${r.kind} ${r.url}` : r.kind; };
   const bad = cases.filter(([p, want]) => got(p) !== want).map(([p, want]) => `${p || "(empty)"}: ${got(p)}, want ${want}`);
