@@ -11,7 +11,7 @@ import { createServer } from "node:http";
 import vm from "node:vm";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { gzipSync } from "node:zlib";
+import { gzipSync, inflateSync } from "node:zlib";
 import { run } from "./pipeline.js";
 import { convert } from "./convert.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
@@ -34,6 +34,7 @@ import { sha256 } from "./sha256.js";
 import { bundle } from "../scripts/bundle.js";
 import { MARK, site, splice } from "../scripts/site.js";
 import { EXAMPLE, LICENSE, excerpt } from "../scripts/example.js";
+import { EDGE, chunks } from "../scripts/icon.js";
 import { parseShare } from "../site/url.js";
 import { parseInline, renderDoc, renderLosses } from "../site/render.js";
 
@@ -1145,6 +1146,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const unlinked = (await Promise.all(linked.map((u) => readFile(join(out, u)).then(() => [], () => [u])))).flat();
   const ofl = await readFile(join(fontDir, "OFL.txt"), "utf8").catch(() => "");
   const appCode = await readFile(join(out, "_app/app.js"), "utf8");
+  const [iconSvgText, touchPng, faviconIco] = await Promise.all([join(out, "_app/icon.svg"), join(out, "_app/touch.png"), join(out, "favicon.ico")]
+    .map((f, i) => readFile(f, i ? undefined : "utf8").catch(() => (i ? Buffer.alloc(0) : ""))));
   await rm(out, { recursive: true, force: true });
   record("web", "fonts", `${fontFiles.length} fonts, ${fontTotal} bytes (cap ${FONT_CAP}), each equal to its SOURCE sha256; every url() and preload resolves; OFL.txt ships${[...unsourced, ...unlinked].length ? `: ${[...unsourced, ...unlinked].join(", ")}` : ""}`,
     fontFiles.length === 3 && fontTotal <= FONT_CAP && Object.keys(sourced).length === fontFiles.length && !unsourced.length &&
@@ -1201,21 +1204,25 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const themeFirst = themeTag === '<script src="/_app/theme.js">' && html.indexOf(themeTag) < html.indexOf('<link rel="stylesheet"');
   const themeCode = await readFile(join(ROOT, "site/theme.js"), "utf8");
   const themeRun = (stored, throws) => {
-    const data = {}, button = { textContent: "" }, ready = [], saved = [];
+    const data = {}, button = { textContent: "" }, ready = [], saved = [], metas = [{ content: "L" }, { content: "D" }];
     const storage = { getItem: () => { if (throws) throw new Error("blocked"); return stored; }, setItem: (k, v) => { if (throws) throw new Error("blocked"); saved.push(v); } };
-    const doc = { documentElement: { dataset: data }, getElementById: () => button, addEventListener: (t, f) => ready.push(f) };
+    const doc = { documentElement: { dataset: data }, getElementById: () => button, addEventListener: (t, f) => ready.push(f), querySelectorAll: (q) => (q === 'meta[name="theme-color"]' ? metas : []) };
+    const painted = () => metas.map((m) => m.content).join("");
     vm.runInNewContext(themeCode, { localStorage: storage, document: doc });
-    const first = data.theme ?? "auto";
+    const first = data.theme ?? "auto", firstPaint = painted();
     ready.forEach((f) => f());
     const seen = [button.textContent];
-    for (let k = 0; k < 3; k++) { button.onclick(); seen.push(`${data.theme ?? "auto"}/${button.textContent}`); }
-    return { first, seen, saved };
+    for (let k = 0; k < 3; k++) { button.onclick(); seen.push(`${data.theme ?? "auto"}/${button.textContent}/${painted()}`); }
+    return { first, firstPaint, seen, saved };
   };
   const stored = themeRun("dark"), junk = themeRun("purple"), none = themeRun(null, true);
-  const themeOk = themeFirst && stored.first === "dark" && junk.first === "auto" && none.first === "auto" &&
-    JSON.stringify(stored.seen) === JSON.stringify(["theme: dark", "auto/theme: auto", "light/theme: light", "dark/theme: dark"]) && JSON.stringify(stored.saved) === JSON.stringify(["auto", "light", "dark"]) &&
-    JSON.stringify(none.seen) === JSON.stringify(["theme: auto", "light/theme: light", "dark/theme: dark", "auto/theme: auto"]);
-  record("web", "theme", "theme.js loads in <head> before the stylesheet, sets a stored theme before the first paint, ignores junk, cycles auto, light, dark, and works with no storage", themeOk);
+  // The theme-color pair, light then dark, before theme.js (it reads them as it runs).
+  const paperMetas = [...html.matchAll(/<meta name="theme-color" media="\(prefers-color-scheme: (light|dark)\)" content="(#[0-9a-f]{6})">/g)];
+  const metasFirst = paperMetas.length === 2 && paperMetas.map((m) => m[1]).join() === "light,dark" && paperMetas.every((m) => m.index < html.indexOf(themeTag));
+  const themeOk = themeFirst && metasFirst && stored.first === "dark" && stored.firstPaint === "DD" && junk.first === "auto" && junk.firstPaint === "LD" && none.first === "auto" &&
+    JSON.stringify(stored.seen) === JSON.stringify(["theme: dark", "auto/theme: auto/LD", "light/theme: light/LL", "dark/theme: dark/DD"]) && JSON.stringify(stored.saved) === JSON.stringify(["auto", "light", "dark"]) &&
+    JSON.stringify(none.seen) === JSON.stringify(["theme: auto", "light/theme: light/LL", "dark/theme: dark/DD", "auto/theme: auto/LD"]);
+  record("web", "theme", "theme.js loads in <head> before the stylesheet, sets a stored theme before the first paint, ignores junk, cycles auto, light, dark, and works with no storage; a chosen theme sets both theme-color metas to its paper", themeOk);
   const missed = SINK_FORMS.filter((s) => !SINKS.test(s));
   record("web", "sinks", `no HTML sink in any site script, source or built (${scanned.length} files); the pattern catches each sink form${sunk.length || missed.length ? `: ${[...sunk, ...missed].join(", ")}` : ""}`,
     !sunk.length && !missed.length && scanned.some((f) => f.endsWith(join("_app", "app.js"))) && !SINKS.test("el.textContent = x; el.setAttribute(\"href\", u)"));
@@ -1301,6 +1308,38 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("web", "contrast", `every text pair at 4.5:1 or more, light and dark (${pairs.length * 2} pairs); dark sets every light color, the same under the media query and data-theme${low.length ? `: ${low.map((p) => `${p[0]} ${p[1]}/${p[2]} ${p[3].toFixed(2)}`).join(", ")}` : ""}`,
     Object.keys(light).length >= 10 && Object.keys(light).every((k) => k in dark) && JSON.stringify(dark) === JSON.stringify(darkSet) &&
     tokens.includes('@media (prefers-color-scheme: dark) {\n  :root:not([data-theme="light"]) {') && !low.length);
+
+  // The icons (scripts/icon.js), drawn from the tokens: the bar shows on a light tab strip and its
+  // edge on a dark one, the notch on the bar (3:1 non-text); the notch sits inside the bar, clear
+  // of the edge; the PNGs are opaque and hold only paper, bar, and notch. Tab grounds approximate
+  // Chrome's, Firefox's, and Safari's, light and dark.
+  const TABS = { light: ["#ffffff", "#f0f0f4", "#dee1e6"], dark: ["#1c1b22", "#202124", "#35363a", "#42414d"] };
+  const svgColor = (cls, prop = "fill") => [...iconSvgText.matchAll(new RegExp(`\\.${cls}\\{[^}]*${prop}:(#[0-9a-f]{6})`, "g"))].map((m) => m[1]);
+  const [barL, barD] = svgColor("bar"), [notchL, notchD] = svgColor("notch"), [edgeD] = svgColor("edge", "stroke");
+  const rect = (cls) => (iconSvgText.match(new RegExp(`<rect class="${cls}" x="([\\d.]+)" y="([\\d.]+)" width="([\\d.]+)" height="([\\d.]+)"/>`)) ?? []).slice(1).map(Number);
+  const [bx, by, bw, bh] = rect("bar"), [nx, ny, nw, nh] = rect("notch"), edgeRect = rect("edge");
+  const pixels = (b) => {
+    const c = chunks(b), h = c[0]?.[1];
+    if (c[0]?.[0] !== "IHDR") return {};
+    const w = h.readUInt32BE(0), ht = h.readUInt32BE(4), px = inflateSync(Buffer.concat(c.filter(([t]) => t === "IDAT").map(([, d]) => d))), seen = new Set();
+    if (h[9] !== 2) return { w, h: ht, type: h[9] };
+    for (let y = 0; y < ht; y++) for (let x = 0; x < w; x++) { const o = y * (1 + w * 3) + 1 + x * 3; seen.add(`#${px.subarray(o, o + 3).toString("hex")}`); }
+    return { w, h: ht, type: h[9], colors: [...seen].sort().join() };
+  };
+  const onPaper = [light.paper, light.tape, light.mark].sort().join();
+  const iconBad = [];
+  if (!html.includes('<link rel="icon" href="/_app/icon.svg" type="image/svg+xml">') || !html.includes('<link rel="apple-touch-icon" href="/_app/touch.png">')) iconBad.push("links");
+  if (barL !== light.tape || notchL !== light.mark || barD !== dark.tape || notchD !== dark.mark || !Object.values(dark).includes(edgeD) || !iconSvgText.includes(`stroke-width:${EDGE}}`)) iconBad.push("a color not its token");
+  const lowIcon = [...TABS.light.map((g) => ["bar", g, ratio(barL ?? "#000000", g)]), ...TABS.dark.map((g) => ["edge", g, ratio(edgeD ?? "#000000", g)]),
+    ["notch on bar", "light", ratio(notchL ?? "#000000", barL ?? "#000000")], ["notch on bar", "dark", ratio(notchD ?? "#000000", barD ?? "#000000")]].filter((p) => p[2] < 3);
+  if (lowIcon.length) iconBad.push(lowIcon.map((p) => `${p[0]} on ${p[1]} ${p[2].toFixed(2)}`).join(", "));
+  if (!(nx >= bx + EDGE && ny >= by + EDGE && nx + nw <= bx + bw - EDGE && ny + nh <= by + bh - EDGE) || JSON.stringify(edgeRect) !== JSON.stringify([bx + EDGE / 2, by + EDGE / 2, bw - EDGE, bh - EDGE])) iconBad.push("geometry");
+  const touch = pixels(touchPng), ico = pixels(faviconIco.subarray(22));
+  if (touch.w !== 180 || touch.h !== 180 || touch.colors !== onPaper) iconBad.push(`touch.png ${JSON.stringify(touch)}`);
+  if (faviconIco.length < 22 || faviconIco.readUInt16LE(2) !== 1 || faviconIco.readUInt16LE(4) !== 1 || faviconIco[6] !== 32 || faviconIco[7] !== 32 || faviconIco.readUInt32LE(18) !== 22 || faviconIco.readUInt32LE(14) !== faviconIco.length - 22 ||
+    ico.w !== 32 || ico.h !== 32 || ico.colors !== onPaper) iconBad.push(`favicon.ico ${JSON.stringify(ico)}`);
+  if (paperMetas[0]?.[2] !== light.paper || paperMetas[1]?.[2] !== dark.paper) iconBad.push("theme-color is not the paper");
+  record("web", "icons", `icon.svg, touch.png, favicon.ico, and theme-color from the tokens; bar and edge at 3:1 or more on ${TABS.light.length + TABS.dark.length} tab grounds, the notch on the bar; the notch inside the bar; the PNGs opaque${iconBad.length ? `: ${iconBad.join(" | ")}` : ""}`, !iconBad.length);
 }
 
 // The result view (site/render.js). Its inline reader agrees with marked on every prose field of
