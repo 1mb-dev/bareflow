@@ -122,6 +122,11 @@ pre code { background: none; padding: 0; font-size: inherit; }
 .colophon h2 { font: 600 var(--t-small)/1.5 var(--mono); color: var(--ink); margin: var(--s-3) 0 var(--s-2); }
 .caption { margin: var(--s-3) 0 var(--s-1); }
 .header { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+/* The fingerprint: 64 bars, one per bit of the hex above them, drawn in ink; 0 is an empty cell. */
+.print #print-hex { color: var(--ink); user-select: all; }
+.bars { display: flex; height: 1.5rem; }
+.bars > span { flex: 0 0 3px; }
+.bars > .on { background: var(--ink); }
 .actions { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: center; margin: var(--s-3) 0; }
 #mode[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .losses { list-style: none; margin: 0; padding: 0; }
