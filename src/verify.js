@@ -913,7 +913,8 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   // keeps its text, and its title once.
   const REFUSED = { json: ['{"a": 1}', "not-html", "json"], array: ["[1, 2]", "not-html", "json"], text: ["hello world\n", "not-html", ""],
     markdown: ["# Title\n\nSome *text*.", "not-html", ""], csv: ["a,b\n1,2\n", "not-html", ""], lt: ["< 5 apples", "not-html", ""], heart: ["<3 you", "not-html", ""],
-    empty: ["", "blank", ""], space: [" \n\t ", "blank", ""], bom: ["\uFEFF \n", "blank", ""], doctype: ["<!doctype html>\n<!-- down -->", "blank", ""], "json with markup": ['{"html": "<div><p>hi</p></div>"}', "not-html", "json"] };
+    empty: ["", "blank", ""], space: [" \n\t ", "blank", ""], bom: ["\uFEFF \n", "blank", ""], doctype: ["<!doctype html>\n<!-- down -->", "blank", ""], "json with markup": ['{"html": "<div><p>hi</p></div>"}', "not-html", "json"],
+    "template leak before the markup": ["{{ x }}<html><body><p>a</p></body></html>", "not-html", "json"], "unclosed comment": ["<!-- open <p>a</p>", "not-html", ""] };
   const KEPT = { optional: ["<!doctype html><title>T</title><p>Kept text.</p>", "T"], "no body tag": ["<html><title>T</title><p>Kept text.</p></html>", "T"],
     "head, no body": ["<html><head><title>T</title></head><p>Kept text.</p></html>", "T"], fragment: ["<p>Kept text.</p>", ""], "upper case": ["<BODY><p>Kept text.</p></BODY>", ""],
     "comment holding <body>": ["<html><head><title>T</title><!-- <body> --></head><p>Kept text.</p></html>", "T"],
