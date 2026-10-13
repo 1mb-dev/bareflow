@@ -963,7 +963,8 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   const DEEP = 5000, BYPASS = { ...Object.fromEntries(["html", "head", "body", "thead", "tfoot", "colgroup", "caption", "rb", "rtc", "div"].map((t) => [`<${t}> x${DEEP}`, `<${t}>`.repeat(DEEP)])),
     ...Object.fromEntries(["noscript", "template", "plaintext"].map((t) => [`<${t}> then divs`, `<${t}>${"<div>".repeat(DEEP)}`])),
     "values holding <": '<div a="<">'.repeat(DEEP), "spaced = before a quote": "<div a = '<'>".repeat(DEEP), "apostrophe in an unquoted value": `<div a=x'>${"<div>".repeat(DEEP)}'`, "self-closing outside svg": "<div/>".repeat(DEEP),
-    ...Object.fromEntries(["foreignObject", "desc"].map((t) => [`self-closing in <svg><${t}>`, `<svg><${t}>${"<div/>".repeat(DEEP)}`])), "self-closing <mi/> in math": `<math>${"<mi/>".repeat(DEEP)}` };
+    ...Object.fromEntries(["foreignObject", "desc"].map((t) => [`self-closing in <svg><${t}>`, `<svg><${t}>${"<div/>".repeat(DEEP)}`])), "self-closing <mi/> in math": `<math>${"<mi/>".repeat(DEEP)}`,
+    ...Object.fromEntries(["desc", "foreignObject", "mi", "math"].map((t) => [`self-closing after a stray </${t}> in an svg`, `<svg></${t}>${"<div/>".repeat(DEEP)}`])) };
   for (const [name, html] of Object.entries(BYPASS)) { const got = scanned(html); if (got !== "scan") seam.push(`scan ${name}: ${got}`); }
   // End tags: a stray one closes nothing; a matching one closes back to its element.
   if (scanned(`${"<div>".repeat(1000)}${"</span>".repeat(1000)}${"<div>".repeat(100)}`) !== "scan") seam.push("scan: stray end tags closed open elements");

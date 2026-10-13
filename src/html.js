@@ -91,9 +91,10 @@ const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input"
 export const SCAN_FLAT = new Set(["p", "li", "dt", "dd", "option", "optgroup", "tr", "td", "th", "tbody", "rt", "rp"]);
 export const SCAN_RAW = new Set(["script", "style", "textarea", "title", "xmp"]);
 const NAME = /[a-zA-Z][\w:-]*/y;
-// htmlparser2 honors "/>" only in foreign content: svg and math open it, an HTML integration point
-// inside one returns to HTML rules, and every other element inherits (measured: <div/> nests inside
-// <svg><foreignObject> and <svg><desc>, and math's <mi/> nests).
+// htmlparser2 honors "/>" only in foreign content, kept as its own stack: svg and math push true, an
+// HTML integration point pushes false, and an end tag of any of them pops one entry whether or not
+// that element is open (measured: <div/> nests inside <svg><foreignObject>, <svg><desc>, and after a
+// stray </desc> in an svg; math's <mi/> nests). A self-closing svg or math pops at once.
 const FOREIGN = new Set(["svg", "math"]), INTEGRATION = new Set(["mi", "mo", "mn", "ms", "mtext", "annotation-xml", "foreignobject", "desc", "title"]);
 
 // The depth of counted elements in the source, in one pass: each "<" is read once, a quoted
@@ -102,6 +103,7 @@ const FOREIGN = new Set(["svg", "math"]), INTEGRATION = new Set(["mi", "mo", "mn
 // stops at what it then removes, so stray end tags cost nothing and the whole scan stays linear.
 function scanDepth(html) {
   const lower = html.toLowerCase(), open = [], foreign = [], count = new Map(), n = html.length;
+  const context = (name) => FOREIGN.has(name) || INTEGRATION.has(name);
   for (let i = lower.indexOf("<"); i >= 0 && i < n; i = lower.indexOf("<", i)) {
     if (lower.startsWith("<!--", i)) { const end = lower.indexOf("-->", i + 4); if (end < 0) break; i = end + 3; continue; }
     const close = lower[i + 1] === "/";
@@ -119,15 +121,17 @@ function scanDepth(html) {
     if (j >= n) break;
     i = j + 1;
     if (close) {
+      if (context(name)) foreign.pop();
       if (!count.get(name)) continue;
-      for (let at = open.length - 1, top; at >= 0; at--) { top = open.pop(); foreign.pop(); count.set(top, count.get(top) - 1); if (top === name) break; }
+      for (let at = open.length - 1, top; at >= 0; at--) { top = open.pop(); count.set(top, count.get(top) - 1); if (top === name) break; }
       continue;
     }
     if (SCAN_RAW.has(name)) { const end = lower.indexOf(`</${name}`, i); if (end < 0) break; i = end; continue; }
-    const inForeign = FOREIGN.has(name) || (!INTEGRATION.has(name) && foreign.length > 0 && foreign.at(-1));
-    if (VOID.has(name) || SCAN_FLAT.has(name) || (lower[j - 1] === "/" && inForeign)) continue;
+    if (context(name)) foreign.push(FOREIGN.has(name));
+    const selfClosed = lower[j - 1] === "/" && foreign.at(-1) === true;
+    if (selfClosed && context(name)) foreign.pop();
+    if (VOID.has(name) || SCAN_FLAT.has(name) || selfClosed) continue;
     open.push(name);
-    foreign.push(inForeign);
     count.set(name, (count.get(name) ?? 0) + 1);
     if (open.length > SCAN_DEPTH) return open.length;
   }
