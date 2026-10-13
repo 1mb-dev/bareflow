@@ -3,7 +3,7 @@
 // localhost; the sheet takes ?w=375|1280, ?theme=light|dark|auto, and ?page=<n> (6 per page), and each frame is view.html?i=<n>
 // (add &mode=markdown for the raw view). /states.html (same ?w= and ?theme=) shows every failure
 // state in the real shell and app.js, answered by scripts/states-stub.js; any address with
-// ?bf-state=<id> is that shell. The sheet is for looking: verify's states rows are what holds the
+// ?bf-state=<id> is that shell; the last, privacy, is /privacy. The sheet is for looking: verify's states rows are what holds the
 // codes and sentences, and nothing checks this list against them.
 import { build } from "esbuild";
 import { createServer } from "node:http";
@@ -47,9 +47,12 @@ showView(c, c.url);
 if (q.get("mode") === "markdown") mode(true);
 `;
 const viewer = await build({ stdin: { contents: entry, resolveDir: ROOT, loader: "js" }, bundle: true, format: "esm", platform: "browser", write: false, logLevel: "silent" });
+// The sheet sets the theme from ?theme=, in place of theme.js.
+const THEME = '<script>{ const t = new URLSearchParams(location.search).get("theme") || "light"; if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }</script>\n';
 const shell = (await readFile(join(OUT, "index.html"), "utf8"))
-  .replace('<script src="/_app/theme.js"></script>\n', "") // the sheet sets the theme from ?theme=
-  .replace('<script type="module" src="/_app/app.js"></script>', '<script>{ const t = new URLSearchParams(location.search).get("theme") || "light"; if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t; }</script>\n<script type="module" src="/viewer.js"></script>');
+  .replace('<script src="/_app/theme.js"></script>\n', "")
+  .replace('<script type="module" src="/_app/app.js"></script>', `${THEME}<script type="module" src="/viewer.js"></script>`);
+const privacy = (await readFile(join(OUT, "privacy.html"), "utf8")).replace('<script src="/_app/theme.js"></script>\n', () => THEME);
 // The shell as served, with the stand-ins ahead of app.js. The interactive state gets Cloudflare's
 // dummy sitekey that always shows a challenge (it works from any host, localhost included).
 const states = shell.replace('<script type="module" src="/viewer.js"></script>', '<script src="/states-stub.js"></script>\n<script type="module" src="/_app/app.js"></script>');
@@ -63,6 +66,7 @@ const STATES = [
   ["long-host", "/https://a-subdomain-label-that-runs-on-without-any-break-at-all.docs.example.com/guide/"],
   ["paste-over-cap", "/", true], ["paste-empty", "/", true],
   ...["token", "check-timeout", "challenge", "check-slow", "limited", "unavailable", "cut", "not-html", "empty", "convert", "converter"].map((id) => [id, `/${TARGET}`]),
+  ["privacy", "/privacy"],
 ];
 const statesSheet = `<!doctype html>
 <html><head><meta charset="utf-8"><title>bareflow states</title>
@@ -75,7 +79,7 @@ const q = new URLSearchParams(location.search), w = Number(q.get("w")) || 375, t
 const scale = w > 800 ? 0.6 : 1;
 for (const [id, path, wide] of ${JSON.stringify(STATES)}) {
   if (wide && w < 640) continue;
-  const tall = id === "empty" || id === "interactive" ? 640 : 320;
+  const tall = id === "privacy" ? 900 : id === "empty" || id === "interactive" ? 640 : 320;
   const src = path + (path.includes("?") ? "&" : "?") + "bf-state=" + id + "&theme=" + theme;
   const f = document.createElement("figure"), cap = document.createElement("figcaption"), open = document.createElement("a"), frame = document.createElement("iframe");
   open.href = src; open.target = "_blank"; open.textContent = id;
@@ -129,7 +133,7 @@ createServer(async (req, res) => {
   const state = asked.searchParams.get("bf-state");
   if (state) {
     res.writeHead(200, { "content-type": TYPES[".html"], "cache-control": "no-store" });
-    return res.end(state === "interactive" ? states.replace('data-sitekey="contact-sheet"', `data-sitekey="${FORCED}"`) : states);
+    return res.end(state === "privacy" ? privacy : state === "interactive" ? states.replace('data-sitekey="contact-sheet"', `data-sitekey="${FORCED}"`) : states);
   }
   const path = normalize(asked.pathname.replace(/^\/$/, "/sheet.html"));
   const file = join(OUT, path);
