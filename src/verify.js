@@ -1047,8 +1047,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     noSecret.status === 503 && noSecret.code === "unavailable" && noSecret.calls.length === 0 && outage.status === 503 && outage.code === "unavailable" && unreachable.status === 503 && unreachable.code === "unavailable");
   record("edge", "test secret", "Cloudflare's 3 test secrets (and one with a trailing newline) on a public host: 503 unavailable with no request made; on localhost, 127.0.0.1, [::1]: checked as usual",
     testSecret.every((r) => r.status === 503 && r.code === "unavailable" && r.calls.length === 0) && testLocal.every((r) => r.status === 200 && r.calls[0] === SITEVERIFY));
-  record("edge", "guards", "credentials, port 8080, IPv4 and IPv6 literals, 1mb.dev, *.1mb.dev, *.pages.dev (trailing dots too), localhost, single-label names, file:, javascript: refused before Turnstile; private literal 403; a redirect to our zone or another port refused",
-    guards.every(Boolean) && priv.status === 403 && priv.code === "blocked" && priv.calls.length === 0 && toOwn.code === "url" && toPort.code === "url");
+  record("edge", "guards", "credentials, port 8080, IPv4 and IPv6 literals, 1mb.dev, *.1mb.dev, *.pages.dev (trailing dots too), localhost, single-label names, file:, javascript: refused before Turnstile; private literal 403; a redirect to our zone or another port refused as redirect (the typed address stays url)",
+    guards.every(Boolean) && priv.status === 403 && priv.code === "blocked" && priv.calls.length === 0 && toOwn.code === "redirect" && toPort.code === "redirect" && toOwn.status === 502);
   record("edge", "response", "a page: inert octet-stream bytes, final URL (ASCII for a non-ASCII target), no upstream headers; 404 upstream with its status and the address that answered (after a redirect too), a refusal and a private literal with none; no url, POST named",
     ok.status === 200 && new TextDecoder().decode(ok.body) === "<p>page</p>" && h.get("content-type") === "application/octet-stream" && h.get("x-content-type-options") === "nosniff" &&
     h.get("content-disposition") === "attachment" && h.get("content-security-policy") === "sandbox; default-src 'none'" && h.get("x-final-url") === "https://a.example/page" &&
@@ -1248,6 +1248,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     { id: "url (route) not a URL", code: "url", path: "/http://[x]/", next: "address" },
     { id: "url (edge)", code: "url", ...edge(400, "url", "port 8080 in https://docs.example.com:8080/: this site fetches ports 80 and 443 only"), next: "address", detail: true },
     { id: "url (edge) detail cap", code: "url", ...edge(400, "url", big), next: "address", detail: true },
+    { id: "redirect", code: "redirect", ...edge(502, "redirect", "bareflow.1mb.dev is not fetched by this site"), next: "original", paste: true, host: true, detail: true },
     { id: "blocked", code: "blocked", ...edge(403, "blocked", "blocked address for 10.0.0.1: bareflow fetches public addresses only"), next: "address", host: true },
     { id: "timeout", code: "timeout", ...edge(504, "timeout", "no answer from https://docs.example.com/guide/ within 30000 ms (redirects included); retry, or open it in a browser"), next: "wait", host: true, paste: true, says: `within ${TIMEOUT / 1000} seconds` },
     ...[[401, "address", true], [403, "address", true], [404, "address", false], [410, "address", false], [429, "wait", true], [500, "wait", true], [503, "wait", true], [418, "address", true]]

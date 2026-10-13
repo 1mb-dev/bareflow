@@ -32,6 +32,7 @@ const SAY = {
     if (n >= 500) return [`${who} could not serve the page (HTTP ${n}).`, LATER, LATER_OR_PASTE];
     return [`${who} answered HTTP ${n}, not the page.`, CHECK, CHECK_OR_PASTE];
   },
+  redirect: (h) => [`${h} redirects to an address this site does not fetch.`, original(h), "Save it from your browser and paste its HTML on the home page."],
   "over-cap": (h, _, pasted) => (pasted
     ? ["The pasted HTML is over 5 MB, this site's limit for a paste.", original(h)]
     : [`${h}'s page is over 1 MB, this site's limit for a fetched page.`, original(h), "Save it and paste its HTML on the home page (up to 5 MB)."]),
@@ -50,7 +51,7 @@ const SAY = {
   converter: () => ["The converter did not load.", RELOAD],
 };
 // Codes that cover causes the sentence cannot name: the server's words show beneath, capped.
-const DETAIL = new Set(["url", "upstream", "convert"]);
+const DETAIL = new Set(["url", "redirect", "upstream", "convert"]);
 const CAP = 120;
 
 // #status is the live region inside #result: a write in the task that unhides #result can go

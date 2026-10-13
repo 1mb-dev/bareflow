@@ -58,7 +58,7 @@ const TARGET = "https://docs.example.com/guide/";
 const STATES = [
   ["interactive", `/${TARGET}`],
   ["route-scheme", "/javascript:alert(1)"], ["route-encoding", "/https%3a%zz"], ["route-no-dot", "/intranet"], ["route-not-url", "/http://[x]/"],
-  ...["url-edge", "url-edge-long", "blocked", "timeout", "upstream-403", "upstream-404", "upstream-429", "upstream-503", "upstream-418", "upstream-403-redirect", "upstream-none", "over-cap"].map((id) => [id, `/${TARGET}`]),
+  ...["url-edge", "url-edge-long", "redirect", "blocked", "timeout", "upstream-403", "upstream-404", "upstream-429", "upstream-503", "upstream-418", "upstream-403-redirect", "upstream-none", "over-cap"].map((id) => [id, `/${TARGET}`]),
   ["long-host", "/https://a-subdomain-label-that-runs-on-without-any-break-at-all.docs.example.com/guide/"],
   ["paste-over-cap", "/", true], ["paste-empty", "/", true],
   ...["token", "check-timeout", "challenge", "check-slow", "limited", "unavailable", "cut", "not-html", "empty", "convert", "converter"].map((id) => [id, `/${TARGET}`]),

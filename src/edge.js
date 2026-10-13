@@ -106,9 +106,10 @@ const fail = (status, code, message, extra) => new Response(message, { status, h
 // The code the app maps to a named error: token, unavailable, url, blocked, timeout, upstream,
 // over-cap. An upstream HTTP error also carries its status, which picks the app's next step, and
 // the address that answered (after redirects), which the app names.
+const isUrl = (e, m = String(e?.message || e)) => e?.code === "url" || m.startsWith("not a URL") || m.startsWith("unsupported protocol");
 function failure(e) {
   const m = String(e?.message || e);
-  if (e?.code === "url" || m.startsWith("not a URL") || m.startsWith("unsupported protocol")) return fail(400, "url", m);
+  if (isUrl(e)) return fail(400, "url", m);
   if (m.startsWith("blocked address")) return fail(403, "blocked", m);
   if (m.startsWith("no answer")) return fail(504, "timeout", m);
   return fail(502, "upstream", m, e?.status ? { "x-bareflow-status": String(e.status), "x-final-url": e.url } : undefined);
@@ -142,5 +143,6 @@ export const handler = (fetchImpl, { timeout, limit } = {}) => async ({ request,
     const { finalUrl, body, stream, over } = await fetchBody(target, edgeTransport(fetchImpl, { limit }), { timeout, check: edgeCheck, maxBytes: WEB_MAX_BYTES });
     if (over) return fail(502, "over-cap", `the page is over ${WEB_MAX_BYTES / 1048576} MB, this site's limit`);
     return new Response(stream ?? body, { status: 200, headers: { ...INERT, "content-type": "application/octet-stream", "content-disposition": "attachment", "x-final-url": finalUrl } });
-  } catch (e) { return failure(e); }
+    // The target passed edgeCheck above, so a refusal in here is a redirect the site chose.
+  } catch (e) { return isUrl(e) ? fail(502, "redirect", String(e.message)) : failure(e); }
 };
