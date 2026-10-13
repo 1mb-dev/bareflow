@@ -50,11 +50,12 @@
     }
   }
 
-  // A paste over the cap goes through the home's form, as a person's would.
-  if (state === "paste-over-cap") {
+  // A paste goes through the home's form, as a person's would; the real worker answers.
+  const PASTE = { "paste-over-cap": `<p>${"a".repeat(5 * 1024 * 1024)}</p>`, "paste-empty": '<html><body><div id="app"></div></body></html>' };
+  if (PASTE[state]) {
     document.addEventListener("DOMContentLoaded", () => setTimeout(() => {
       document.getElementById("paste-url").value = "https://docs.example.com/guide/";
-      document.getElementById("paste-html").value = `<p>${"a".repeat(5 * 1024 * 1024)}</p>`;
+      document.getElementById("paste-html").value = PASTE[state];
       document.getElementById("paste-form").requestSubmit();
     }, 100));
   }

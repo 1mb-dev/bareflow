@@ -1252,6 +1252,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     { id: "upstream, no status", code: "upstream", ...edge(502, "upstream", "more than 5 redirects from https://docs.example.com/guide/"), next: "original", paste: true, host: true, detail: true },
     { id: "over-cap (edge)", code: "over-cap", ...edge(502, "over-cap", "the page is over 1 MB, this site's limit"), next: "original", paste: true, host: true },
     { id: "over-cap (paste)", code: "over-cap", desktopOnly: true, path: "/", act: submit("paste-form", { "paste-url": `https://${HOST}/guide/`, "paste-html": "<p>a</p>" }), extra: { Worker: replying({ error: "over-cap", message: "the pasted page is over 5 MB" }) }, next: "original", host: true, raw: "the pasted page is over 5 MB" },
+    { id: "empty (paste)", code: "empty", desktopOnly: true, path: "/", act: submit("paste-form", { "paste-url": `https://${HOST}/guide/`, "paste-html": "<p></p>" }), extra: { Worker: replying({ error: "empty", message: "the page has no readable content; sites that render with JavaScript come back empty", ...emptyPage }) }, next: "original", host: true, shown: true, says: "pasted HTML", not: "came back from", raw: "the page has no readable content; sites that render with JavaScript come back empty" },
     { id: "token", code: "token", ...edge(403, "token", "the Turnstile check failed or expired; reload the page"), next: "reload" },
     { id: "token, empty body", code: "token", ...edge(403, "token", ""), next: "reload" },
     { id: "check-timeout", code: "check-timeout", path: TARGET, extra: { turnstile: { render: (el, o) => o["timeout-callback"]?.() } }, next: "reload" },
@@ -1297,6 +1298,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
       if (!s.main || !s.main.endsWith(".") || s.main.endsWith("...")) bad.push(`${w} does not end in one period`);
       if (row.host && !s.main.includes(HOST)) bad.push(`${w} does not name ${HOST}`);
       if (row.says && !s.main.includes(row.says)) bad.push(`${w} does not say ${row.says}`);
+      if (row.not && s.main.includes(row.not)) bad.push(`${w} says ${row.not}`);
       const banned = BANNED.filter((re) => re.test(all));
       if (banned.length) bad.push(`${w} banned ${banned.join(" ")}`);
       if (/\bnpx\b/.test(all) || /\bBareflow\b/.test(all)) bad.push(`${w} npx or Bareflow`);

@@ -37,7 +37,9 @@ const SAY = {
   unavailable: () => ["Fetching is unavailable right now.", LATER, `${LATER} ${OR_PASTE}`],
   cut: (h) => [`${h}'s page stopped arriving partway.`, "Reload to try again."],
   "not-html": (h) => [`${h} returned a binary file, not an HTML page.`, CHECK],
-  empty: (h) => [`No readable text came back from ${h}: a page that builds itself with JavaScript arrives empty.`, original(h)],
+  empty: (h, _, pasted) => [pasted
+    ? "No readable text in the pasted HTML: a page that builds itself with JavaScript has no text in its source."
+    : `No readable text came back from ${h}: a page that builds itself with JavaScript arrives empty.`, original(h)],
   convert: (h) => [`bareflow could not convert ${h}'s page; the fault is bareflow's, not the page's.`, original(h)],
   converter: () => ["The converter did not load.", RELOAD],
 };
