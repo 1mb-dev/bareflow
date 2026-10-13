@@ -1048,7 +1048,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("edge", "test secret", "Cloudflare's 3 test secrets (and one with a trailing newline) on a public host: 503 unavailable with no request made; on localhost, 127.0.0.1, [::1]: checked as usual",
     testSecret.every((r) => r.status === 503 && r.code === "unavailable" && r.calls.length === 0) && testLocal.every((r) => r.status === 200 && r.calls[0] === SITEVERIFY));
   record("edge", "guards", "credentials, port 8080, IPv4 and IPv6 literals, 1mb.dev, *.1mb.dev, *.pages.dev (trailing dots too), localhost, single-label names, file:, javascript: refused before Turnstile; private literal 403; a redirect to our zone or another port refused as redirect (the typed address stays url)",
-    guards.every(Boolean) && priv.status === 403 && priv.code === "blocked" && priv.calls.length === 0 && toOwn.code === "redirect" && toPort.code === "redirect" && toOwn.status === 502);
+    guards.every(Boolean) && priv.status === 403 && priv.code === "blocked" && priv.calls.length === 0 && toOwn.code === "redirect" && toPort.code === "redirect" && toOwn.status === 502 && toPort.status === 502);
   record("edge", "response", "a page: inert octet-stream bytes, final URL (ASCII for a non-ASCII target), no upstream headers; 404 upstream with its status and the address that answered (after a redirect too), a refusal and a private literal with none; no url, POST named",
     ok.status === 200 && new TextDecoder().decode(ok.body) === "<p>page</p>" && h.get("content-type") === "application/octet-stream" && h.get("x-content-type-options") === "nosniff" &&
     h.get("content-disposition") === "attachment" && h.get("content-security-policy") === "sandbox; default-src 'none'" && h.get("x-final-url") === "https://a.example/page" &&
@@ -1180,7 +1180,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     vm.runInNewContext(appCode, ctx);
     act?.(w.document, w.Event);
     const said = [...w.document.querySelectorAll("script")].map((e) => e.getAttribute("src")).filter((u) => !u.startsWith("/_app/")).concat(did).join(" ");
-    return Object.assign(new String(said), { d: w.document, timers, ctx });
+    return Object.assign(new String(said), { d: w.document, timers, ctx, did });
     } finally {
       if (wide) for (const [k, d] of layout) { if (d) Object.defineProperty(proto, k, d); else delete proto[k]; }
     }
@@ -1281,8 +1281,15 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const uncovered = [...emitted].filter((c) => !rowCodes.has(c)), orphaned = [...rowCodes].filter((c) => !emitted.has(c));
   record("web", "states: codes", `every code src/edge.js, site/worker.js, and site/app.js emit has a row, and every row's code is emitted (${emitted.size} codes)${uncovered.length ? `; no row: ${uncovered.join(", ")}` : ""}${orphaned.length ? `; emitted by nothing: ${orphaned.join(", ")}` : ""}`,
     !uncovered.length && !orphaned.length && emitted.size >= 12);
-  // A throw in a timer is logged by a browser, not fatal: the page simply stops there.
-  const flush = async (run) => { for (let i = 0; i < 20; i++) { run.timers.splice(0).forEach((f) => { try { f(); } catch { /* as a browser */ } }); for (let j = 0; j < 3; j++) await new Promise((r) => setImmediate(r)); } };
+  // A throw in a timer is logged by a browser, not fatal: the page stops there. Each is kept on the
+  // run, and any one fails the record that ran it.
+  const flush = async (run) => {
+    run.thrown ??= [];
+    for (let i = 0; i < 20; i++) {
+      run.timers.splice(0).forEach((f) => { try { f(); } catch (e) { run.thrown.push(String(e?.message || e)); } });
+      for (let j = 0; j < 3; j++) await new Promise((r) => setImmediate(r));
+    }
+  };
   const failure = async (row, wide) => {
     const run = runApp(row.path, row.act, html, false, { ...row.extra, ...(wide ? desktopMedia : {}) });
     if (row.blockScript) run.d.querySelector(`script[src="${TURNSTILE}"]`)?.onerror?.();
@@ -1290,7 +1297,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     await flush(run);
     const st = run.d.getElementById("status"), det = st.querySelector(".detail");
     const main = [...st.childNodes].filter((n) => n !== det).map((n) => n.textContent).join("").trim();
-    return { main, detail: det?.textContent ?? null, code: run.d.getElementById("result").dataset.failed, view: !run.d.getElementById("view").hidden };
+    return { main, detail: det?.textContent ?? null, code: run.d.getElementById("result").dataset.failed, view: !run.d.getElementById("view").hidden, thrown: run.thrown };
   };
   for (const row of ROWS) {
     const phone = row.desktopOnly ? null : await failure(row, false), desk = await failure(row, true);
@@ -1311,6 +1318,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
       const want = row.detail && raw ? `detail: ${capped(raw)}` : null;
       if (s.detail !== want) bad.push(`${w} detail ${JSON.stringify(s.detail)}`);
       if (row.shown && !s.view) bad.push(`${w} result not shown`);
+      if (s.thrown.length) bad.push(`${w} a timer threw: ${s.thrown.join("; ")}`);
     }
     if (phone && PASTE.test(phone.main)) bad.push("phone offers paste");
     if (phone && !NEXT[row.next].test(phone.main)) bad.push(`phone next step is not ${row.next}`);
@@ -1329,12 +1337,12 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     const run = runApp(TARGET, null, html, false, { turnstile: { render: (el, o) => { el.textContent = "widget"; opts = o; fire(o); } } });
     await flush(run);
     const said = run.d.getElementById("status").textContent, hidden = run.d.getElementById("challenge").hidden;
-    opts.callback("late"); // its own handler hides the widget, so hidden is read before
+    opts?.callback?.("late"); // its own handler hides the widget, so hidden is read before
     await flush(run);
-    return { opts, said, still: run.d.getElementById("status").textContent === said, hidden, fetched: String(run).includes("fetch") };
+    return { opts, said, still: run.d.getElementById("status").textContent === said, hidden, fetched: run.did.some((d) => d.startsWith("fetch")), thrown: run.thrown };
   };
   const widgets = { error: await widget((o) => o["error-callback"]()), timeout: await widget((o) => o["timeout-callback"]()) };
-  const widgetBad = Object.entries(widgets).filter(([, w]) => w.opts?.retry !== "never" || w.opts?.["refresh-timeout"] !== "never" || !w.hidden || !w.still || w.fetched).map(([k, w]) => `${k}: ${JSON.stringify({ retry: w.opts?.retry, refresh: w.opts?.["refresh-timeout"], hidden: w.hidden, still: w.still, fetched: w.fetched })}`);
+  const widgetBad = Object.entries(widgets).filter(([, w]) => w.opts?.retry !== "never" || w.opts?.["refresh-timeout"] !== "never" || !w.hidden || !w.still || w.fetched || w.thrown.length).map(([k, w]) => `${k}: ${JSON.stringify({ retry: w.opts?.retry, refresh: w.opts?.["refresh-timeout"], hidden: w.hidden, still: w.still, fetched: w.fetched, thrown: w.thrown })}`);
   record("web", "states: widget", `Turnstile renders with retry and refresh-timeout "never"; on error or timeout the widget hides, and a late answer neither fetches nor changes the status${widgetBad.length ? `: ${widgetBad.join(" | ")}` : ""}`,
     !widgetBad.length);
   // #status is the live region, inside #result, which is hidden until a route shows it: a write in
@@ -1344,14 +1352,14 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   await Promise.all([flush(liveRoute), flush(livePaste)]);
   const later = [liveRoute, livePaste].map((r) => r.d.getElementById("status").textContent);
   record("web", "states: live region", `a refused address and a paste write #status a task after #result is shown (same task: ${JSON.stringify(sameTick)})`,
-    sameTick.every((t) => t === "") && later.every(Boolean));
+    sameTick.every((t) => t === "") && later.every(Boolean) && !liveRoute.thrown.length && !livePaste.thrown.length);
   // A conversion that answers before the deferred progress line is written still ends on the tally.
   const quick = runApp("/", submit("paste-form", { "paste-url": `https://${HOST}/a`, "paste-html": "<p>a</p>" }), html, false, { ...desktopMedia, Worker: replying({ ...emptyPage, losses: 0, flattened: false }) });
   for (let j = 0; j < 3; j++) await new Promise((r) => setImmediate(r)); // the reply lands first, as it can in a browser
   await flush(quick);
   const tallied = quick.d.getElementById("status").textContent;
   record("web", "states: result", `a result keeps the view's tally over a progress line still waiting (${JSON.stringify(tallied)})`,
-    tallied === "no losses marked" && !quick.d.getElementById("result").dataset.failed);
+    tallied === "no losses marked" && !quick.d.getElementById("result").dataset.failed && !quick.thrown.length);
   record("web", "claims", `no npx in site/, the built site, or the Function's messages (${served.length} files)${npx.length ? `: ${npx.join(", ")}` : ""}`,
     !npx.length && served.some((f) => f.endsWith(join("_app", "app.js"))) && served.some((f) => f.endsWith("index.html")));
   // The theme: theme.js is a classic script in <head> before the stylesheet, so it sets data-theme
