@@ -3,7 +3,8 @@
 // localhost; the sheet takes ?w=375|1280, ?theme=light|dark|auto, and ?page=<n> (6 per page), and each frame is view.html?i=<n>
 // (add &mode=markdown for the raw view). /states.html (same ?w= and ?theme=) shows every failure
 // state in the real shell and app.js, answered by scripts/states-stub.js; any address with
-// ?bf-state=<id> is that shell.
+// ?bf-state=<id> is that shell. The sheet is for looking: verify's states rows are what holds the
+// codes and sentences, and nothing checks this list against them.
 import { build } from "esbuild";
 import { createServer } from "node:http";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
