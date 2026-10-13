@@ -3,8 +3,7 @@
 // error, 1 fetch or extraction failure with the reason on err.
 import { run as pipelineRun } from "./pipeline.js";
 import { convertBounded } from "./bounded.js";
-import { MAX_DEPTH, MAX_ELEMENTS } from "./html.js";
-import { CONVERT_TIMEOUT } from "./fetch-policy.js";
+import { CONVERT_TIMEOUT, MAX_DEPTH, MAX_ELEMENTS } from "./fetch-policy.js";
 
 export const USAGE = "usage: bareflow <url> [--json]";
 

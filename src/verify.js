@@ -17,7 +17,7 @@ import { convert } from "./convert.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
 import { decompress, fetchSnapshot, nodeTransport } from "./fetch.js";
-import { CONVERT_TIMEOUT, fetchBody, fetchPage, MAX_BYTES, snapshot, TIMEOUT } from "./fetch-policy.js";
+import { CONVERT_TIMEOUT, fetchBody, fetchPage, MAX_BYTES, MAX_DEPTH, MAX_ELEMENTS, snapshot, TIMEOUT } from "./fetch-policy.js";
 import { edgeTransport, handler, SITEVERIFY, WEB_MAX_BYTES } from "./edge.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
@@ -27,7 +27,7 @@ import { parseHTML } from "linkedom";
 import { main, USAGE } from "./cli.js";
 import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
-import { MAX_DEPTH, MAX_ELEMENTS, parseHtml } from "./html.js";
+import { parseHtml } from "./html.js";
 import { convertBounded } from "./bounded.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
@@ -886,7 +886,7 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
 {
   const code = await readFile(join(siteOut, "_app/worker.js"), "utf8");
   const ask = (msg) => new Promise((resolve) => {
-    const self = { postMessage: resolve };
+    const self = { postMessage: (m) => { if (!m?.started) resolve(m); } };
     vm.runInContext(code, vm.createContext({ self, URL, TextEncoder, TextDecoder, console, setTimeout, clearTimeout, queueMicrotask, structuredClone, atob, btoa }));
     self.onmessage({ data: msg });
   });
@@ -952,7 +952,9 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   const limited = (html) => { try { parseHtml(html); return "ok"; } catch (e) { return e.code ?? `threw ${e.message}`; } };
   const LIMITS = [["depth at the cap", chain(MAX_DEPTH - 2), "ok"], ["depth one past", chain(MAX_DEPTH - 1), "too-deep"], ["a million levels, source", "<div>".repeat(1e6), "too-deep"],
     ["elements at the cap", flat(MAX_ELEMENTS - 3), "ok"], ["elements one past", flat(MAX_ELEMENTS - 2), "too-big"],
-    ["5,000 unclosed li", `<ul>${"<li>x".repeat(5000)}</ul>`, "ok"], ["5,000 unclosed p", "<p>x".repeat(5000), "ok"], ["div in a script string", `<script>${"'<div>'+".repeat(5000)}''</script><p>x</p>`, "ok"]];
+    ["5,000 unclosed li", `<ul>${"<li>x".repeat(5000)}</ul>`, "ok"], ["5,000 unclosed p", "<p>x".repeat(5000), "ok"],
+    ["5,000 rows without end tags", `<table>${"<tr><td>a<td>b".repeat(5000)}</table>`, "ok"], ["3,000 optgroups without end tags", `<select>${"<optgroup><option>a".repeat(3000)}</select>`, "ok"],
+    ["5,000 unclosed p before blocks", "<p>x<div>y</div>".repeat(5000), "ok"], ["div in a script string", `<script>${"'<div>'+".repeat(5000)}''</script><p>x</p>`, "ok"]];
   for (const [name, html, want] of LIMITS) { const got = limited(html); if (got !== want) seam.push(`${name}: ${got}, want ${want}`); }
   for (const code of ["too-deep", "too-big"]) {
     const w = await ask({ input: "paste", url: "https://p.example/x", html: code === "too-deep" ? chain(MAX_DEPTH) : flat(MAX_ELEMENTS) });
@@ -971,8 +973,8 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   if (threaded.markdown !== direct.markdown) seam.push("thread: differs from convert()");
   const refusedIn = await convertBounded({ ...base, html: "{}" }).then(() => ({}), (e) => e);
   if (refusedIn.code !== "not-html" || refusedIn.host !== "q.example") seam.push(`thread refusal: ${refusedIn.code} ${refusedIn.host}`);
-  const late = await convertBounded({ ...base, html: flat(30000) }, 50).then(() => ({}), (e) => e);
-  if (late.code !== "slow" || late.host !== "q.example") seam.push(`thread deadline: ${late.code} ${late.host}`);
+  const late = await convertBounded({ ...base, html: flat(45000) }, 3000).then(() => ({}), (e) => e);
+  if (late.code !== "slow" || late.host !== "q.example" || !late.started) seam.push(`thread deadline: ${late.code} ${late.host}, started ${late.started}`);
   const appSrcText = await readFile(join(ROOT, "site/app.js"), "utf8");
   if (Number(appSrcText.match(/const CONVERT_TIMEOUT = (\d+);/)?.[1]) !== CONVERT_TIMEOUT) seam.push("site/app.js CONVERT_TIMEOUT differs from the policy's");
   record("web", "seam", `parse seam: ${Object.keys(REFUSED).length} non-HTML bodies refused by name in convert and the worker, the CLI's three sentences exit 1; ${Object.keys(KEPT).length} pages with implied tags keep their text and title once; depth and element caps at their boundaries; the CLI's conversion thread and its deadline${seam.length ? `: ${seam.join("; ")}` : ""}`, !seam.length);
@@ -1362,7 +1364,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     { id: "blank", code: "blank", ...converted({ error: "blank", message: "the body is empty" }), next: "original", host: true },
     { id: "too-deep", code: "too-deep", ...converted({ error: "too-deep", message: "the page nests more than 256 levels deep" }), next: "original", host: true },
     { id: "too-big", code: "too-big", ...converted({ error: "too-big", message: "the page has more than 50000 elements" }), next: "original", host: true },
-    { id: "slow", code: "slow", ...fetched({ fetch: answer({}), Worker: class { postMessage() {} terminate() {} } }), next: "original", host: true },
+    { id: "slow", code: "slow", ...fetched({ fetch: answer({}), Worker: class { postMessage() { Promise.resolve().then(() => this.onmessage({ data: { started: true } })); } terminate() {} } }), next: "original", host: true },
     { id: "empty", code: "empty", ...converted({ error: "empty", message: "the page has no readable content; sites that render with JavaScript come back empty", ...emptyPage }), next: "original", host: true, shown: true },
     { id: "convert", code: "convert", ...converted({ error: "convert", message: "Cannot read properties of undefined (reading 'x')" }), next: "original", host: true, detail: true },
     { id: "convert, empty message", code: "convert", ...converted({ error: "convert", message: "" }), next: "original", host: true },

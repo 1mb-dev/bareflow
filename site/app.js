@@ -95,11 +95,12 @@ function fail(code, { host, n, hop, detail, pasted, said } = {}) {
 
 const worker = () => new Worker("/_app/worker.js");
 // A conversion is synchronous work in the worker; only terminating the worker stops one that runs on.
+// The deadline starts when the worker says it has begun, so loading the bundle does not count.
 const convertIn = (msg, transfer) => new Promise((resolve) => {
   const w = worker();
+  let timer;
   const done = (r) => { clearTimeout(timer); w.terminate(); resolve(r); };
-  const timer = setTimeout(() => done({ error: "slow" }), CONVERT_TIMEOUT);
-  w.onmessage = ({ data }) => done(data);
+  w.onmessage = ({ data }) => (data?.started ? (timer = setTimeout(() => done({ error: "slow" }), CONVERT_TIMEOUT)) : done(data));
   // worker.js answers every message, errors included: onerror is the script failing to load.
   w.onerror = () => done({ error: "converter" });
   w.postMessage(msg, transfer);

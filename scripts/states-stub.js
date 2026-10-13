@@ -33,7 +33,7 @@
 
   // The worker answers for itself, except a conversion that throws, a script that fails to load,
   // and one that never answers (slow: the app's deadline ends it).
-  if (state === "slow") window.Worker = class { postMessage() {} terminate() {} };
+  if (state === "slow") window.Worker = class { postMessage() { setTimeout(() => this.onmessage?.({ data: { started: true } })); } terminate() {} };
   if (state === "convert" || state === "converter") {
     window.Worker = class {
       postMessage() { setTimeout(() => (state === "converter" ? this.onerror?.({}) : this.onmessage?.({ data: { error: "convert", message: "Cannot read properties of undefined (reading 'blocks')" } })), 200); }

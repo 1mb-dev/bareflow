@@ -2,7 +2,7 @@
 // conversion here is the one verify diffs with the CLI. One message in, one out:
 //   { input: "edge", url, finalUrl, bytes }  bytes from /_fetch (ArrayBuffer)
 //   { input: "paste", url, html }            a page a person gave; url is their assertion
-// -> { markdown, doc, losses, flattened } or { error, message } with error one of not-html,
+// -> { started: true } first, then { markdown, doc, losses, flattened } or { error, message } with error one of not-html,
 //    blank, too-deep, too-big, over-cap, empty (with markdown and doc), convert. `doc` is the IR the result view renders.
 /* global bareflow */
 const fail = (error, message, extra) => ({ error, message, ...extra });
@@ -27,6 +27,7 @@ async function work(m) {
 }
 
 self.onmessage = async ({ data }) => {
+  self.postMessage({ started: true });
   try { self.postMessage(await work(data)); } catch (e) {
     // The parse seam's refusals (src/html.js NotHtml) keep their code; any other throw is bareflow's.
     if (e?.code === "blank") self.postMessage(fail("blank", e.message));

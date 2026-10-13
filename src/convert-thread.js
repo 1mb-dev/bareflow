@@ -2,6 +2,7 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { convert } from "./convert.js";
 
+parentPort.postMessage({ started: true });
 try {
   parentPort.postMessage({ result: await convert(workerData) });
 } catch (e) {
