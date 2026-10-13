@@ -13,7 +13,6 @@ const SLOW = 10000; // ms to wait for the bot check's widget
 // style.css .desktop)]; a phone is never told to paste. h is the host, n the upstream HTTP status.
 const CHECK = "Check the address.", LATER = "Try again later.", RELOAD = "Reload the page to try again.";
 const CHECK_OR_PASTE = "Check the address, or save the page and paste its HTML on the home page.";
-// A site may refuse this site's fetch for longer than "later" while the visitor's browser gets the page.
 const LATER_OR_PASTE = "Try again later, or save the page and paste its HTML on the home page.";
 const SAVE_AND_PASTE = "Save it from your browser and paste its HTML on the home page.";
 const OR_PASTE = "Or paste the page's HTML on the home page.";
@@ -41,7 +40,7 @@ const SAY = {
   token: () => ["The bot check failed or expired.", RELOAD],
   "check-timeout": () => ["The bot check timed out before it was answered.", RELOAD],
   challenge: () => ["The bot check did not load from challenges.cloudflare.com.", "If a content blocker is on, allow that address, then reload.", `If a content blocker is on, allow that address, then reload. ${OR_PASTE}`],
-  "check-slow": () => [`The bot check did not load from challenges.cloudflare.com within ${SLOW / 1000} seconds; the network may be slow, or a content blocker may stop it.`, RELOAD, `${RELOAD} ${OR_PASTE}`],
+  "check-slow": () => [`The bot check did not load from challenges.cloudflare.com within ${SLOW / 1000} seconds; the network may be slow, or a content blocker may be stopping it.`, RELOAD, `${RELOAD} ${OR_PASTE}`],
   limited: () => ["This site has had too many requests from your network.", "Wait a minute, then reload."],
   unavailable: () => ["Fetching is unavailable right now.", LATER, `${LATER} ${OR_PASTE}`],
   cut: (h) => [`${h}'s page stopped arriving partway.`, RELOAD],

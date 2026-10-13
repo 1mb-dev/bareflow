@@ -44,8 +44,8 @@ An instruction must work when it is read: no `npx bareflow` until the package is
 fails on `npx` in anything the web serves or says). Paste is offered only where the home shows the
 paste form (from 40rem); a phone's next step is the address, the wait, or the original.
 
-The server's own words (src/edge.js) are a reason, not a sentence: the web shows them only as
-`detail:` under a code that covers several causes (url, redirect, upstream without a status, convert).
+The web shows the server's own words (src/edge.js) only as `detail:`, under a code that covers
+several causes (url, redirect, upstream without a status, convert).
 
 ## Banned
 
