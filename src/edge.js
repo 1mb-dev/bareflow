@@ -4,7 +4,7 @@
 // stays under the free plan's 10 ms). Workers fetch cannot pin DNS: a name that resolves to a
 // private address is refused by Cloudflare's network, not here. Literals, ports, userinfo, and our
 // own zones are refused here on every hop.
-import { checkTarget, fetchBody, MAX_BYTES, noAnswer, REDIRECT } from "./fetch-policy.js";
+import { checkTarget, fetchBody, noAnswer, REDIRECT } from "./fetch-policy.js";
 
 export const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 export const OWN_ZONES = ["1mb.dev", "pages.dev"];
@@ -22,10 +22,10 @@ export function edgeCheck(url) {
   const target = checkTarget(url);
   // "1mb.dev." is 1mb.dev: a trailing dot is the same name in DNS.
   const host = target.host.replace(/\.+$/, "");
-  if (u.username || u.password) throw refused(`credentials in ${url}: the web fetches no URL with a user or password`);
-  if (u.port && u.port !== "80" && u.port !== "443") throw refused(`port ${u.port} in ${url}: the web fetches ports 80 and 443 only; the bareflow CLI fetches others`);
-  if (target.literal) throw refused(`IP address ${host}: the web fetches host names only; the bareflow CLI fetches public addresses`);
-  if (OWN_ZONES.some((z) => host === z || host.endsWith(`.${z}`))) throw refused(`${host} is not fetched by the web`);
+  if (u.username || u.password) throw refused("credentials in the address: this site fetches no address with a user name or password");
+  if (u.port && u.port !== "80" && u.port !== "443") throw refused(`port ${u.port} in ${url}: this site fetches ports 80 and 443 only`);
+  if (target.literal) throw refused(`IP address ${host}: this site fetches host names only`);
+  if (OWN_ZONES.some((z) => host === z || host.endsWith(`.${z}`))) throw refused(`${host} is not fetched by this site`);
   // Cloudflare's network refuses these; a local dev server would not.
   if (!host.includes(".") || host === "localhost" || host.endsWith(".localhost")) throw refused(`${host} is not a public host name`);
 }
@@ -101,16 +101,16 @@ export const edgeTransport = (fetchImpl, { limit } = {}) => async (url, { header
 
 // Every response is inert where it lands: no sniffing, no rendering, no script.
 const INERT = { "x-content-type-options": "nosniff", "content-security-policy": "sandbox; default-src 'none'", "cache-control": "no-store" };
-const fail = (status, code, message) => new Response(message, { status, headers: { ...INERT, "content-type": "text/plain; charset=utf-8", "x-bareflow-error": code } });
+const fail = (status, code, message, extra) => new Response(message, { status, headers: { ...INERT, "content-type": "text/plain; charset=utf-8", "x-bareflow-error": code, ...extra } });
 
 // The code the app maps to a named error: token, unavailable, url, blocked, timeout, upstream,
-// over-cap.
+// over-cap. An upstream HTTP error also carries its status, which picks the app's next step.
 function failure(e) {
   const m = String(e?.message || e);
   if (e?.code === "url" || m.startsWith("not a URL") || m.startsWith("unsupported protocol")) return fail(400, "url", m);
   if (m.startsWith("blocked address")) return fail(403, "blocked", m);
   if (m.startsWith("no answer")) return fail(504, "timeout", m);
-  return fail(502, "upstream", m);
+  return fail(502, "upstream", m, e?.status ? { "x-bareflow-status": String(e.status) } : undefined);
 }
 
 // "ok", "bad" (Turnstile said no), or "down" (siteverify did not answer usably: not the visitor's fault).
@@ -135,11 +135,11 @@ export const handler = (fetchImpl, { timeout = 30000, limit } = {}) => async ({ 
   if (!target) return fail(400, "url", "no url parameter");
   try { edgeCheck(target); } catch (e) { return failure(e); }
   const verdict = await checkToken(fetchImpl, env.TURNSTILE_SECRET, token, request.headers.get("cf-connecting-ip"));
-  if (verdict === "down") return fail(503, "unavailable", "the bot check service did not answer; try again later");
+  if (verdict === "down") return fail(503, "unavailable", "the bot check service did not answer");
   if (verdict === "bad") return fail(403, "token", "the Turnstile check failed or expired; reload the page");
   try {
     const { finalUrl, body, stream, over } = await fetchBody(target, edgeTransport(fetchImpl, { limit }), { timeout, check: edgeCheck, maxBytes: WEB_MAX_BYTES });
-    if (over) return fail(502, "over-cap", `the page is over ${WEB_MAX_BYTES / 1048576} MB, the web's limit; the bareflow CLI reads up to ${MAX_BYTES / 1048576} MB`);
+    if (over) return fail(502, "over-cap", `the page is over ${WEB_MAX_BYTES / 1048576} MB, this site's limit`);
     return new Response(stream ?? body, { status: 200, headers: { ...INERT, "content-type": "application/octet-stream", "content-disposition": "attachment", "x-final-url": finalUrl } });
   } catch (e) { return failure(e); }
 };

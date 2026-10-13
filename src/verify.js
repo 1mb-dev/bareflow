@@ -1047,10 +1047,11 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     testSecret.every((r) => r.status === 503 && r.code === "unavailable" && r.calls.length === 0) && testLocal.every((r) => r.status === 200 && r.calls[0] === SITEVERIFY));
   record("edge", "guards", "credentials, port 8080, IPv4 and IPv6 literals, 1mb.dev, *.1mb.dev, *.pages.dev (trailing dots too), localhost, single-label names, file:, javascript: refused before Turnstile; private literal 403; a redirect to our zone or another port refused",
     guards.every(Boolean) && priv.status === 403 && priv.code === "blocked" && priv.calls.length === 0 && toOwn.code === "url" && toPort.code === "url");
-  record("edge", "response", "a page: inert octet-stream bytes, final URL (ASCII for a non-ASCII target), no upstream headers; 404 upstream, no url, POST named",
+  record("edge", "response", "a page: inert octet-stream bytes, final URL (ASCII for a non-ASCII target), no upstream headers; 404 upstream with its status, a refusal and a private literal with none; no url, POST named",
     ok.status === 200 && new TextDecoder().decode(ok.body) === "<p>page</p>" && h.get("content-type") === "application/octet-stream" && h.get("x-content-type-options") === "nosniff" &&
     h.get("content-disposition") === "attachment" && h.get("content-security-policy") === "sandbox; default-src 'none'" && h.get("x-final-url") === "https://a.example/page" &&
-    !h.has("set-cookie") && !h.has("x-upstream") && wide.status === 200 && wide.headers.get("x-final-url") === "https://a.example/%E6%97%A5" && missing.status === 502 && missing.code === "upstream" && noUrl.status === 400 && post.status === 405);
+    !h.has("set-cookie") && !h.has("x-upstream") && wide.status === 200 && wide.headers.get("x-final-url") === "https://a.example/%E6%97%A5" && missing.status === 502 && missing.code === "upstream" && missing.headers.get("x-bareflow-status") === "404" &&
+    !ok.headers.has("x-bareflow-status") && !toOwn.headers.has("x-bareflow-status") && !priv.headers.has("x-bareflow-status") && noUrl.status === 400 && post.status === 405);
   // Pass-through: a declared, uncompressed length within the web cap reaches the response unread,
   // through the limiter; a compressed, undeclared, or malformed one is read. After the 200, a body
   // longer than declared, a reset, or the deadline arrives as a cut body; a completed pipe clears
@@ -1101,8 +1102,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     !compressed.unread && compressed.text === "<p>declared</p>" && !undeclared.unread && undeclared.text === "<p>declared</p>" && !malformed.unread && malformed.text === "<p>declared</p>" &&
     understated.unread && understated.text === "cut" && resetMid.unread && resetMid.text === "cut" && late.status === 200 && late.unread && late.text === "cut" &&
     /past the 1048576-byte cap$/.test(pastCap) && /^fetchPage needs bytes/.test(pageOfStream));
-  record("edge", "cap", "every page fetch asks for identity; one byte over the web cap: 502 over-cap naming the CLI; exactly the cap: 200 with every byte",
-    encodings.size === 1 && encodings.has("identity") && big.status === 502 && big.code === "over-cap" && /^the page is over 1 MB, the web's limit; the bareflow CLI reads up to 5 MB$/.test(new TextDecoder().decode(big.body)) &&
+  record("edge", "cap", "every page fetch asks for identity; one byte over the web cap: 502 over-cap naming this site's limit; exactly the cap: 200 with every byte",
+    encodings.size === 1 && encodings.has("identity") && big.status === 502 && big.code === "over-cap" && /^the page is over 1 MB, this site's limit$/.test(new TextDecoder().decode(big.body)) &&
     exact.status === 200 && exact.body.length === WEB_MAX_BYTES);
 }
 

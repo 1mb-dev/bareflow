@@ -60,7 +60,7 @@ export async function fetchBody(url, transport, { timeout = 30000, check, maxByt
       try { at = new URL(res.location, at).toString(); } catch { throw new Error(`redirect ${res.status} from ${at} to an invalid location`); }
       continue;
     }
-    if (res.status >= 400) throw new Error(`HTTP ${res.status} from ${at}; check the URL (bareflow does not retry)`);
+    if (res.status >= 400) throw Object.assign(new Error(`HTTP ${res.status} from ${at}; check the URL (bareflow does not retry)`), { status: res.status });
     if (res.stream) {
       if (!(res.length <= maxBytes)) {
         res.stream.cancel().catch(() => {});
