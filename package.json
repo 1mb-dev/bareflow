@@ -2,7 +2,27 @@
   "name": "bareflow",
   "version": "0.5.0",
   "description": "Deterministic, faithful, versioned document layer for technical web content",
+  "keywords": [
+    "markdown",
+    "documentation",
+    "html-to-markdown",
+    "llm",
+    "agents",
+    "cli"
+  ],
+  "homepage": "https://github.com/1mb-dev/bareflow#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/1mb-dev/bareflow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/1mb-dev/bareflow/issues"
+  },
+  "author": "Vinayak Mishra (https://github.com/vnykmshr)",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "bin": {
     "bareflow": "./bin/bareflow.js"
   },
