@@ -11,7 +11,8 @@ import { realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundle } from "./bundle.js";
-import { exampleHtml } from "./example.js";
+import { excerpt, exampleHtml } from "./example.js";
+import { stylesheet } from "./stylesheet.js";
 import { iconIco, iconPng, iconSvg, palette } from "./icon.js";
 import { CARD, cardAlt, cardWords } from "./card.js";
 import { VERSION } from "../src/version.js";
@@ -31,19 +32,20 @@ export const cardTags = (alt) => `<meta property="og:image" content="${CARD.url}
 <meta name="twitter:card" content="summary_large_image">
 `;
 
-// _app/style.css: the tokens first (verify's design check reads them there), then the rules.
-export const stylesheet = async () => (await Promise.all(["site/tokens.css", "site/style.css"].map((f) => readFile(join(ROOT, f), "utf8")))).join("\n");
-
 export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.TURNSTILE_SITEKEY || TEST_SITEKEY) {
   await rm(out, { recursive: true, force: true });
   await mkdir(join(out, "_app"), { recursive: true });
-  const app = await build({ entryPoints: [join(ROOT, "site/app.js")], bundle: true, format: "esm", platform: "browser", minify: true, write: false, logLevel: "silent" });
   const tokens = await readFile(join(ROOT, "site/tokens.css"), "utf8"), { light, dark } = palette(tokens);
   const html = (await readFile(join(ROOT, "site/index.html"), "utf8")).replace("__SITEKEY__", () => sitekey).replace("__VERSION__", () => VERSION)
     .replace("__PAPER__", () => light.paper).replace("__PAPER_DARK__", () => dark.paper);
   for (const m of [MARK, CARD_MARK]) if (html.split(m).length !== 2) throw new Error(`site/index.html: needs ${JSON.stringify(m)} exactly once`);
   // Awaited here, together: an await inside the array below would hold back every entry after it.
-  const [example, alt, worker, css] = await Promise.all([exampleHtml(), cardWords().then(cardAlt), bundle().then(async (b) => `${b}\n${await readFile(join(ROOT, "site/worker.js"), "utf8")}`), stylesheet()]);
+  // One pipeline run feeds the home's example and the card's words.
+  const ex = excerpt();
+  const [app, example, alt, worker, css] = await Promise.all([
+    build({ entryPoints: [join(ROOT, "site/app.js")], bundle: true, format: "esm", platform: "browser", minify: true, write: false, logLevel: "silent" }),
+    exampleHtml(ex), cardWords(ex).then(cardAlt), bundle().then(async (b) => `${b}\n${await readFile(join(ROOT, "site/worker.js"), "utf8")}`), stylesheet(),
+  ]);
   await Promise.all([
     writeFile(join(out, "index.html"), splice(splice(html, ""), "", CARD_MARK)),
     writeFile(join(out, "_app/home.html"), splice(splice(html, `${example}\n`), cardTags(alt), CARD_MARK)),

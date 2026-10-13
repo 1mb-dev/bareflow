@@ -14,7 +14,7 @@ import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { excerpt, exampleHtml } from "./example.js";
 import { chunk, chunks } from "./icon.js";
-import { stylesheet } from "./site.js";
+import { stylesheet } from "./stylesheet.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const CARD = { file: "site/card.png", url: "https://bareflow.1mb.dev/_app/card.png", width: 1200, height: 630, key: "bareflow-card" };
@@ -23,8 +23,8 @@ const SCALE = 3.75;
 
 // What the card shows, and the light :root block it is drawn with (values only: comments, spacing,
 // and the dark theme do not move it).
-export async function cardWords() {
-  const { doc } = await excerpt();
+export async function cardWords(ex = excerpt()) {
+  const { doc } = await ex;
   const n = doc.sections[0].losses.length;
   const css = await readFile(join(ROOT, "site/tokens.css"), "utf8"), at = css.indexOf(":root {");
   const tokens = css.slice(at, css.indexOf("}", at) + 1).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\s+/g, " ");
@@ -42,7 +42,7 @@ function withText(png, text) {
 }
 
 async function render() {
-  const words = await cardWords();
+  const ex = excerpt(), words = await cardWords(ex);
   const dir = await mkdtemp(join(tmpdir(), "bareflow-card-"));
   try {
     await mkdir(join(dir, "_app"));
@@ -53,7 +53,7 @@ async function render() {
 <link rel="stylesheet" href="/_app/style.css"><style>
 body { width: ${CARD.width / SCALE}px; overflow: hidden; } /* headless Chrome lays out wider than a small window */ .example > h2, .exhibit > figcaption, .exhibit-part:nth-child(3), .elision { display: none; }
 .exhibit { border: 0; } .exhibit-part:first-child { padding: 0; }
-</style></head><body>${await exampleHtml()}</body></html>`);
+</style></head><body>${await exampleHtml(ex)}</body></html>`);
     const types = { ".html": "text/html", ".css": "text/css", ".woff2": "font/woff2" };
     const server = createServer(async (req, res) => {
       const f = join(dir, normalize(decodeURIComponent(new URL(req.url, "http://x").pathname)));

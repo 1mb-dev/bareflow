@@ -18,10 +18,7 @@ const flat = (t) => t.replace(/\s+/g, " ").trim();
 
 // The IR and the excerpt of it the home shows: blocks 2-5 of the one section (the first heading,
 // its paragraph, the Options API code, and the remains of the Composition API code that L1 marks).
-// One run per process: the build and verify ask for it several times. Callers only read it.
-let once;
-export const excerpt = () => (once ??= cut());
-async function cut() {
+export async function excerpt() {
   const { doc } = await run({ url: EXAMPLE.url, html: await readFile(join(ROOT, EXAMPLE.fixture), "utf8"), retrievedAt: FIXED });
   const [s] = doc.sections, b = s.blocks, skipped = b.slice(0, 2), shown = b.slice(2, 6);
   const fits = doc.sections.length === 1 && !s.children.length && s.losses.length === 2 &&
@@ -36,8 +33,9 @@ async function cut() {
 // excerpt, the losses with L1 open, and the attribution; bareflow says nothing inside the page's
 // area but the elisions. No ids (a paste renders a page into the
 // same document), no controls.
-export async function example(d) {
-  const { doc, part, skipped } = await excerpt();
+// ex: an excerpt() a caller already ran (the build runs the pipeline once for the home and the card).
+export async function example(d, ex = excerpt()) {
+  const { doc, part, skipped } = await ex;
   const el = (tag, cls, text) => { const e = d.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const link = (href, text) => { const a = el("a", null, text); a.href = href; return a; };
   const losses = doc.sections[0].losses.length;
@@ -75,7 +73,7 @@ export async function example(d) {
 }
 
 // The example as HTML, for the home.
-export async function exampleHtml() {
+export async function exampleHtml(ex) {
   const { document } = parseHTML("<!doctype html><html><body></body></html>");
-  return (await example(document)).outerHTML;
+  return (await example(document, ex)).outerHTML;
 }
