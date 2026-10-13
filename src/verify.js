@@ -1161,8 +1161,11 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const TURNSTILE = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
   const runApp = (path, act, page = html, wide = false) => {
     const w = parseHTML(page), did = [], timers = [];
-    // linkedom lays nothing out; wide makes every block overflow, as code does on a phone.
-    if (wide) for (const [k, v] of [["scrollWidth", 400], ["clientWidth", 300]]) Object.defineProperty(w.HTMLElement.prototype, k, { get: () => v, configurable: true });
+    // linkedom lays nothing out; wide makes every block overflow, as code does on a phone. Every
+    // linkedom document shares one HTMLElement prototype, so the stand-ins come off after this run.
+    const proto = w.HTMLElement.prototype, layout = ["scrollWidth", "clientWidth"].map((k) => [k, Object.getOwnPropertyDescriptor(proto, k)]);
+    if (wide) for (const [k, v] of [["scrollWidth", 400], ["clientWidth", 300]]) Object.defineProperty(proto, k, { get: () => v, configurable: true });
+    try {
     const ctx = {
       document: w.document, location: { href: `https://bareflow.1mb.dev${path}`, origin: "https://bareflow.1mb.dev", assign: (u) => did.push(`assign ${u}`) },
       history: { replaceState() {}, pushState() {} }, fetch: (u) => { did.push(`fetch ${u}`); return new Promise(() => {}); },
@@ -1173,6 +1176,9 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     act?.(w.document, w.Event);
     const said = [...w.document.querySelectorAll("script")].map((e) => e.getAttribute("src")).filter((u) => !u.startsWith("/_app/")).concat(did).join(" ");
     return Object.assign(new String(said), { d: w.document, timers });
+    } finally {
+      if (wide) for (const [k, d] of layout) { if (d) Object.defineProperty(proto, k, d); else delete proto[k]; }
+    }
   };
   const submit = (id, fields) => (d, Event) => {
     for (const [f, v] of Object.entries(fields)) d.getElementById(f).value = v;
@@ -1186,7 +1192,9 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   // The home's pre-rendered example: a block that scrolls takes focus, as in the view.
   const homeRun = runApp("/", null, home, true);
   const focusable = [...homeRun.d.querySelectorAll(".exhibit pre")].map((e) => e.getAttribute("tabindex"));
-  record("web", "example-reach", `the home's example: every block that scrolls takes focus (${focusable.length} blocks)`, focusable.length === 4 && focusable.every((t) => t === "0") && String(homeRun) === "");
+  const canary = parseHTML("<pre>x</pre>").document.querySelector("pre");
+  record("web", "example-reach", `the home's example: every block that scrolls takes focus (${focusable.length} blocks); the layout stand-ins come off after (linkedom has no layout: a fresh pre reports ${canary.scrollWidth}/${canary.clientWidth})`,
+    focusable.length === 4 && focusable.every((t) => t === "0") && String(homeRun) === "" && canary.scrollWidth === undefined && canary.clientWidth === undefined);
   const want = { home: "", query: "", go: "assign https://bareflow.1mb.dev/https://docs.example.com/a", paste: "worker", refused: "", target: TURNSTILE, bare: TURNSTILE };
   const wrong = Object.keys(want).filter((k) => String(loads[k]) !== want[k]);
   // A blocked script fails the fetch at the next check, not after the 10 s wait.
