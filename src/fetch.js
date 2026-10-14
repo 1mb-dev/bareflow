@@ -46,8 +46,10 @@ function validatingLookup(hostname, opts, cb) {
 }
 
 // The request is destroyed at the policy's deadline, a hard one, not a socket idle timeout, so a
-// server that drips bytes cannot hold the caller.
-export const nodeTransport = (resolver) => (url, { host, headers, deadline, budget, maxBytes }) => new Promise((resolve, reject) => {
+// server that drips bytes cannot hold the caller. The deadline spans decompression too: the edge's
+// fetch decodes as it reads, so one budget means the same on both transports. `inflate` is
+// decompress, replaceable so verify can hold it past the deadline.
+export const nodeTransport = (resolver, inflate = decompress) => (url, { host, headers, deadline, budget, maxBytes }) => new Promise((resolve, reject) => {
   const u = new URL(url);
   const isHttps = u.protocol === "https:";
   let timer;
@@ -78,9 +80,8 @@ export const nodeTransport = (resolver) => (url, { host, headers, deadline, budg
     const finish = async () => {
       if (read) return;
       read = true;
-      clearTimeout(timer); // the body is in; decompressing it is not the site's delay
       let body;
-      try { body = await decompress(Buffer.concat(chunks).subarray(0, maxBytes + 1), (res.headers["content-encoding"] || "").toLowerCase(), { truncated: size > maxBytes, limit: maxBytes + 1 }); }
+      try { body = await inflate(Buffer.concat(chunks).subarray(0, maxBytes + 1), (res.headers["content-encoding"] || "").toLowerCase(), { truncated: size > maxBytes, limit: maxBytes + 1 }); }
       catch (e) { return reject(new Error(`${e.message}: ${url}`)); }
       resolve({ status: res.statusCode, body, over: size > maxBytes });
     };
@@ -91,7 +92,8 @@ export const nodeTransport = (resolver) => (url, { host, headers, deadline, budg
     });
     res.on("end", finish);
   });
-  timer = setTimeout(() => r.destroy(noAnswer(url, budget)), deadline - Date.now());
+  // Rejected here, not only through destroy: a request whose response has ended emits no error.
+  timer = setTimeout(() => { const e = noAnswer(url, budget); reject(e); r.destroy(e); }, deadline - Date.now());
   r.on("error", reject);
   r.end();
 });
