@@ -36,6 +36,7 @@ import { sha256 } from "./sha256.js";
 import { bundle } from "../scripts/bundle.js";
 import { CARD_MARK, MARK, NOINDEX, cardTags, homeTags, site, splice } from "../scripts/site.js";
 import { EXAMPLE, LICENSE, excerpt } from "../scripts/example.js";
+import { classify } from "../scripts/probe-run.js";
 import { EDGE, chunks } from "../scripts/icon.js";
 import { CARD, cardAlt, cardText, cardWords } from "../scripts/card.js";
 import { parseShare } from "../site/url.js";
@@ -1620,6 +1621,13 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   // the Function's own zone reaches its origin past Cloudflare's security settings.
   const PAGES = '# The Pages project\'s configuration, its source of truth: the dashboard cannot edit these fields.\nname = "bareflow"\npages_build_output_dir = "./dist/site"\n' +
     'compatibility_date = "2026-10-12"\n# A fetch to the Function\'s own zone goes through Cloudflare\'s front door, not straight to its origin.\ncompatibility_flags = ["global_fetch_strictly_public"]\n';
+  // The live probe's verdicts (scripts/probe-run.js): only Cloudflare's named refusal or an immediate
+  // throw passes; a timeout or a dropped connection says nothing about whether it connected.
+  const VERDICTS = [[{ threw: "The operation was aborted due to timeout" }, "inconclusive"], [{ threw: "Network connection lost." }, "inconclusive"],
+    [{ threw: "TypeError: Fetch API cannot load: http://10.0.0.1/" }, "pass"], [{ status: 403, code: "1003" }, "pass"], [{ status: 530, code: null }, "inconclusive"],
+    [{ status: 200 }, "finding"], [{ status: 302 }, "finding"], [{ status: 404, code: null }, "inconclusive"]];
+  const misread = VERDICTS.filter(([o, want]) => classify(o) !== want).map(([o, want]) => `${JSON.stringify(o)}: ${classify(o)}, want ${want}`);
+  record("web", "probe verdicts", `the live probe's classes: a named refusal or an immediate throw passes, a timeout or reset is inconclusive, any response from the target is a finding${misread.length ? `: ${misread.join("; ")}` : ""}`, !misread.length);
   record("web", "pages config", "wrangler.toml exactly: the project's compatibility date, global_fetch_strictly_public, dist/site", await readFile(join(ROOT, "wrangler.toml"), "utf8") === PAGES);
   // Pages serves index.html for any path that is not a file (no 404.html), so it is the shell of
   // every share URL; / alone is rewritten to the home.
