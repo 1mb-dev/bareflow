@@ -18,7 +18,8 @@ function repairTables(document) {
     const anchor = SECTION.has(stray.tagName) && SECTION.has(row.parentElement?.tagName) ? row.parentElement : row;
     const moved = [];
     for (let n = stray; n; n = n.nextSibling) moved.push(n);
-    anchor.after(...moved);
+    let at = anchor;
+    for (const n of moved) { at.after(n); at = n; }
   }
 }
 
@@ -52,8 +53,11 @@ function impliedBody(document) {
     else { seen ||= content(n); before.push(n); }
   }
   if (!body) root.append((body = document.createElement("body")));
-  body.prepend(...before);
-  body.append(...after, ...top.slice(top.indexOf(root) + 1));
+  // One node per call: a spread of a node list overflows the stack past ~124k arguments on Node's
+  // main thread (more in a worker), so the same page would convert in one runtime only.
+  const first = body.firstChild;
+  for (const n of before) body.insertBefore(n, first);
+  for (const n of [...after, ...top.slice(top.indexOf(root) + 1)]) body.append(n);
 }
 
 // A page bareflow will not convert, refused by name: the CLI and the worker map `code`, and

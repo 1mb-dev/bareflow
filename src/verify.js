@@ -957,6 +957,10 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     ["5,000 unclosed p before blocks", "<p>x<div>y</div>".repeat(5000), "ok"], ["div in a script string", `<script>${"'<div>'+".repeat(5000)}''</script><p>x</p>`, "ok"], ["5,000 self-closing paths in an svg", `<svg>${"<path/>".repeat(5000)}</svg>`, "ok"],
     ["self-closing after a closed foreignObject", `<svg><foreignObject><p>x</p></foreignObject>${"<path/>".repeat(5000)}</svg>`, "ok"]];
   for (const [name, html, want] of LIMITS) { const got = limited(html); if (got !== want) seam.push(`${name}: ${got}, want ${want}`); }
+  // Node lists past the stack's spread limit (150,000 text and comment nodes) move intact.
+  const FLOOD = "a<!---->".repeat(75000);
+  for (const [name, html] of [["after </html>", `<html><body><p>x</p></body></html>${FLOOD}`], ["before <body>", `<html><head></head>${FLOOD}<body><p>x</p></body></html>`],
+    ["after a stray tbody in a cell", `<table><tr><th>x<tbody></tbody>${FLOOD}</table>`]]) { const got = limited(html); if (got !== "ok") seam.push(`150,000 nodes ${name}: ${got}`); }
   // The scan refuses before linkedom parses (linkedom is quadratic in depth): nesting through tags
   // it must count, values holding "<", and an apostrophe outside a quoted value.
   const scanned = (html) => { try { parseHtml(html); return "converted"; } catch (e) { return e.scanned ? "scan" : e.code; } };
