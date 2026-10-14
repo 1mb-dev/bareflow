@@ -33,9 +33,6 @@ function repairTables(document) {
 // root's children, never through document.head/body: linkedom's getters create them.
 const METADATA = new Set(["TITLE", "META", "LINK", "BASE", "STYLE"]);
 const HEADISH = new Set([...METADATA, "SCRIPT", "NOSCRIPT", "TEMPLATE"]);
-// Leading whitespace, comments, and doctypes. A comment ends where htmlparser2 ends it: `<!-->` and
-// `<!--->` close at once, `--!>` does not. A claim about the parser: verify checks it.
-export const LEAD = /^(?:\s*(?:<!--(?:-?>|[\s\S]*?-->)|<!doctype[^>]*>))*\s*/i;
 const element = (n, tag) => n.nodeType === 1 && n.tagName === tag;
 
 function impliedBody(document) {
@@ -80,12 +77,12 @@ export class Refused extends Error {
   }
 }
 
-// No HTML document: "blank" (nothing past whitespace, comments, and a doctype) or "not-html"
-// (text, CSV, or JSON, which may carry markup in its strings); shape "json" when it opens with { or [.
+// No HTML document: "blank" (no content, as parsed) or "not-html" (text, CSV, or JSON, which may
+// carry markup in its strings); shape "json" when its first content opens with { or [.
 export class NotHtml extends Refused {
-  constructor(html) {
-    const rest = html.slice(html.match(LEAD)[0].length);
-    super(rest ? "not-html" : "blank", rest ? "the body is not an HTML document" : "the body is empty");
+  constructor(html, at) {
+    const rest = html.slice(at);
+    super(rest ? "not-html" : "blank", rest ? "the body is not an HTML document" : "the page is empty");
     this.shape = /^[[{]/.test(rest) ? "json" : "";
   }
 }
@@ -98,6 +95,20 @@ export class NotHtml extends Refused {
 // depth, and in self-closed svg or math elements, which never pop), and every end tag searches the
 // open stack. The options are linkedom's; htmlparser2 moves in lockstep with linkedom's range for it.
 const PARSED = { lowerCaseAttributeNames: false, decodeEntities: true, xmlMode: false };
+
+// Where the page's content starts, as htmlparser2 reads it: the first element, text past whitespace,
+// or processing instruction other than a doctype; the length when there is none. An offset into the
+// source, so a brace written as an entity is not a JSON body's brace.
+function firstContent(html) {
+  let at = html.length;
+  const stop = {}, parser = new Parser({
+    ontext(t) { if (t.trim()) { at = parser.startIndex + t.length - t.trimStart().length; throw stop; } },
+    onopentagname() { at = parser.startIndex; throw stop; },
+    onprocessinginstruction(name) { if (!name.toLowerCase().startsWith("!doctype")) { at = parser.startIndex; throw stop; } },
+  }, PARSED);
+  try { parser.write(html); parser.end(); } catch (e) { if (e !== stop) throw e; }
+  return at;
+}
 
 // The deepest open element (html is 1) and the element count; with `caps`, refused past either.
 export function parsedSize(html, caps = true) {
@@ -116,11 +127,11 @@ export function parsedSize(html, caps = true) {
 }
 
 export function parseHtml(html) {
-  const rest = html.slice(html.match(LEAD)[0].length);
-  if (/^[[{]/.test(rest)) throw new NotHtml(html);
+  const at = firstContent(html);
+  if (html[at] === "{" || html[at] === "[") throw new NotHtml(html, at);
   parsedSize(html);
   const window = parseHTML(html);
-  if (!window.document.documentElement) throw new NotHtml(html);
+  if (!window.document.documentElement) throw new NotHtml(html, at);
   impliedBody(window.document);
   repairTables(window.document);
   return window;

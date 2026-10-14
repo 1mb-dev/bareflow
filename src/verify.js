@@ -25,11 +25,10 @@ import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
 import { renderMarkdown, NOTE_SOURCES, REASON_IS_OWN } from "./render.js";
 import { marked } from "marked";
 import { parseHTML } from "linkedom";
-import { Parser } from "htmlparser2";
 import { main, USAGE } from "./cli.js";
 import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
-import { LEAD, NotHtml, parseHtml, parsedSize } from "./html.js";
+import { NotHtml, parseHtml, parsedSize } from "./html.js";
 import { convertBounded } from "./bounded.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
@@ -928,7 +927,11 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   const REFUSED = { json: ['{"a": 1}', "not-html", "json"], array: ["[1, 2]", "not-html", "json"], text: ["hello world\n", "not-html", ""],
     markdown: ["# Title\n\nSome *text*.", "not-html", ""], "text after a comment closed at <!--->": ["<!--->x-->", "not-html", ""], csv: ["a,b\n1,2\n", "not-html", ""], lt: ["< 5 apples", "not-html", ""], heart: ["<3 you", "not-html", ""],
     empty: ["", "blank", ""], space: [" \n\t ", "blank", ""], bom: ["\uFEFF \n", "blank", ""], doctype: ["<!doctype html>\n<!-- down -->", "blank", ""], "json with markup": ['{"html": "<div><p>hi</p></div>"}', "not-html", "json"],
-    "template leak before the markup": ["{{ x }}<html><body><p>a</p></body></html>", "not-html", "json"], "unclosed comment": ["<!-- open <p>a</p>", "not-html", ""] };
+    "template leak before the markup": ["{{ x }}<html><body><p>a</p></body></html>", "not-html", "json"], "unclosed comment": ["<!-- open <p>a</p>", "blank", ""],
+    "json after an end tag": ['</div>{"html": "<main><h1>Doc</h1><p>x</p></main>"}', "not-html", "json"], "json after cdata": ['<![CDATA[]]>["<p>x</p>"]', "not-html", "json"],
+    "json after a comment": ['<!-- c -->{"a": 1}', "not-html", "json"], "indented json": ['\n  {"a": 1}', "not-html", "json"], "json after an encoded space": ['&nbsp;{"a": 1}', "not-html", "json"],
+    "encoded brace": ['&#123;"a": 1}', "not-html", ""], "only an end tag": ["</div>", "blank", ""], "only an encoded space": ["&nbsp;", "blank", ""],
+    "comment not closed by --!>": ["<!-- x --!><p>text</p>", "blank", ""], "json holding more tags than the cap": [`{"html": "${"<i>".repeat(MAX_ELEMENTS + 1)}"}`, "not-html", "json"] };
   const KEPT = { optional: ["<!doctype html><title>T</title><p>Kept text.</p>", "T"], "no body tag": ["<html><title>T</title><p>Kept text.</p></html>", "T"],
     "head, no body": ["<html><head><title>T</title></head><p>Kept text.</p></html>", "T"], fragment: ["<p>Kept text.</p>", ""], "upper case": ["<BODY><p>Kept text.</p></BODY>", ""],
     "comment holding <body>": ["<html><head><title>T</title><!-- <body> --></head><p>Kept text.</p></html>", "T"],
@@ -947,7 +950,7 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     if (thrown?.code !== code || (thrown.shape ?? "") !== shape || w.error !== code) seam.push(`${name}: ${thrown?.code ?? "converted"}/${w.error ?? "converted"}`);
   }
   // The host is the one that answered (convert sets it from the final URL), without a port.
-  const SAID = { blank: "bareflow: p.example returned nothing. Open it in a browser to check.\n", "not-html": "bareflow: p.example did not return an HTML page. Fetch it directly.\n",
+  const SAID = { blank: "bareflow: p.example returned an empty page. Open it in a browser to check.\n", "not-html": "bareflow: p.example did not return an HTML page. Fetch it directly.\n",
     json: "bareflow: p.example did not return an HTML page (it looks like JSON). Fetch it directly.\n" };
   const redirected = await convert({ url: "https://a.example:8080/x", finalUrl: "https://p.example/y", html: " ", retrievedAt: "x", input: "fetch" }).then(() => ({}), (e) => e);
   for (const [want, e] of [["blank", redirected], ["not-html", { code: "not-html", shape: "" }], ["json", { code: "not-html", shape: "json" }]]) {
@@ -1047,36 +1050,6 @@ const seeded = (seed) => () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.im
   }
   record("parse", "limits", `the limit pass counts what linkedom builds (depth/elements) on ${pages.length} frozen pages and ${soup.length} seeded soups of ${names.size} tag names (${sourced} from htmlparser2's source), and the repairs add at most 2 levels and 3 elements${[...off, ...band].length ? `: ${[...off, ...band].slice(0, 5).join("; ")}` : ""}`,
     !off.length && !band.length && sourced >= 60 && found);
-}
-
-// LEAD (src/html.js) is a claim about htmlparser2: on seeded runs of comments, doctypes, and text it
-// ends where the parser's first content starts (an element, text past whitespace, a processing
-// instruction; any `<!doctype` declaration is a doctype, as a browser reads it). A comment open to the
-// end is the exception: the parser sees no content, LEAD stops before it, so the page is refused as
-// not-html, not blank.
-{
-  const rnd = seeded(9);
-  const T = ["<!-->", "<!--->", "<!-- c -->", "<!--", "-->", "--!>", "<!doctype html>", "<!DOCTYPE html>", "<!doctypehtml>", "<!doctype>", "<!doctype html", " ", "\n", "x", "<p>", "{", "<!---->", "->", "-"];
-  const first = (html) => {
-    let at = -1;
-    const stop = {}, p = new Parser({
-      ontext(t) { if (t.trim()) { at = p.startIndex + t.length - t.trimStart().length; throw stop; } },
-      onopentagname() { at = p.startIndex; throw stop; },
-      onprocessinginstruction(n) { if (!n.toLowerCase().startsWith("!doctype")) { at = p.startIndex; throw stop; } },
-    });
-    try { p.write(html); p.end(); } catch (e) { if (e !== stop) throw e; }
-    return at;
-  };
-  const off = [], seen = new Set();
-  let open = 0;
-  for (let i = 0; i < 5000; i++) {
-    const html = Array.from({ length: 1 + Math.floor(rnd() * 6) }, () => T[Math.floor(rnd() * T.length)]).join("");
-    const at = first(html), lead = html.match(LEAD)[0].length, rest = html.slice(lead);
-    seen.add(html);
-    if (at < 0 && rest.startsWith("<!--") && !rest.slice(2).includes("-->")) { open++; continue; }
-    if (lead !== (at < 0 ? html.length : at)) off.push(`${JSON.stringify(html)}: LEAD ${lead}, parser ${at}`);
-  }
-  record("parse", "lead", `LEAD ends where htmlparser2's first content starts on ${5000 - open} seeded prefixes, ${seen.size} distinct (${open} open comments, refused not-html)${off.length ? `: ${off.length} differ, ${off.slice(0, 3).join("; ")}` : ""}`, !off.length && open > 0 && seen.size > 1000);
 }
 
 // FixedLengthStream's contract (Workers only): the stream errors past, or short of, n bytes. The
@@ -1461,7 +1434,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     { id: "cut", code: "cut", ...fetched({ fetch: answer({ cut: true }) }), next: "reload", host: true },
     { id: "not-html", code: "not-html", ...converted({ error: "not-html", message: "the address returned a binary file, not an HTML page" }), next: "original", host: true },
     { id: "not-html, text", code: "not-html", ...converted({ error: "not-html", message: "the body is not an HTML document" }), next: "original", host: true },
-    { id: "blank", code: "blank", ...converted({ error: "blank", message: "the body is empty" }), next: "original", host: true },
+    { id: "blank", code: "blank", ...converted({ error: "blank", message: "the page is empty" }), next: "original", host: true },
     { id: "too-deep", code: "too-deep", ...converted({ error: "too-deep", message: "the page nests more than 256 levels deep" }), next: "original", host: true },
     { id: "too-big", code: "too-big", ...converted({ error: "too-big", message: "the page has more than 50000 elements" }), next: "original", host: true },
     { id: "slow", code: "slow", ...fetched({ fetch: answer({}), Worker: class { postMessage() { Promise.resolve().then(() => this.onmessage({ data: { started: true } })); } terminate() {} } }), next: "original", host: true },
