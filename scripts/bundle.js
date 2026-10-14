@@ -10,13 +10,15 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-export async function bundle() {
+// With { inputs: true }, also the module paths esbuild bundled.
+export async function bundle({ inputs = false } = {}) {
   const out = await build({
     stdin: { contents: 'export { convert } from "./src/convert.js"; export { snapshot, MAX_BYTES } from "./src/fetch-policy.js";', resolveDir: ROOT },
     bundle: true, format: "iife", globalName: "bareflow", platform: "browser", minify: true,
-    write: false, logLevel: "silent",
+    write: false, logLevel: "silent", metafile: inputs,
   });
-  return out.outputFiles[0].text;
+  const code = out.outputFiles[0].text;
+  return inputs ? { code, inputs: Object.keys(out.metafile.inputs) } : code;
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {

@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
 import { createServer } from "node:http";
 import vm from "node:vm";
 import { join, dirname } from "node:path";
@@ -685,6 +686,14 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   const defuddle = JSON.parse(await readFile(join(ROOT, "node_modules/defuddle/package.json"), "utf8"));
   record("version", "pinned", `src/version.js is ${VERSION}, defuddle ${EXTRACTOR_VERSION}; package.json ${pkg.version}, defuddle pinned ${pkg.dependencies.defuddle}, installed ${defuddle.version}`,
     VERSION === pkg.version && EXTRACTOR_VERSION === defuddle.version && pkg.dependencies.defuddle === defuddle.version);
+  // htmlparser2 runs twice per page, as the limit pass (src/html.js) and inside linkedom: declared
+  // with linkedom's own range, resolved to one copy from both, bundled once.
+  const linkedom = JSON.parse(await readFile(join(ROOT, "node_modules/linkedom/package.json"), "utf8"));
+  const from = (f) => createRequire(join(ROOT, f)).resolve("htmlparser2");
+  const ours = from("src/html.js"), theirs = from("node_modules/linkedom/esm/shared/parse-from-string.js");
+  const parsers = (await bundle({ inputs: true })).inputs.filter((f) => f.endsWith("htmlparser2/dist/esm/Parser.js"));
+  record("version", "htmlparser2", `declared ${pkg.dependencies.htmlparser2}, linkedom's ${linkedom.dependencies.htmlparser2}; ${ours === theirs ? "one copy" : `two copies: ${ours}, ${theirs}`}; ${parsers.length} Parser in the bundle`,
+    pkg.dependencies.htmlparser2 === linkedom.dependencies.htmlparser2 && ours === theirs && parsers.length === 1);
 }
 
 // The pure-JS sha256 equals node:crypto: padding boundaries, multi-byte UTF-8, raw bytes, and
