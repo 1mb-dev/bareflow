@@ -63,7 +63,7 @@ export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.
   const tokens = await readFile(join(ROOT, "site/tokens.css"), "utf8"), { light, dark } = palette(tokens);
   const html = (await readFile(join(ROOT, "site/index.html"), "utf8")).replace("__SITEKEY__", () => sitekey).replace("__VERSION__", () => VERSION)
     .replace("__PAPER__", () => light.paper).replace("__PAPER_DARK__", () => dark.paper);
-  for (const m of [MARK, CARD_MARK]) if (html.split(m).length !== 2) throw new Error(`site/index.html: needs ${JSON.stringify(m)} exactly once`);
+  for (const m of [MARK, CARD_MARK]) if (html.split(m).length !== 2) throw new Error(`site/index.html needs ${JSON.stringify(m)} exactly once`);
   // Awaited here, together: an await inside the array below would hold back every entry after it.
   // One pipeline run feeds the home's example and the card's words.
   const ex = excerpt();

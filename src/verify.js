@@ -1661,15 +1661,17 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   // allows all: a crawler that may not fetch the shell never reads its noindex.
   const robotsBad = [];
   const shellHead = html.slice(0, html.indexOf("</head>")), noindexAt = shellHead.indexOf(NOINDEX);
-  if (noindexAt < 0 || noindexAt > shellHead.indexOf('<script type="module" src="/_app/app.js">')) robotsBad.push("shell: one noindex meta in its static head before app.js");
+  if (noindexAt < 0 || noindexAt > shellHead.indexOf('<script type="module" src="/_app/app.js">')) robotsBad.push("shell: a noindex meta in its static head before app.js");
   if (JSON.stringify(pages.map(([f]) => f).sort()) !== JSON.stringify([join("_app", "home.html"), "index.html", "privacy.html"])) robotsBad.push(`documents: ${pages.map(([f]) => f).join(", ")}`);
-  // Every meta outside this set is listed, by name, property, or http-equiv: a googlebot noindex, a
-  // content of none, or an http-equiv X-Robots-Tag in the shell would ride into the home.
-  const KNOWN_META = /^(charset|viewport|description|theme-color|twitter:card|og:[a-z:]+)$/;
-  const metaKey = (m) => (m.hasAttribute("charset") ? "charset" : m.getAttribute("name") ?? m.getAttribute("property") ?? `http-equiv ${m.getAttribute("http-equiv")}`).toLowerCase();
-  const index = (d) => ({ robots: [...d.querySelectorAll("meta")].filter((m) => !KNOWN_META.test(metaKey(m))).map((m) => `${metaKey(m)}=${m.getAttribute("content")}`), canonical: [...d.querySelectorAll('link[rel="canonical"]')].map((l) => l.getAttribute("href")), url: [...d.querySelectorAll('meta[property="og:url"]')].map((m) => m.getAttribute("content")) });
-  for (const [name, d, want] of [["shell", shellDoc, { robots: ["robots=noindex"], canonical: [], url: [] }], ["home", homeDoc, { robots: [], canonical: ["https://bareflow.1mb.dev/"], url: ["https://bareflow.1mb.dev/"] }],
-    ["privacy", privDoc, { robots: [], canonical: ["https://bareflow.1mb.dev/privacy"], url: [] }]]) if (JSON.stringify(index(d)) !== JSON.stringify(want)) robotsBad.push(`${name}: ${JSON.stringify(index(d))}`);
+  // A meta is known only in one of these attribute shapes, named in this set; every other meta is
+  // listed whole. A googlebot noindex, a content of none, or an http-equiv beside a known name in the
+  // shell would ride into the home.
+  const SHAPES = ["charset", "content name", "content media name", "content property"];
+  const KNOWN_META = /^(viewport|description|theme-color|twitter:card|og:[a-z_:]+)$/;
+  const known = (m) => { const shape = [...m.attributes].map((a) => a.name).sort().join(" "); return SHAPES.includes(shape) && (shape === "charset" || KNOWN_META.test((m.getAttribute("name") ?? m.getAttribute("property")).toLowerCase())); };
+  const index = (d) => ({ meta: [...d.querySelectorAll("meta")].filter((m) => !known(m)).map((m) => m.outerHTML), canonical: [...d.querySelectorAll('link[rel="canonical"]')].map((l) => l.getAttribute("href")), url: [...d.querySelectorAll('meta[property="og:url"]')].map((m) => m.getAttribute("content")) });
+  for (const [name, d, want] of [["shell", shellDoc, { meta: ['<meta name="robots" content="noindex">'], canonical: [], url: [] }], ["home", homeDoc, { meta: [], canonical: ["https://bareflow.1mb.dev/"], url: ["https://bareflow.1mb.dev/"] }],
+    ["privacy", privDoc, { meta: [], canonical: ["https://bareflow.1mb.dev/privacy"], url: [] }]]) if (JSON.stringify(index(d)) !== JSON.stringify(want)) robotsBad.push(`${name}: ${JSON.stringify(index(d))}`);
   if (robotsTxt !== "User-agent: *\nAllow: /\n") robotsBad.push(`robots.txt: ${JSON.stringify(robotsTxt)}`);
   record("web", "robots", `share URLs noindex by the shell's static meta, the home and privacy page indexable with their canonical on bareflow.1mb.dev, robots.txt allows all; no other document${robotsBad.length ? `: ${robotsBad.join(" | ")}` : ""}`, !robotsBad.length);
   const hostile = "$&$'$`$$</script><script>x</script>";
