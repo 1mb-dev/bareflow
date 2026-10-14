@@ -41,7 +41,8 @@
     "bundle": "node scripts/bundle.js",
     "site": "node scripts/site.js",
     "parity": "node scripts/parity.js",
-    "contact": "node scripts/contact.js"
+    "contact": "node scripts/contact.js",
+    "smoke": "node scripts/smoke.js"
   },
   "dependencies": {
     "defuddle": "0.19.4",
