@@ -17,7 +17,8 @@ import { chunk, chunks } from "./icon.js";
 import { stylesheet } from "./stylesheet.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-export const CARD = { file: "site/card.png", url: "https://bareflow.1mb.dev/_app/card.png", width: 1200, height: 630, key: "bareflow-card" };
+export const ORIGIN = "https://bareflow.1mb.dev";
+export const CARD = { file: "site/card.png", url: `${ORIGIN}/_app/card.png`, width: 1200, height: 630, key: "bareflow-card" };
 // The tape's --t-small (13 px) at 48.75 px; 1200 and 630 must divide by it (a window of 320x168).
 const SCALE = 3.75;
 
