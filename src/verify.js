@@ -681,7 +681,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   record("notice", "pages", `every frozen page is in its manifest and in NOTICE with its URL${bad.length ? `: ${bad.join("; ")}` : ""}`, !bad.length);
 }
 
-// The browser bundle, built once: the one-Parser check below reads the bytes the parity run executes.
+// Built once: the Parser count and the vm run below read the same build.
 const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, inputs: [], error: e }));
 
 // The versions the header and IR report match package.json and the defuddle that runs.
@@ -1004,8 +1004,7 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   if (refusedIn.code !== "not-html" || refusedIn.host !== "q.example") seam.push(`thread refusal: ${refusedIn.code} ${refusedIn.host}`);
   const late = await convertBounded({ ...base, html: flat(45000) }, 3000).then(() => ({}), (e) => e);
   if (late.code !== "slow" || late.host !== "q.example" || !late.started) seam.push(`thread deadline: ${late.code} ${late.host}, started ${late.started}`);
-  // The pass refuses before linkedom builds: 5 MB of nesting is too-deep well inside the deadline;
-  // built first, it would take linkedom minutes and the thread would answer slow.
+  // Only a refusal before linkedom builds answers 5 MB of nesting inside the deadline.
   const deep = await convertBounded({ ...base, html: "<div>".repeat(1e6) }).then(() => ({}), (e) => e);
   if (deep.code !== "too-deep") seam.push(`a million levels in the thread: ${deep.code ?? "converted"}`);
   const appSrcText = await readFile(join(ROOT, "site/app.js"), "utf8");
