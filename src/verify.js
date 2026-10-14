@@ -696,7 +696,7 @@ const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, input
   const from = (f) => createRequire(join(ROOT, f)).resolve("htmlparser2");
   const ours = from("src/html.js"), theirs = from("node_modules/linkedom/esm/shared/parse-from-string.js");
   const parsers = bundled.inputs.filter((f) => f.endsWith("htmlparser2/dist/esm/Parser.js"));
-  record("version", "htmlparser2", `declared ${pkg.dependencies.htmlparser2}, linkedom's ${linkedom.dependencies.htmlparser2}; ${ours === theirs ? "one copy" : `two copies: ${ours}, ${theirs}`}; ${parsers.length} Parser in the bundle`,
+  record("version", "htmlparser2", `declared ${pkg.dependencies.htmlparser2}, linkedom's ${linkedom.dependencies.htmlparser2}; ${ours === theirs ? "one copy" : `two copies: ${ours}, ${theirs}`}; ${bundled.error ? `bundle failed: ${bundled.error.message}` : `${parsers.length} Parser in the bundle`}`,
     pkg.dependencies.htmlparser2 === linkedom.dependencies.htmlparser2 && ours === theirs && parsers.length === 1);
 }
 
@@ -1013,6 +1013,9 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   record("web", "seam", `parse seam: ${Object.keys(REFUSED).length} non-HTML bodies refused by name in convert and the worker, the CLI's three sentences exit 1; ${Object.keys(KEPT).length} pages with implied tags keep their text and title once; depth and element caps at their boundaries; the CLI's conversion thread and its deadline${seam.length ? `: ${seam.join("; ")}` : ""}`, !seam.length);
 }
 
+// Seeded mulberry32: generated inputs are the same on every run.
+const seeded = (seed) => () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+
 // The limit pass (src/html.js parsedSize) counts what linkedom builds: depth and element count equal
 // linkedom's own tree on every frozen page and on seeded tag soup drawn from the tag names in
 // htmlparser2's own source. The repairs after add at most two levels and three elements, so the caps
@@ -1023,8 +1026,7 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   for (const m of (await readFile(join(HP, "Tokenizer.js"), "utf8")).matchAll(/\/\/ `<\/?([a-z]+)/g)) names.add(m[1]);
   const sourced = names.size, found = ["p", "tr", "tbody", "svg", "desc", "script"].every((n) => names.has(n));
   for (const n of ["html", "head", "body", "div", "span", "a", "b", "template", "noscript", "plaintext", "noembed", "iframe", "foreignObject", "x-y"]) names.add(n);
-  let seed = 1;
-  const rnd = () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const rnd = seeded(1);
   const pick = (a) => a[Math.floor(rnd() * a.length)], NAMES = [...names];
   const name = () => (rnd() < 0.1 ? pick(NAMES).toUpperCase() : pick(NAMES));
   const ATTR = ["", " a", ' a="<"', " a='>'", " a = '/>'", " a=x'", ' a="', " /", " a=b/", ' x="</div>"'];
@@ -1035,11 +1037,14 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   const tree = (root, d0) => { let depth = 0, elements = 0; for (const st = [[root, d0]]; st.length; ) { const [n, d] = st.pop(); if (d > depth) depth = d; if (d) elements++; for (let c = n.firstElementChild; c; c = c.nextElementSibling) st.push([c, d + 1]); } return { depth, elements }; };
   const off = [], band = [];
   for (const [i, html] of [...pages, ...soup].entries()) {
-    const at = i < pages.length ? `page ${i}` : `soup ${i - pages.length}`, parsed = parsedSize(html, false), built = tree(parseHTML(html).document, 0);
-    if (parsed.depth !== built.depth || parsed.elements !== built.elements) off.push(`${at}: parsed ${parsed.depth}/${parsed.elements}, linkedom ${built.depth}/${built.elements}`);
-    let final;
-    try { final = tree(parseHtml(html).document.documentElement, 1); } catch (e) { if (!(e instanceof NotHtml)) band.push(`${at}: threw ${e.code ?? e.message}`); continue; }
-    if (final.depth > parsed.depth + 2 || final.elements > parsed.elements + 3) band.push(`${at}: parsed ${parsed.depth}/${parsed.elements}, repaired ${final.depth}/${final.elements}`);
+    const at = i < pages.length ? `page ${i}` : `soup ${i - pages.length}`;
+    try {
+      const parsed = parsedSize(html, false), built = tree(parseHTML(html).document, 0);
+      if (parsed.depth !== built.depth || parsed.elements !== built.elements) off.push(`${at}: parsed ${parsed.depth}/${parsed.elements}, linkedom ${built.depth}/${built.elements}`);
+      let final;
+      try { final = tree(parseHtml(html).document.documentElement, 1); } catch (e) { if (e instanceof NotHtml) continue; throw e; }
+      if (final.depth > parsed.depth + 2 || final.elements > parsed.elements + 3) band.push(`${at}: parsed ${parsed.depth}/${parsed.elements}, repaired ${final.depth}/${final.elements}`);
+    } catch (e) { band.push(`${at}: threw ${e.code ?? e.message}`); }
   }
   record("parse", "limits", `the limit pass counts what linkedom builds (depth/elements) on ${pages.length} frozen pages and ${soup.length} seeded soups of ${names.size} tag names (${sourced} from htmlparser2's source), and the repairs add at most 2 levels and 3 elements${[...off, ...band].length ? `: ${[...off, ...band].slice(0, 5).join("; ")}` : ""}`,
     !off.length && !band.length && sourced >= 60 && found);
@@ -1047,31 +1052,32 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
 
 // LEAD (src/html.js) is a claim about htmlparser2: on seeded runs of comments, doctypes, and text it
 // ends where the parser's first content starts (an element, text past whitespace, a processing
-// instruction). A comment open to the end is the exception: the parser sees no content, LEAD stops
-// before it, so the page is refused as not-html, not blank.
+// instruction; any `<!doctype` declaration is a doctype, as a browser reads it). A comment open to the
+// end is the exception: the parser sees no content, LEAD stops before it, so the page is refused as
+// not-html, not blank.
 {
-  let seed = 9;
-  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
-  const T = ["<!-->", "<!--->", "<!-- c -->", "<!--", "-->", "--!>", "<!doctype html>", " ", "\n", "x", "<p>", "{", "<!---->", "->", "-"];
+  const rnd = seeded(9);
+  const T = ["<!-->", "<!--->", "<!-- c -->", "<!--", "-->", "--!>", "<!doctype html>", "<!DOCTYPE html>", "<!doctypehtml>", "<!doctype>", "<!doctype html", " ", "\n", "x", "<p>", "{", "<!---->", "->", "-"];
   const first = (html) => {
     let at = -1;
     const stop = {}, p = new Parser({
       ontext(t) { if (t.trim()) { at = p.startIndex + t.length - t.trimStart().length; throw stop; } },
       onopentagname() { at = p.startIndex; throw stop; },
-      onprocessinginstruction(n) { if (n.toLowerCase() !== "!doctype") { at = p.startIndex; throw stop; } },
+      onprocessinginstruction(n) { if (!n.toLowerCase().startsWith("!doctype")) { at = p.startIndex; throw stop; } },
     });
     try { p.write(html); p.end(); } catch (e) { if (e !== stop) throw e; }
     return at;
   };
-  const off = [];
+  const off = [], seen = new Set();
   let open = 0;
   for (let i = 0; i < 5000; i++) {
     const html = Array.from({ length: 1 + Math.floor(rnd() * 6) }, () => T[Math.floor(rnd() * T.length)]).join("");
-    const at = first(html), lead = html.match(LEAD)[0].length;
-    if (at < 0 && lead < html.length) { open++; continue; }
+    const at = first(html), lead = html.match(LEAD)[0].length, rest = html.slice(lead);
+    seen.add(html);
+    if (at < 0 && rest.startsWith("<!--") && !rest.slice(2).includes("-->")) { open++; continue; }
     if (lead !== (at < 0 ? html.length : at)) off.push(`${JSON.stringify(html)}: LEAD ${lead}, parser ${at}`);
   }
-  record("parse", "lead", `LEAD ends where htmlparser2's first content starts on ${5000 - open} seeded prefixes (${open} open comments, refused not-html)${off.length ? `: ${off.length} differ, ${off.slice(0, 3).join("; ")}` : ""}`, !off.length && open > 0);
+  record("parse", "lead", `LEAD ends where htmlparser2's first content starts on ${5000 - open} seeded prefixes, ${seen.size} distinct (${open} open comments, refused not-html)${off.length ? `: ${off.length} differ, ${off.slice(0, 3).join("; ")}` : ""}`, !off.length && open > 0 && seen.size > 1000);
 }
 
 // FixedLengthStream's contract (Workers only): the stream errors past, or short of, n bytes. The
