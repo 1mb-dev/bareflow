@@ -1669,7 +1669,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const SHAPES = ["charset", "content name", "content media name", "content property"];
   const KNOWN_META = /^(viewport|description|theme-color|twitter:card|og:[a-z_:]+)$/;
   const known = (m) => { const shape = [...m.attributes].map((a) => a.name).sort().join(" "); return SHAPES.includes(shape) && (shape === "charset" || KNOWN_META.test((m.getAttribute("name") ?? m.getAttribute("property")).toLowerCase())); };
-  const index = (d) => ({ meta: [...d.querySelectorAll("meta")].filter((m) => !known(m)).map((m) => m.outerHTML), canonical: [...d.querySelectorAll('link[rel="canonical"]')].map((l) => l.getAttribute("href")), url: [...d.querySelectorAll('meta[property="og:url"]')].map((m) => m.getAttribute("content")) });
+  const index = (d) => ({ meta: [...d.querySelectorAll("meta")].filter((m) => !known(m)).map((m) => m.outerHTML), canonical: [...d.querySelectorAll("link[rel]")].filter((l) => /(^|\s)canonical(\s|$)/i.test(l.getAttribute("rel"))).map((l) => l.getAttribute("href")), url: [...d.querySelectorAll('meta[property="og:url"]')].map((m) => m.getAttribute("content")) });
   for (const [name, d, want] of [["shell", shellDoc, { meta: ['<meta name="robots" content="noindex">'], canonical: [], url: [] }], ["home", homeDoc, { meta: [], canonical: ["https://bareflow.1mb.dev/"], url: ["https://bareflow.1mb.dev/"] }],
     ["privacy", privDoc, { meta: [], canonical: ["https://bareflow.1mb.dev/privacy"], url: [] }]]) if (JSON.stringify(index(d)) !== JSON.stringify(want)) robotsBad.push(`${name}: ${JSON.stringify(index(d))}`);
   if (robotsTxt !== "User-agent: *\nAllow: /\n") robotsBad.push(`robots.txt: ${JSON.stringify(robotsTxt)}`);
