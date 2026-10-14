@@ -36,8 +36,16 @@ const LEAD = /^(?:\s*(?:<!--[\s\S]*?-->|<!doctype[^>]*>))*\s*/i;
 const element = (n, tag) => n.nodeType === 1 && n.tagName === tag;
 
 function impliedBody(document) {
-  const top = [...document.childNodes].filter((n) => n.nodeType !== 10);
-  const root = top.find((n) => element(n, "HTML"));
+  let top = [...document.childNodes].filter((n) => n.nodeType !== 10);
+  let root = top.find((n) => element(n, "HTML"));
+  // Wrapped in the tree, not re-parsed with an <html> prefix: the prefix lands wherever a regex
+  // thinks the markup starts (inside a title after `<!--->`), and a stray </html> then closes it.
+  if (!root) {
+    root = document.createElement("html");
+    for (const n of top) root.append(n);
+    document.append(root);
+    top = [root];
+  }
   const kids = [...root.childNodes];
   let head = kids.find((n) => element(n, "HEAD")), body = kids.find((n) => element(n, "BODY"));
   if (!head) root.prepend((head = document.createElement("head")));
@@ -158,9 +166,8 @@ export function parseHtml(html) {
   const rest = html.slice(html.match(LEAD)[0].length);
   if (/^[[{]/.test(rest)) throw new NotHtml(html);
   if (scanDepth(html) > SCAN_DEPTH) throw Object.assign(new Refused("too-deep", `the page nests more than ${MAX_DEPTH} levels deep`), { scanned: true });
-  let window = parseHTML(html);
+  const window = parseHTML(html);
   if (!window.document.documentElement) throw new NotHtml(html);
-  if (![...window.document.childNodes].some((n) => element(n, "HTML"))) window = parseHTML(`${html.slice(0, html.length - rest.length)}<html>${rest}`);
   impliedBody(window.document);
   repairTables(window.document);
   const { elements, deepest } = measure(window.document.documentElement);

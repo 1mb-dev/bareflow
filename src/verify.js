@@ -923,7 +923,8 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     "text before the doctype": ["Warning: x\n<!doctype html><html><head><title>T</title></head><body><p>Kept text.</p></body></html>", "T", "Warning: x"],
     "markup before the doctype": ["<br />\n<b>Warning</b>: y<br />\n<!DOCTYPE html><html><head><title>T</title></head><body><p>Kept text.</p></body></html>", "T", "y"],
     "content before <body>": ["<html><head><title>T</title></head><p>Stray.</p><body><p>Kept text.</p></body></html>", "T", "Stray."],
-    "content before <head>": ["<html><p>Kept text.</p><head><title>T</title></head></html>", "T"] };
+    "content before <head>": ["<html><p>Kept text.</p><head><title>T</title></head></html>", "T"],
+    "title after a comment closed at <!--->": ["<!---><title>A --> B</title><p>Kept text.</p>", "A --> B"] };
   const seam = [];
   const cliSays = async (e) => { let said = ""; const code = await main(["https://p.example/x"], { run: async () => { throw e; }, out: () => {}, err: (s) => { said += s; } }); return [code, said]; };
   for (const [name, [body, code, shape]] of Object.entries(REFUSED)) {
