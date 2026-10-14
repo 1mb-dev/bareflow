@@ -80,10 +80,9 @@ export class Refused extends Error {
 // No HTML document: "blank" (no content, as parsed) or "not-html" (text, CSV, or JSON, which may
 // carry markup in its strings); shape "json" when its first content opens with { or [.
 export class NotHtml extends Refused {
-  constructor(html, at) {
-    const rest = html.slice(at);
-    super(rest ? "not-html" : "blank", rest ? "the body is not an HTML document" : "the page is empty");
-    this.shape = /^[[{]/.test(rest) ? "json" : "";
+  constructor(opens) {
+    super(opens === "none" ? "blank" : "not-html", opens === "none" ? "the page is empty" : "the body is not an HTML document");
+    this.shape = opens === "json" ? "json" : "";
   }
 }
 
@@ -96,18 +95,24 @@ export class NotHtml extends Refused {
 // open stack. The options are linkedom's; htmlparser2 moves in lockstep with linkedom's range for it.
 const PARSED = { lowerCaseAttributeNames: false, decodeEntities: true, xmlMode: false };
 
-// Where the page's content starts, as htmlparser2 reads it: the first element, text past whitespace,
-// or processing instruction other than a doctype; the length when there is none. An offset into the
-// source, so a brace written as an entity is not a JSON body's brace.
-function firstContent(html) {
-  let at = html.length;
+// What the page opens with, as htmlparser2 reads it: "element", "text" past whitespace, "json" (text
+// whose first character in the source is { or [, so a brace written as an entity is not one), or
+// "none". Doctypes, comments, and other declarations are not content (a browser reads `<!x>` and
+// `<?x?>` as comments). startIndex is stale after an end tag with a space or attributes, so only
+// endIndex is read: an entity is its own text event, and its source holds no { or [.
+function opening(html) {
+  let opens = "none";
   const stop = {}, parser = new Parser({
-    ontext(t) { if (t.trim()) { at = parser.startIndex + t.length - t.trimStart().length; throw stop; } },
-    onopentagname() { at = parser.startIndex; throw stop; },
-    onprocessinginstruction(name) { if (!name.toLowerCase().startsWith("!doctype")) { at = parser.startIndex; throw stop; } },
+    ontext(t) {
+      if (!t.trim()) return;
+      const c = html[parser.endIndex + 1 - t.trimStart().length];
+      opens = c === "{" || c === "[" ? "json" : "text";
+      throw stop;
+    },
+    onopentagname() { opens = "element"; throw stop; },
   }, PARSED);
   try { parser.write(html); parser.end(); } catch (e) { if (e !== stop) throw e; }
-  return at;
+  return opens;
 }
 
 // The deepest open element (html is 1) and the element count; with `caps`, refused past either.
@@ -127,11 +132,11 @@ export function parsedSize(html, caps = true) {
 }
 
 export function parseHtml(html) {
-  const at = firstContent(html);
-  if (html[at] === "{" || html[at] === "[") throw new NotHtml(html, at);
+  const opens = opening(html);
+  if (opens === "none" || opens === "json") throw new NotHtml(opens);
   parsedSize(html);
   const window = parseHTML(html);
-  if (!window.document.documentElement) throw new NotHtml(html, at);
+  if (!window.document.documentElement) throw new NotHtml(opens);
   impliedBody(window.document);
   repairTables(window.document);
   return window;

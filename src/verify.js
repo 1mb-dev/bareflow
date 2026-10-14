@@ -941,7 +941,8 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     "content before <body>": ["<html><head><title>T</title></head><p>Stray.</p><body><p>Kept text.</p></body></html>", "T", "Stray."],
     "content before <head>": ["<html><p>Kept text.</p><head><title>T</title></head></html>", "T"],
     "title after a comment closed at <!--->": ["<!---><title>A --> B</title><p>Kept text.</p>", "A --> B"],
-    "a later comment then {": ["<!---><html><body><p>Kept text.</p><!-- a -->{not json</body></html>", ""] };
+    "a later comment then {": ["<!---><html><body><p>Kept text.</p><!-- a -->{not json</body></html>", ""],
+    "a brace in an end tag before the markup": ["</x {><p>Kept text.</p>", ""] };
   const seam = [];
   const cliSays = async (e) => { let said = ""; const code = await main(["https://p.example/x"], { run: async () => { throw e; }, out: () => {}, err: (s) => { said += s; } }); return [code, said]; };
   for (const [name, [body, code, shape]] of Object.entries(REFUSED)) {
@@ -1050,6 +1051,29 @@ const seeded = (seed) => () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.im
   }
   record("parse", "limits", `the limit pass counts what linkedom builds (depth/elements) on ${pages.length} frozen pages and ${soup.length} seeded soups of ${names.size} tag names (${sourced} from htmlparser2's source), and the repairs add at most 2 levels and 3 elements${[...off, ...band].length ? `: ${[...off, ...band].slice(0, 5).join("; ")}` : ""}`,
     !off.length && !band.length && sourced >= 60 && found);
+}
+
+// The opening walk (src/html.js), by construction: runs of what is not content (comments, doctypes,
+// declarations, whitespace and encoded spaces, end tags with spaces or attributes) before one content
+// token give the class that token implies. Left out, as htmlparser2 reads them otherwise: `</p>` and
+// `</br>` (it opens them), `</>` (text), `--!>` (no comment end), a doctype with no `>`, `&nbsp` with no `;`.
+{
+  const rnd = seeded(5), pick = (a) => a[Math.floor(rnd() * a.length)];
+  const NONE = ["<!-- c -->", "<!---->", "<!-->", "<!--->", "<!doctype html>", "<!DOCTYPE html>", " ", "\n", "\t", "\uFEFF", "&nbsp;", "&#32;",
+    "</div >", '</x y="1">', "</div\n>", "</x {>", "</x [ >", '</x {="1">', "<![CDATA[x]]>", "<!x>", "<?x?>"];
+  const CONTENT = [['{"a": 1}', "json"], ["[1]", "json"], ["x", "not-html"], ['&#123;"a": 1}', "not-html"], ["<p>x", "converted"], ['<p>{"a": 1}', "converted"]];
+  const TAIL = [...NONE, '{"a": 1}', "[1]"];
+  const off = [], seen = new Set();
+  for (let i = 0; i < 2000; i++) {
+    const lead = Array.from({ length: Math.floor(rnd() * 7) }, () => pick(NONE)).join("");
+    const [content, want] = rnd() < 0.1 ? ["", "blank"] : pick(CONTENT);
+    const html = content ? lead + content + Array.from({ length: Math.floor(rnd() * 3) }, () => pick(TAIL)).join("") : lead;
+    seen.add(html);
+    let got = "converted";
+    try { parseHtml(html); } catch (e) { if (!(e instanceof NotHtml)) throw e; got = e.shape || e.code; }
+    if (got !== want) off.push(`${JSON.stringify(html)}: ${got}, want ${want}`);
+  }
+  record("parse", "opening", `the page's opening class is its content token's on ${seen.size} seeded bodies (comments, doctypes, declarations, encoded spaces, end tags with attributes before it)${off.length ? `: ${off.length} differ, ${off.slice(0, 3).join("; ")}` : ""}`, !off.length && seen.size > 1500);
 }
 
 // FixedLengthStream's contract (Workers only): the stream errors past, or short of, n bytes. The
