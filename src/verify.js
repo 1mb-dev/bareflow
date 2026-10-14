@@ -1109,7 +1109,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     if (req.url === "/exact" || req.url === "/exact1" || req.url === "/declared") { const n = WEB_MAX_BYTES + (req.url === "/exact" ? 0 : 1); res.writeHead(200, { "content-type": "text/html", ...(req.url === "/declared" ? { "content-length": n } : {}) }); return res.end(Buffer.alloc(n, 97)); }
     res.writeHead(404); res.end();
   });
-  // No keep-alive: a reused socket the server is closing resets the next request under load.
+  // Idle sockets never time out, so undici (the edge's fetch here) never reuses one the server is closing.
   server.keepAliveTimeout = 0;
   await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
   const port = server.address().port;
@@ -1120,7 +1120,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const off = [];
   // One transport at a time: run together, one's synchronous work lands inside the other's deadline.
   for (const p of paths) {
-    const u = `http://site.test:${port}${p}`, timeout = p === "/drip" ? 300 : undefined;
+    const u = `http://site.test:${port}${p}`, timeout = p === "/drip" ? 300 : 5000;
     const a = await outcome(fetchSnapshot(u, { timeout, lookup })), b = await outcome(fetchPage(u, edgeTransport(toLocal), { timeout }));
     if (a !== b) off.push(`${p}: node "${a.slice(0, 90)}" edge "${b.slice(0, 90)}"`);
   }

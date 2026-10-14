@@ -48,7 +48,8 @@ function validatingLookup(hostname, opts, cb) {
 // The request is destroyed at the policy's deadline, a hard one, not a socket idle timeout, so a
 // server that drips bytes cannot hold the caller. The deadline spans decompression too: the edge's
 // fetch decodes as it reads, so one budget means the same on both transports. `inflate` is
-// decompress, replaceable so verify can hold it past the deadline.
+// decompress; verify alone replaces it, to hold it past the deadline. No agent: a pooled socket the
+// server closes unannounced after a redirect resets the next hop, and one request per hop needs no pool.
 export const nodeTransport = (resolver, inflate = decompress) => (url, { host, headers, deadline, budget, maxBytes }) => new Promise((resolve, reject) => {
   const u = new URL(url);
   const isHttps = u.protocol === "https:";
@@ -62,6 +63,7 @@ export const nodeTransport = (resolver, inflate = decompress) => (url, { host, h
     path: u.pathname + u.search,
     method: "GET",
     lookup: resolver,
+    agent: false,
     headers,
   }, (res) => {
     res.on("error", reject); // mid-body abort must reject, not crash the process
