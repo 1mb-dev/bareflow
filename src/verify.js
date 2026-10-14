@@ -1616,6 +1616,11 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     "https://:project.pages.dev/*\n  X-Robots-Tag: noindex\n\nhttps://:version.:project.pages.dev/*\n  X-Robots-Tag: noindex\n";
   record("web", "headers", "_headers exactly: the CSP (Turnstile's script-src and frame-src only), nosniff, no-referrer on every path, noindex on pages.dev hosts; the Function routed at /_fetch only",
     headers === HEADERS && JSON.stringify(routes) === JSON.stringify({ version: 1, include: ["/_fetch"], exclude: [] }));
+  // The Pages project's configuration lives in this file, not the dashboard: without the flag, a fetch to
+  // the Function's own zone reaches its origin past Cloudflare's security settings.
+  const PAGES = '# The Pages project\'s configuration, its source of truth: the dashboard cannot edit these fields.\nname = "bareflow"\npages_build_output_dir = "./dist/site"\n' +
+    'compatibility_date = "2026-10-12"\n# A fetch to the Function\'s own zone goes through Cloudflare\'s front door, not straight to its origin.\ncompatibility_flags = ["global_fetch_strictly_public"]\n';
+  record("web", "pages config", "wrangler.toml exactly: the project's compatibility date, global_fetch_strictly_public, dist/site", await readFile(join(ROOT, "wrangler.toml"), "utf8") === PAGES);
   // Pages serves index.html for any path that is not a file (no 404.html), so it is the shell of
   // every share URL; / alone is rewritten to the home.
   // The home's example (scripts/example.js): in the home only, once, with no ids. Its page and

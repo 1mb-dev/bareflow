@@ -1,0 +1,6 @@
+# The Pages project's configuration, its source of truth: the dashboard cannot edit these fields.
+name = "bareflow"
+pages_build_output_dir = "./dist/site"
+compatibility_date = "2026-10-12"
+# A fetch to the Function's own zone goes through Cloudflare's front door, not straight to its origin.
+compatibility_flags = ["global_fetch_strictly_public"]
