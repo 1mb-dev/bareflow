@@ -6,6 +6,8 @@
 // here (scripts/icon.js); the OG card is committed (scripts/card.js needs Chrome) and goes in the
 // home's head only: an unfurler runs no script, so the shell's tags speak for every share URL.
 // privacy.html (served at /privacy) is the shell's head and footer around site/privacy.html.
+// The shell is noindex by its own meta, so every share URL is, whatever host serves it; the home and
+// the privacy page cut it and name their canonical URL.
 import { build } from "esbuild";
 import { copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
@@ -25,6 +27,13 @@ export const TEST_SITEKEY = "1x00000000000000000000AA";
 export const MARK = "<!-- example -->\n";
 export const splice = (html, chunk, mark = MARK) => html.replace(mark, () => chunk);
 export const CARD_MARK = "<!-- card -->\n";
+export const NOINDEX = '<meta name="robots" content="noindex">\n';
+const HOME_URL = "https://bareflow.1mb.dev/";
+const PRIVACY_URL = "https://bareflow.1mb.dev/privacy";
+export const homeTags = `<link rel="canonical" href="${HOME_URL}">
+<meta property="og:url" content="${HOME_URL}">
+`;
+const cut = (s, part, where) => { if (s.split(part).length !== 2) throw new Error(`${where}: needs ${JSON.stringify(part)} exactly once`); return s.replace(part, ""); };
 const attr = (t) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 export const cardTags = (alt) => `<meta property="og:image" content="${CARD.url}">
 <meta property="og:image:width" content="${CARD.width}">
@@ -37,14 +46,13 @@ export const cardTags = (alt) => `<meta property="og:image" content="${CARD.url}
 // around its own main. Out of the head: app.js (so no Turnstile), the OG tags (the shell's speak
 // for the site), and the serif preload (every word on the page is bareflow's, in Mono).
 export function privacyPage(shell, main) {
-  const cut = (s, part) => { if (s.split(part).length !== 2) throw new Error(`privacy page: the shell needs ${JSON.stringify(part)} exactly once`); return s.replace(part, ""); };
   if (shell.split("<body").length !== 2) throw new Error("privacy page: the shell needs one <body");
   let head = shell.slice(0, shell.indexOf("<body"));
-  for (const line of head.match(/^\s*<meta\b[^>]*\bproperty="og:[^>]*>\n/gm) ?? []) head = cut(head, line);
-  head = cut(cut(head, '<script type="module" src="/_app/app.js"></script>\n'), '<link rel="preload" href="/_app/fonts/literata-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>\n');
+  for (const line of head.match(/^\s*<meta\b[^>]*\bproperty="og:[^>]*>\n/gm) ?? []) head = cut(head, line, "privacy page");
+  for (const part of [NOINDEX, '<script type="module" src="/_app/app.js"></script>\n', '<link rel="preload" href="/_app/fonts/literata-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>\n']) head = cut(head, part, "privacy page");
   const swap = (s, re, to) => { if ((s.match(new RegExp(re, "g")) ?? []).length !== 1) throw new Error(`privacy page: the shell needs ${re} exactly once`); return s.replace(re, () => to); };
   head = swap(head, /<title>[^<]*<\/title>/, "<title>bareflow: privacy</title>");
-  head = swap(head, /<meta name="description" content="[^"]*">/, '<meta name="description" content="What bareflow and Cloudflare see when you convert a page.">');
+  head = swap(head, /<meta name="description" content="[^"]*">/, `<meta name="description" content="What bareflow and Cloudflare see when you convert a page.">\n<link rel="canonical" href="${PRIVACY_URL}">`);
   const foot = shell.match(/^<footer class="foot">.*<\/footer>\n/m)?.[0];
   if (!foot) throw new Error("privacy page: the shell has no footer line");
   return `${head}<body>\n${main}${foot}</body>\n</html>\n`;
@@ -68,7 +76,7 @@ export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.
   await Promise.all([
     writeFile(join(out, "index.html"), shell),
     readFile(join(ROOT, "site/privacy.html"), "utf8").then((main) => writeFile(join(out, "privacy.html"), privacyPage(shell, main))),
-    writeFile(join(out, "_app/home.html"), splice(splice(html, `${example}\n`), cardTags(alt), CARD_MARK)),
+    writeFile(join(out, "_app/home.html"), splice(splice(cut(html, NOINDEX, "site/index.html"), `${example}\n`), homeTags + cardTags(alt), CARD_MARK)),
     writeFile(join(out, "_app/app.js"), app.outputFiles[0].text),
     copyFile(join(ROOT, "site/theme.js"), join(out, "_app/theme.js")),
     writeFile(join(out, "_app/icon.svg"), iconSvg(tokens)),
@@ -81,6 +89,7 @@ export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.
     copyFile(join(ROOT, "site/_headers"), join(out, "_headers")),
     copyFile(join(ROOT, "site/_routes.json"), join(out, "_routes.json")),
     copyFile(join(ROOT, "site/_redirects"), join(out, "_redirects")),
+    copyFile(join(ROOT, "site/robots.txt"), join(out, "robots.txt")),
   ]);
   return out;
 }

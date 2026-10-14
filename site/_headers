@@ -2,3 +2,9 @@
   Content-Security-Policy: default-src 'none'; script-src 'self' https://challenges.cloudflare.com; worker-src 'self'; connect-src 'self'; style-src 'self'; font-src 'self'; frame-src https://challenges.cloudflare.com; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
+
+https://:project.pages.dev/*
+  X-Robots-Tag: noindex
+
+https://:version.:project.pages.dev/*
+  X-Robots-Tag: noindex

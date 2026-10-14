@@ -35,7 +35,7 @@ import { scoreLoss, scoreNav } from "./truth.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
 import { sha256 } from "./sha256.js";
 import { bundle } from "../scripts/bundle.js";
-import { CARD_MARK, MARK, cardTags, site, splice } from "../scripts/site.js";
+import { CARD_MARK, MARK, NOINDEX, cardTags, homeTags, site, splice } from "../scripts/site.js";
 import { EXAMPLE, LICENSE, excerpt } from "../scripts/example.js";
 import { EDGE, chunks } from "../scripts/icon.js";
 import { CARD, cardAlt, cardText, cardWords } from "../scripts/card.js";
@@ -1308,6 +1308,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   ];
   const npx = (await Promise.all(served.map(async (f) => (/\bnpx\b/.test(await readFile(f, "utf8")) ? [f] : [])))).flat();
   const headers = await readFile(join(out, "_headers"), "utf8");
+  const robotsTxt = await readFile(join(out, "robots.txt"), "utf8").catch(() => null);
   const routes = JSON.parse(await readFile(join(out, "_routes.json"), "utf8"));
   const redirects = await readFile(join(out, "_redirects"), "utf8");
   const home = await readFile(join(out, "_app/home.html"), "utf8").catch(() => "");
@@ -1583,20 +1584,22 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const missed = SINK_FORMS.filter((s) => !SINKS.test(s));
   record("web", "sinks", `no HTML sink in any site script, source or built (${scanned.length} files); the pattern catches each sink form${sunk.length || missed.length ? `: ${[...sunk, ...missed].join(", ")}` : ""}`,
     !sunk.length && !missed.length && scanned.some((f) => f.endsWith(join("_app", "app.js"))) && !SINKS.test("el.textContent = x; el.setAttribute(\"href\", u)"));
-  record("web", "headers", "_headers: the CSP (Turnstile's script-src and frame-src only), nosniff, no-referrer; the Function routed at /_fetch only",
-    headers.includes(`  Content-Security-Policy: ${CSP}\n`) && headers.includes("  X-Content-Type-Options: nosniff\n") && headers.includes("  Referrer-Policy: no-referrer\n") &&
-    JSON.stringify(routes) === JSON.stringify({ version: 1, include: ["/_fetch"], exclude: [] }));
+  // Byte for byte: a `! Name` line under any rule detaches that header wherever the rule matches.
+  const HEADERS = `/*\n  Content-Security-Policy: ${CSP}\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n\n` +
+    "https://:project.pages.dev/*\n  X-Robots-Tag: noindex\n\nhttps://:version.:project.pages.dev/*\n  X-Robots-Tag: noindex\n";
+  record("web", "headers", "_headers exactly: the CSP (Turnstile's script-src and frame-src only), nosniff, no-referrer on every path, noindex on pages.dev hosts; the Function routed at /_fetch only",
+    headers === HEADERS && JSON.stringify(routes) === JSON.stringify({ version: 1, include: ["/_fetch"], exclude: [] }));
   // Pages serves index.html for any path that is not a file (no 404.html), so it is the shell of
   // every share URL; / alone is rewritten to the home.
   // The home's example (scripts/example.js): in the home only, once, with no ids. Its page and
   // losses are the view's own renders of the frozen IR, read back from the built home, so the
   // serializer and the splice are checked too; its own words and links are exactly these.
-  const words = await cardWords(), tags = cardTags(cardAlt(words)), bare = home.replace(tags, "");
+  const words = await cardWords(), tags = homeTags + cardTags(cardAlt(words)), bare = home.replace(tags, "");
   const exStart = bare.indexOf('<section class="example">'), exEnd = bare.indexOf("</section>\n", exStart) + "</section>\n".length;
   const homeDoc = parseHTML(home).document, shellDoc = parseHTML(html).document, fresh = parseHTML("<!doctype html><html><body></body></html>").document;
   const ex = homeDoc.querySelector("section.example"), exBad = [];
   if (homeDoc.querySelectorAll("section.example, .exhibit").length !== 2 || shellDoc.querySelector(".example, .exhibit") || [MARK, CARD_MARK].some((m) => html.includes(m) || home.includes(m))) exBad.push("placement");
-  if (exStart < 0 || !home.includes(tags) || bare.slice(0, exStart) + bare.slice(exEnd) !== html) exBad.push("the home less the example and the card is not the shell");
+  if (exStart < 0 || !home.includes(tags) || bare.slice(0, exStart) + bare.slice(exEnd) !== html.replace(NOINDEX, "")) exBad.push("the home less the example and the card is not the shell less its noindex");
   for (const [name, d] of [["home", homeDoc], ["shell", shellDoc]]) { const ids = [...d.querySelectorAll("[id]")].map((e) => e.id); if (new Set(ids).size !== ids.length) exBad.push(`${name}: duplicate id`); }
   if (ex) {
     const { doc, part } = await excerpt();
@@ -1653,12 +1656,24 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("web", "privacy", `privacy.html: six lines, off-site links https with Cloudflare's privacy policy and Turnstile addendum, no domain of ours, no OG tags${offSite.length ? ` (${offSite.length} off-site links)` : ""}`,
     privMain?.querySelectorAll("li").length === 6 && privMain.querySelector("a.name")?.getAttribute("href") === "/" && offSite.every((h) => h.startsWith("https://")) &&
     ["https://www.cloudflare.com/privacypolicy/", "https://www.cloudflare.com/turnstile-privacy-policy/"].every((u) => offSite.includes(u)) && !/1mb\.dev|pages\.dev/.test(privMain.textContent + hrefs.join(" ")) && !/property="og:/.test(privacy));
+  // Indexing: the shell (every share URL, on any host) is noindex by its own static meta; the home
+  // and the privacy page are not, and name their canonical on the production host. robots.txt
+  // allows all: a crawler that may not fetch the shell never reads its noindex.
+  const robotsBad = [];
+  const shellHead = html.slice(0, html.indexOf("</head>")), noindexAt = shellHead.indexOf(NOINDEX);
+  if (html.split(NOINDEX).length !== 2 || noindexAt < 0 || noindexAt > shellHead.indexOf('<script type="module" src="/_app/app.js">')) robotsBad.push("shell: one noindex meta in its static head before app.js");
+  if (JSON.stringify(pages.map(([f]) => f).sort()) !== JSON.stringify([join("_app", "home.html"), "index.html", "privacy.html"])) robotsBad.push(`documents: ${pages.map(([f]) => f).join(", ")}`);
+  const index = (d) => ({ robots: [...d.querySelectorAll('meta[name="robots"]')].map((m) => m.getAttribute("content")), canonical: [...d.querySelectorAll('link[rel="canonical"]')].map((l) => l.getAttribute("href")), url: [...d.querySelectorAll('meta[property="og:url"]')].map((m) => m.getAttribute("content")) });
+  for (const [name, d, want] of [["shell", shellDoc, { robots: ["noindex"], canonical: [], url: [] }], ["home", homeDoc, { robots: [], canonical: ["https://bareflow.1mb.dev/"], url: ["https://bareflow.1mb.dev/"] }],
+    ["privacy", privDoc, { robots: [], canonical: ["https://bareflow.1mb.dev/privacy"], url: [] }]]) if (JSON.stringify(index(d)) !== JSON.stringify(want)) robotsBad.push(`${name}: ${JSON.stringify(index(d))}`);
+  if (robotsTxt !== "User-agent: *\nAllow: /\n") robotsBad.push(`robots.txt: ${JSON.stringify(robotsTxt)}`);
+  record("web", "robots", `share URLs noindex by the shell's static meta, the home and privacy page indexable with their canonical on bareflow.1mb.dev, robots.txt allows all; no other document${robotsBad.length ? `: ${robotsBad.join(" | ")}` : ""}`, !robotsBad.length);
   const hostile = "$&$'$`$$</script><script>x</script>";
   if (splice(`a${MARK}b`, hostile) !== `a${hostile}b`) exBad.push("the splice reads the example as a pattern");
   const notice = await readFile(join(ROOT, "NOTICE"), "utf8");
   if (!notice.replace(/\s+/g, " ").includes(`${EXAMPLE.fixture} (${new URL(EXAMPLE.url).hostname}, CC BY 4.0)`) ||
     Object.values(inventory).find((p) => `test/fixtures/${p.fixture}` === EXAMPLE.fixture)?.url !== EXAMPLE.url) exBad.push("NOTICE does not name the example's page and license");
-  record("web", "home", "_redirects rewrites / alone, to _app/home; no 404.html; the home is the shell plus the example and the card",
+  record("web", "home", "_redirects rewrites / alone, to _app/home; no 404.html; the home is the shell less its noindex, plus the example, the card, and its canonical",
     redirects === "/ /_app/home 200\n" && !top.includes("404.html") && !exBad.some((b) => /placement|not the shell/.test(b)));
   record("web", "example", `the example: in the home once, no ids; its page and losses equal the view's renders of the frozen IR with L1 open; its words, links, tags, and attributes exactly its own; the splice takes text as text; NOTICE names it${exBad.length ? `: ${exBad.slice(0, 4).join(" | ")}` : ""}`, !exBad.length);
 
