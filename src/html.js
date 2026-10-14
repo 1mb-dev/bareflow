@@ -33,7 +33,9 @@ function repairTables(document) {
 // root's children, never through document.head/body: linkedom's getters create them.
 const METADATA = new Set(["TITLE", "META", "LINK", "BASE", "STYLE"]);
 const HEADISH = new Set([...METADATA, "SCRIPT", "NOSCRIPT", "TEMPLATE"]);
-const LEAD = /^(?:\s*(?:<!--[\s\S]*?-->|<!doctype[^>]*>))*\s*/i;
+// Leading whitespace, comments, and doctypes. A comment ends where htmlparser2 ends it: `<!-->` and
+// `<!--->` close at once, `--!>` does not. A claim about the parser: verify checks it.
+export const LEAD = /^(?:\s*(?:<!--(?:-?>|[\s\S]*?-->)|<!doctype[^>]*>))*\s*/i;
 const element = (n, tag) => n.nodeType === 1 && n.tagName === tag;
 
 function impliedBody(document) {

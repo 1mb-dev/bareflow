@@ -25,10 +25,11 @@ import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
 import { renderMarkdown, NOTE_SOURCES, REASON_IS_OWN } from "./render.js";
 import { marked } from "marked";
 import { parseHTML } from "linkedom";
+import { Parser } from "htmlparser2";
 import { main, USAGE } from "./cli.js";
 import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
-import { NotHtml, parseHtml, parsedSize } from "./html.js";
+import { LEAD, NotHtml, parseHtml, parsedSize } from "./html.js";
 import { convertBounded } from "./bounded.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
@@ -922,7 +923,7 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   // same in the CLI and the worker; HTML that leaves out its optional html, head, or body tags
   // keeps its text, and its title once.
   const REFUSED = { json: ['{"a": 1}', "not-html", "json"], array: ["[1, 2]", "not-html", "json"], text: ["hello world\n", "not-html", ""],
-    markdown: ["# Title\n\nSome *text*.", "not-html", ""], csv: ["a,b\n1,2\n", "not-html", ""], lt: ["< 5 apples", "not-html", ""], heart: ["<3 you", "not-html", ""],
+    markdown: ["# Title\n\nSome *text*.", "not-html", ""], "text after a comment closed at <!--->": ["<!--->x-->", "not-html", ""], csv: ["a,b\n1,2\n", "not-html", ""], lt: ["< 5 apples", "not-html", ""], heart: ["<3 you", "not-html", ""],
     empty: ["", "blank", ""], space: [" \n\t ", "blank", ""], bom: ["\uFEFF \n", "blank", ""], doctype: ["<!doctype html>\n<!-- down -->", "blank", ""], "json with markup": ['{"html": "<div><p>hi</p></div>"}', "not-html", "json"],
     "template leak before the markup": ["{{ x }}<html><body><p>a</p></body></html>", "not-html", "json"], "unclosed comment": ["<!-- open <p>a</p>", "not-html", ""] };
   const KEPT = { optional: ["<!doctype html><title>T</title><p>Kept text.</p>", "T"], "no body tag": ["<html><title>T</title><p>Kept text.</p></html>", "T"],
@@ -933,7 +934,8 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     "markup before the doctype": ["<br />\n<b>Warning</b>: y<br />\n<!DOCTYPE html><html><head><title>T</title></head><body><p>Kept text.</p></body></html>", "T", "y"],
     "content before <body>": ["<html><head><title>T</title></head><p>Stray.</p><body><p>Kept text.</p></body></html>", "T", "Stray."],
     "content before <head>": ["<html><p>Kept text.</p><head><title>T</title></head></html>", "T"],
-    "title after a comment closed at <!--->": ["<!---><title>A --> B</title><p>Kept text.</p>", "A --> B"] };
+    "title after a comment closed at <!--->": ["<!---><title>A --> B</title><p>Kept text.</p>", "A --> B"],
+    "a later comment then {": ["<!---><html><body><p>Kept text.</p><!-- a -->{not json</body></html>", ""] };
   const seam = [];
   const cliSays = async (e) => { let said = ""; const code = await main(["https://p.example/x"], { run: async () => { throw e; }, out: () => {}, err: (s) => { said += s; } }); return [code, said]; };
   for (const [name, [body, code, shape]] of Object.entries(REFUSED)) {
@@ -1025,6 +1027,35 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   }
   record("parse", "limits", `the limit pass counts what linkedom builds (depth/elements) on ${pages.length} frozen pages and ${soup.length} seeded soups of ${names.size} tag names (${sourced} from htmlparser2's source), and the repairs add at most 2 levels and 3 elements${[...off, ...band].length ? `: ${[...off, ...band].slice(0, 5).join("; ")}` : ""}`,
     !off.length && !band.length && sourced >= 60 && found);
+}
+
+// LEAD (src/html.js) is a claim about htmlparser2: on seeded runs of comments, doctypes, and text it
+// ends where the parser's first content starts (an element, text past whitespace, a processing
+// instruction). A comment open to the end is the exception: the parser sees no content, LEAD stops
+// before it, so the page is refused as not-html, not blank.
+{
+  let seed = 9;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  const T = ["<!-->", "<!--->", "<!-- c -->", "<!--", "-->", "--!>", "<!doctype html>", " ", "\n", "x", "<p>", "{", "<!---->", "->", "-"];
+  const first = (html) => {
+    let at = -1;
+    const stop = {}, p = new Parser({
+      ontext(t) { if (t.trim()) { at = p.startIndex + t.length - t.trimStart().length; throw stop; } },
+      onopentagname() { at = p.startIndex; throw stop; },
+      onprocessinginstruction(n) { if (n.toLowerCase() !== "!doctype") { at = p.startIndex; throw stop; } },
+    });
+    try { p.write(html); p.end(); } catch (e) { if (e !== stop) throw e; }
+    return at;
+  };
+  const off = [];
+  let open = 0;
+  for (let i = 0; i < 5000; i++) {
+    const html = Array.from({ length: 1 + Math.floor(rnd() * 6) }, () => T[Math.floor(rnd() * T.length)]).join("");
+    const at = first(html), lead = html.match(LEAD)[0].length;
+    if (at < 0 && lead < html.length) { open++; continue; }
+    if (lead !== (at < 0 ? html.length : at)) off.push(`${JSON.stringify(html)}: LEAD ${lead}, parser ${at}`);
+  }
+  record("parse", "lead", `LEAD ends where htmlparser2's first content starts on ${5000 - open} seeded prefixes (${open} open comments, refused not-html)${off.length ? `: ${off.length} differ, ${off.slice(0, 3).join("; ")}` : ""}`, !off.length && open > 0);
 }
 
 // FixedLengthStream's contract (Workers only): the stream errors past, or short of, n bytes. The
