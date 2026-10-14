@@ -2,7 +2,8 @@
 // fetch, so verify runs it under Node. It returns the capped bytes, or a declared length within
 // the cap passed through unread; it does not decode, hash, or convert (the browser does, CPU here
 // stays under the free plan's 10 ms). Workers fetch cannot pin DNS: a name that resolves to a
-// private address is refused by Cloudflare's network, not here. Literals, ports, userinfo, and our
+// private address is refused by Cloudflare's network (error 1016 or 1002; scripts/probe.js measures
+// it), not here. Literals, ports, userinfo, and our
 // own zones are refused here on every hop.
 import { checkTarget, fetchBody, noAnswer, REDIRECT } from "./fetch-policy.js";
 

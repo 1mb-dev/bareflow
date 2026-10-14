@@ -20,12 +20,12 @@ export const PROBES = [
 ].map(([name, url]) => ({ name, url }));
 export const CONTROL = { name: "control", url: "https://example.com/" };
 
-// pass: Cloudflare refused (the fetch threw at once, or a status >= 400 with its "error code: N");
-// finding: any response reached the code; inconclusive: a timeout, a dropped connection, or an
-// unnamed error status, which says nothing about whether Cloudflare connected.
+// pass: Cloudflare refused by name (a status >= 400 with "error code: 1xxx"); finding: any response from
+// the target; inconclusive: everything else, a throw included, and the 52x codes (Cloudflare tried to
+// connect), since neither says Cloudflare refused.
 export function classify(o) {
-  if (o.threw) return /time(d)? ?out|abort|reset|lost|ECONN|closed/i.test(o.threw) ? "inconclusive" : "pass";
-  if (o.status >= 400) return o.code ? "pass" : "inconclusive";
+  if (o.threw) return "inconclusive";
+  if (o.status >= 400) return /^1\d{3}$/.test(o.code ?? "") ? "pass" : "inconclusive";
   return "finding";
 }
 
