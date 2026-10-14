@@ -28,7 +28,7 @@ import { parseHTML } from "linkedom";
 import { main, USAGE } from "./cli.js";
 import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
-import { parseHtml } from "./html.js";
+import { NotHtml, parseHtml, parsedSize } from "./html.js";
 import { convertBounded } from "./bounded.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
@@ -955,34 +955,22 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     const one = ["html", "head", "body"].every((t) => d.querySelectorAll(t).length === 1) && d.documentElement.tagName === "HTML" && (!title || d.querySelector("head > title")?.textContent === title);
     if (!one || !text.includes("\nKept text.\n") || (also && !text.includes(also)) || (title && (!text.startsWith(`\n# ${title}\n`) || text.split(`\n${title}\n`).length !== 1))) seam.push(`${name}: ${one ? "" : "tree, "}${JSON.stringify(text.slice(0, 60))}`);
   }
-  // Limits at the seam: depth (html is level 1) and element count, each refused one past its cap;
-  // the parse pass refuses a depth linkedom would take minutes to build, without recursing.
+  // Limits at the seam, as parsed: depth (html is level 1) and element count, each refused one past
+  // its cap; then the shapes whose cost the caps bound inside htmlparser2: tables nested through
+  // optional end tags (repair would flatten them, after 29 s at 1 MB), self-closed svg (its
+  // foreign-content stack grows per element), and stray </p> (each opens a p) under deep open tags.
   const chain = (n) => `<html><head></head><body>${"<div>".repeat(n)}x${"</div>".repeat(n)}</body></html>`;
   const flat = (n) => `<html><head></head><body>${"<p></p>".repeat(n)}</body></html>`;
   const limited = (html) => { try { parseHtml(html); return "ok"; } catch (e) { return e.code ?? `threw ${e.message}`; } };
-  const LIMITS = [["depth at the cap", chain(MAX_DEPTH - 2), "ok"], ["depth one past", chain(MAX_DEPTH - 1), "too-deep"], ["a million levels, source", "<div>".repeat(1e6), "too-deep"],
+  const LIMITS = [["depth at the cap", chain(MAX_DEPTH - 2), "ok"], ["depth one past", chain(MAX_DEPTH - 1), "too-deep"],
     ["elements at the cap", flat(MAX_ELEMENTS - 3), "ok"], ["elements one past", flat(MAX_ELEMENTS - 2), "too-big"],
-    ["5,000 unclosed li", `<ul>${"<li>x".repeat(5000)}</ul>`, "ok"], ["5,000 unclosed p", "<p>x".repeat(5000), "ok"],
-    ["5,000 rows without end tags", `<table>${"<tr><td>a<td>b".repeat(5000)}</table>`, "ok"], ["3,000 optgroups without end tags", `<select>${"<optgroup><option>a".repeat(3000)}</select>`, "ok"],
-    ["5,000 unclosed p before blocks", "<p>x<div>y</div>".repeat(5000), "ok"], ["div in a script string", `<script>${"'<div>'+".repeat(5000)}''</script><p>x</p>`, "ok"], ["5,000 self-closing paths in an svg", `<svg>${"<path/>".repeat(5000)}</svg>`, "ok"],
-    ["self-closing after a closed foreignObject", `<svg><foreignObject><p>x</p></foreignObject>${"<path/>".repeat(5000)}</svg>`, "ok"]];
+    ["tables nested by <tbody> in a cell", `<table>${"<tr><th>x<tbody>".repeat(100)}`, "too-deep"], ["self-closed svg", `<svg>${"<svg/>".repeat(MAX_ELEMENTS)}`, "too-big"],
+    ["stray </p> under 200 open", `${"<div>".repeat(200)}${"</p>".repeat(MAX_ELEMENTS)}`, "too-big"]];
   for (const [name, html, want] of LIMITS) { const got = limited(html); if (got !== want) seam.push(`${name}: ${got}, want ${want}`); }
   // Node lists past the stack's spread limit (150,000 text and comment nodes) move intact.
   const FLOOD = "a<!---->".repeat(75000);
   for (const [name, html] of [["after </html>", `<html><body><p>x</p></body></html>${FLOOD}`], ["before <body>", `<html><head></head>${FLOOD}<body><p>x</p></body></html>`],
     ["after a stray tbody in a cell", `<table><tr><th>x<tbody></tbody>${FLOOD}</table>`]]) { const got = limited(html); if (got !== "ok") seam.push(`150,000 nodes ${name}: ${got}`); }
-  // The parse pass refuses before linkedom builds (linkedom is quadratic in depth): nesting through
-  // optional-end tags, values holding "<", and an apostrophe outside a quoted value.
-  const scanned = (html) => { try { parseHtml(html); return "converted"; } catch (e) { return e.scanned ? "scan" : e.code; } };
-  const DEEP = 5000, BYPASS = { ...Object.fromEntries(["html", "head", "body", "thead", "tfoot", "colgroup", "caption", "rb", "rtc", "div"].map((t) => [`<${t}> x${DEEP}`, `<${t}>`.repeat(DEEP)])),
-    ...Object.fromEntries(["noscript", "template", "plaintext"].map((t) => [`<${t}> then divs`, `<${t}>${"<div>".repeat(DEEP)}`])),
-    "values holding <": '<div a="<">'.repeat(DEEP), "spaced = before a quote": "<div a = '<'>".repeat(DEEP), "apostrophe in an unquoted value": `<div a=x'>${"<div>".repeat(DEEP)}'`, "self-closing outside svg": "<div/>".repeat(DEEP),
-    ...Object.fromEntries(["foreignObject", "desc"].map((t) => [`self-closing in <svg><${t}>`, `<svg><${t}>${"<div/>".repeat(DEEP)}`])), "self-closing <mi/> in math": `<math>${"<mi/>".repeat(DEEP)}`,
-    ...Object.fromEntries(["desc", "foreignObject", "mi", "math"].map((t) => [`self-closing after a stray </${t}> in an svg`, `<svg></${t}>${"<div/>".repeat(DEEP)}`])) };
-  for (const [name, html] of Object.entries(BYPASS)) { const got = scanned(html); if (got !== "scan") seam.push(`scan ${name}: ${got}`); }
-  // End tags: a stray one closes nothing; a matching one closes back to its element.
-  if (scanned(`${"<div>".repeat(200)}${"</span>".repeat(200)}${"<div>".repeat(100)}`) !== "scan") seam.push("scan: stray end tags closed open elements");
-  if (scanned(`${"<div>".repeat(200)}${"</div>".repeat(200)}${"<div>".repeat(100)}x`) === "scan") seam.push("scan: matching end tags did not close");
   for (const code of ["too-deep", "too-big"]) {
     const w = await ask({ input: "paste", url: "https://p.example/x", html: code === "too-deep" ? chain(MAX_DEPTH) : flat(MAX_ELEMENTS) });
     if (w.error !== code) seam.push(`worker ${code}: ${w.error}`);
@@ -1005,6 +993,38 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   const appSrcText = await readFile(join(ROOT, "site/app.js"), "utf8");
   if (Number(appSrcText.match(/const CONVERT_TIMEOUT = (\d+);/)?.[1]) !== CONVERT_TIMEOUT) seam.push("site/app.js CONVERT_TIMEOUT differs from the policy's");
   record("web", "seam", `parse seam: ${Object.keys(REFUSED).length} non-HTML bodies refused by name in convert and the worker, the CLI's three sentences exit 1; ${Object.keys(KEPT).length} pages with implied tags keep their text and title once; depth and element caps at their boundaries; the CLI's conversion thread and its deadline${seam.length ? `: ${seam.join("; ")}` : ""}`, !seam.length);
+}
+
+// The limit pass (src/html.js parsedSize) counts what linkedom builds: depth and element count equal
+// linkedom's own tree on every frozen page and on seeded tag soup drawn from the tag names in
+// htmlparser2's own source. The repairs after add at most two levels and three elements, so the caps
+// hold for the tree the extractor reads.
+{
+  const HP = join(ROOT, "node_modules/htmlparser2/dist/esm");
+  const names = new Set([...(await readFile(join(HP, "Parser.js"), "utf8")).matchAll(/"([a-z][a-z0-9-]*)"/g)].map((m) => m[1]));
+  for (const m of (await readFile(join(HP, "Tokenizer.js"), "utf8")).matchAll(/\/\/ `<\/?([a-z]+)/g)) names.add(m[1]);
+  const sourced = names.size, found = ["p", "tr", "tbody", "svg", "desc", "script"].every((n) => names.has(n));
+  for (const n of ["html", "head", "body", "div", "span", "a", "b", "template", "noscript", "plaintext", "noembed", "iframe", "foreignObject", "x-y"]) names.add(n);
+  let seed = 1;
+  const rnd = () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const pick = (a) => a[Math.floor(rnd() * a.length)], NAMES = [...names];
+  const name = () => (rnd() < 0.1 ? pick(NAMES).toUpperCase() : pick(NAMES));
+  const ATTR = ["", " a", ' a="<"', " a='>'", " a = '/>'", " a=x'", ' a="', " /", " a=b/", ' x="</div>"'];
+  const TOKENS = [() => `<${name()}${pick(ATTR)}>`, () => `<${name()}${pick(ATTR)}>`, () => `<${name()}${pick(ATTR)}>`, () => `</${name()}>`, () => `</${name()}>`, () => `<${name()}/>`,
+    () => "x", () => " & ", () => "<!-- c -->", () => "<![CDATA[<div>]]>", () => "<?p <div>?>", () => "<!doctype html>", () => "<", () => "</", () => "<3", () => "<!--", () => "-->", () => "<!--->"];
+  const soup = Array.from({ length: 400 }, () => Array.from({ length: 300 }, () => pick(TOKENS)()).join(""));
+  const pages = await Promise.all([...Object.values(inventory).map((s) => join(ROOT, "test/fixtures", s.fixture)), ...Object.keys(realPages).map((f) => join(ROOT, "test/pages", f))].map((f) => readFile(f, "utf8")));
+  const tree = (root, d0) => { let depth = 0, elements = 0; for (const st = [[root, d0]]; st.length; ) { const [n, d] = st.pop(); if (d > depth) depth = d; if (d) elements++; for (let c = n.firstElementChild; c; c = c.nextElementSibling) st.push([c, d + 1]); } return { depth, elements }; };
+  const off = [], band = [];
+  for (const [i, html] of [...pages, ...soup].entries()) {
+    const at = i < pages.length ? `page ${i}` : `soup ${i - pages.length}`, parsed = parsedSize(html, false), built = tree(parseHTML(html).document, 0);
+    if (parsed.depth !== built.depth || parsed.elements !== built.elements) off.push(`${at}: parsed ${parsed.depth}/${parsed.elements}, linkedom ${built.depth}/${built.elements}`);
+    let final;
+    try { final = tree(parseHtml(html).document.documentElement, 1); } catch (e) { if (e instanceof NotHtml) continue; throw e; }
+    if (final.depth > parsed.depth + 2 || final.elements > parsed.elements + 3) band.push(`${at}: parsed ${parsed.depth}/${parsed.elements}, repaired ${final.depth}/${final.elements}`);
+  }
+  record("parse", "limits", `the limit pass counts what linkedom builds (depth/elements) on ${pages.length} frozen pages and ${soup.length} seeded soups of ${names.size} tag names (${sourced} from htmlparser2's source), and the repairs add at most 2 levels and 3 elements${[...off, ...band].length ? `: ${[...off, ...band].slice(0, 5).join("; ")}` : ""}`,
+    !off.length && !band.length && sourced >= 60 && found);
 }
 
 // FixedLengthStream's contract (Workers only): the stream errors past, or short of, n bytes. The

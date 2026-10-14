@@ -90,52 +90,37 @@ export class NotHtml extends Refused {
 
 // Limits (src/fetch-policy.js MAX_DEPTH, MAX_ELEMENTS), counted by htmlparser2 itself before
 // linkedom builds a tree. linkedom builds from these same callbacks (an open tag descends, a close
-// climbs whatever its name), so the count is the tree's depth as parsed. Refusing mid-parse bounds
+// climbs whatever its name), so the counts are the tree's as parsed; the repairs after add at most
+// html and body to its depth and html, head, and body to its count. Refusing mid-parse bounds
 // htmlparser2's own costs: its open stack and its foreign-content stack grow by unshift (quadratic in
 // depth, and in self-closed svg or math elements, which never pop), and every end tag searches the
-// open stack. The parsed tree is then measured again after repair; the walk iterates, as a recursive
-// one would overflow the stack on the inputs it exists to refuse.
-// The options are linkedom's; htmlparser2 moves in lockstep with linkedom's range for it.
+// open stack. The options are linkedom's; htmlparser2 moves in lockstep with linkedom's range for it.
 const PARSED = { lowerCaseAttributeNames: false, decodeEntities: true, xmlMode: false };
-const tooDeep = () => new Refused("too-deep", `the page nests more than ${MAX_DEPTH} levels deep`);
-const tooBig = () => new Refused("too-big", `the page has more than ${MAX_ELEMENTS} elements`);
 
-function limitParse(html) {
-  let depth = 0, elements = 0;
+// The deepest open element (html is 1) and the element count; with `caps`, refused past either.
+export function parsedSize(html, caps = true) {
+  let depth = 0, deepest = 0, elements = 0;
   const parser = new Parser({
     onopentag() {
-      if (++elements > MAX_ELEMENTS) throw Object.assign(tooBig(), { scanned: true });
-      if (++depth > MAX_DEPTH) throw Object.assign(tooDeep(), { scanned: true });
+      if (++elements > MAX_ELEMENTS && caps) throw new Refused("too-big", `the page has more than ${MAX_ELEMENTS} elements`);
+      if (++depth > deepest) deepest = depth;
+      if (depth > MAX_DEPTH && caps) throw new Refused("too-deep", `the page nests more than ${MAX_DEPTH} levels deep`);
     },
     onclosetag() { depth--; },
   }, PARSED);
   parser.write(html);
   parser.end();
-}
-
-function measure(root) {
-  let elements = 0, deepest = 0;
-  for (const stack = [[root, 1]]; stack.length; ) {
-    const [n, d] = stack.pop();
-    elements++;
-    if (d > deepest) deepest = d;
-    if (d > MAX_DEPTH || elements > MAX_ELEMENTS) break;
-    for (let c = n.firstElementChild; c; c = c.nextElementSibling) stack.push([c, d + 1]);
-  }
-  return { elements, deepest };
+  return { depth: deepest, elements };
 }
 
 export function parseHtml(html) {
   const rest = html.slice(html.match(LEAD)[0].length);
   if (/^[[{]/.test(rest)) throw new NotHtml(html);
-  limitParse(html);
+  parsedSize(html);
   const window = parseHTML(html);
   if (!window.document.documentElement) throw new NotHtml(html);
   impliedBody(window.document);
   repairTables(window.document);
-  const { elements, deepest } = measure(window.document.documentElement);
-  if (deepest > MAX_DEPTH) throw tooDeep();
-  if (elements > MAX_ELEMENTS) throw tooBig();
   return window;
 }
 
