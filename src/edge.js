@@ -16,12 +16,14 @@ export const WEB_MAX_BYTES = 1024 * 1024;
 export const TEST_SECRETS = new Set(["1", "2", "3"].map((n) => `${n}x0000000000000000000000000000000AA`));
 const LOCAL = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
+// One host name as DNS reads it: "1mb.dev." is 1mb.dev, and case does not count.
+const bare = (host) => String(host ?? "").toLowerCase().replace(/\.+$/, "");
+
 // The policy's checkTarget (scheme, private literals), then the Function's own guards.
 export function edgeCheck(url) {
   const u = new URL(url);
   const target = checkTarget(url);
-  // "1mb.dev." is 1mb.dev: a trailing dot is the same name in DNS.
-  const host = target.host.replace(/\.+$/, "");
+  const host = bare(target.host);
   if (u.username || u.password) throw refused("credentials in the address: this site fetches no address with a user name or password");
   if (u.port && u.port !== "80" && u.port !== "443") throw refused(`port ${u.port} in ${url}: this site fetches ports 80 and 443 only`);
   if (target.literal) throw refused(`IP address ${host}: this site fetches host names only`);
@@ -115,16 +117,17 @@ function failure(e) {
   return fail(502, "upstream", m, e?.status ? { "x-bareflow-status": String(e.status), "x-final-url": e.url } : undefined);
 }
 
-// "ok", "bad" (Turnstile said no, or the token was solved on another host), or "down" (siteverify did
-// not answer usably: not the visitor's fault). A token is good only on the host that asks: the widget's
-// domain list also admits its subdomains. Cloudflare's test secrets (localhost only) answer example.com.
-const bare = (host) => String(host ?? "").toLowerCase().replace(/\.+$/, "");
-async function checkToken(fetchImpl, secret, token, ip, host) {
+// "ok", "bad" (Turnstile said no), "elsewhere" (a token solved on another host: the widget's domain list
+// also admits its subdomains; a visitor's page and /_fetch share a host, so for one it is this site's
+// fault), or "down" (siteverify did not answer usably). `test`: a Cloudflare test secret, which answers
+// example.com; the handler admits one on localhost only.
+async function checkToken(fetchImpl, secret, token, ip, host, test) {
   try {
     const res = await fetchImpl(SITEVERIFY, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ secret, response: token, remoteip: ip ?? undefined }), signal: AbortSignal.timeout(10000) });
     if (!res.ok) return "down";
     const v = await res.json();
-    return v?.success === true && (TEST_SECRETS.has(secret.trim()) || bare(v.hostname) === bare(host)) ? "ok" : "bad";
+    if (v?.success !== true) return "bad";
+    return test || bare(v.hostname) === bare(host) ? "ok" : "elsewhere";
   } catch { return "down"; }
 }
 
@@ -134,15 +137,17 @@ export const handler = (fetchImpl, { timeout, limit } = {}) => async ({ request,
   if (request.method !== "GET") return fail(405, "url", "GET only");
   if (!env?.TURNSTILE_SECRET) return fail(503, "unavailable", "the fetch is not configured (no TURNSTILE_SECRET)");
   const req = new URL(request.url);
-  if (TEST_SECRETS.has(env.TURNSTILE_SECRET.trim()) && !LOCAL.has(req.hostname)) return fail(503, "unavailable", "the fetch is not configured (a Turnstile test secret off localhost)");
+  const test = TEST_SECRETS.has(env.TURNSTILE_SECRET.trim());
+  if (test && !LOCAL.has(req.hostname)) return fail(503, "unavailable", "the fetch is not configured (a Turnstile test secret off localhost)");
   const token = request.headers.get("x-turnstile-token");
   if (!token) return fail(403, "token", "no Turnstile token; reload the page");
   const target = req.searchParams.get("url");
   if (!target) return fail(400, "url", "no url parameter");
   try { edgeCheck(target); } catch (e) { return failure(e); }
-  const verdict = await checkToken(fetchImpl, env.TURNSTILE_SECRET, token, request.headers.get("cf-connecting-ip"), req.hostname);
+  const verdict = await checkToken(fetchImpl, env.TURNSTILE_SECRET, token, request.headers.get("cf-connecting-ip"), req.hostname, test);
   if (verdict === "down") return fail(503, "unavailable", "the bot check service did not answer");
   if (verdict === "bad") return fail(403, "token", "the Turnstile check failed or expired; reload the page");
+  if (verdict === "elsewhere") return fail(503, "unavailable", "the bot check answered for another host than this one");
   try {
     const { finalUrl, body, stream, over } = await fetchBody(target, edgeTransport(fetchImpl, { limit }), { timeout, check: edgeCheck, maxBytes: WEB_MAX_BYTES });
     if (over) return fail(502, "over-cap", `the page is over ${WEB_MAX_BYTES / 1048576} MB, this site's limit`);
