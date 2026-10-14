@@ -61,9 +61,10 @@ const check = async (name, fn) => { try { await fn(); } catch (e) { row(false, n
 // until green would hide one that flaps between the two.
 const start = Date.now();
 for (let n = 1; ; n++) {
-  const r = await get("/").catch((e) => e);
-  if (r instanceof Response && r.status === 200 && (await bytes(r)).equals(home)) { console.log(`ok    settled: / is this build (${n} tries)`); break; }
-  if (Date.now() - start > SETTLE) { console.log(`FAIL  settled: / is not this build after ${SETTLE / 1000} s (${r instanceof Response ? r.status : r.message})`); process.exit(1); }
+  let r, same = false;
+  try { r = await get("/"); same = r.status === 200 && (await bytes(r)).equals(home); } catch (e) { r = e; }
+  if (same) { console.log(`ok    settled: / is this build (${n} tries)`); break; }
+  if (Date.now() - start > SETTLE) { console.log(`FAIL  settled: / is not this build after ${SETTLE / 1000} s (${r instanceof Response ? r.status : r.cause?.message ?? r.message})`); process.exit(1); }
   await new Promise((ok) => setTimeout(ok, POLL));
 }
 
