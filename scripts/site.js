@@ -18,9 +18,9 @@ import { stylesheet } from "./stylesheet.js";
 import { iconIco, iconPng, iconSvg, palette } from "./icon.js";
 import { CARD, ORIGIN, cardAlt, cardWords } from "./card.js";
 import { VERSION } from "../src/version.js";
+import { TEST_SITEKEY } from "./sitekey.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-export const TEST_SITEKEY = "1x00000000000000000000AA";
 // Where the home's example goes in the template; the shell gets nothing there. A function, not a
 // string: a replacement string reads $&, $', and $` in third-party text as patterns.
 export const MARK = "<!-- example -->\n";
