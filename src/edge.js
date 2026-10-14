@@ -115,12 +115,16 @@ function failure(e) {
   return fail(502, "upstream", m, e?.status ? { "x-bareflow-status": String(e.status), "x-final-url": e.url } : undefined);
 }
 
-// "ok", "bad" (Turnstile said no), or "down" (siteverify did not answer usably: not the visitor's fault).
-async function checkToken(fetchImpl, secret, token, ip) {
+// "ok", "bad" (Turnstile said no, or the token was solved on another host), or "down" (siteverify did
+// not answer usably: not the visitor's fault). A token is good only on the host that asks: the widget's
+// domain list also admits its subdomains. Cloudflare's test secrets (localhost only) answer example.com.
+const bare = (host) => String(host ?? "").toLowerCase().replace(/\.+$/, "");
+async function checkToken(fetchImpl, secret, token, ip, host) {
   try {
     const res = await fetchImpl(SITEVERIFY, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ secret, response: token, remoteip: ip ?? undefined }), signal: AbortSignal.timeout(10000) });
     if (!res.ok) return "down";
-    return (await res.json())?.success === true ? "ok" : "bad";
+    const v = await res.json();
+    return v?.success === true && (TEST_SECRETS.has(secret.trim()) || bare(v.hostname) === bare(host)) ? "ok" : "bad";
   } catch { return "down"; }
 }
 
@@ -136,7 +140,7 @@ export const handler = (fetchImpl, { timeout, limit } = {}) => async ({ request,
   const target = req.searchParams.get("url");
   if (!target) return fail(400, "url", "no url parameter");
   try { edgeCheck(target); } catch (e) { return failure(e); }
-  const verdict = await checkToken(fetchImpl, env.TURNSTILE_SECRET, token, request.headers.get("cf-connecting-ip"));
+  const verdict = await checkToken(fetchImpl, env.TURNSTILE_SECRET, token, request.headers.get("cf-connecting-ip"), req.hostname);
   if (verdict === "down") return fail(503, "unavailable", "the bot check service did not answer");
   if (verdict === "bad") return fail(403, "token", "the Turnstile check failed or expired; reload the page");
   try {

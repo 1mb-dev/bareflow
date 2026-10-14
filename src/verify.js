@@ -1187,7 +1187,12 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const platform = async (url, init) => {
     calls.push(String(url));
     if (url !== SITEVERIFY) encodings.add(new Headers(init.headers).get("accept-encoding"));
-    if (url === SITEVERIFY) { const t = JSON.parse(init.body).response; if (t === "unreachable") throw new TypeError("fetch failed"); return t === "outage" ? Response.json({ success: false }, { status: 503 }) : Response.json({ success: t === "good" }); }
+    // A token "good@<host>" was solved on <host> ("good" on bareflow.1mb.dev; "good@" names none).
+    if (url === SITEVERIFY) {
+      const [t, at = "bareflow.1mb.dev"] = JSON.parse(init.body).response.split("@");
+      if (t === "unreachable") throw new TypeError("fetch failed");
+      return t === "outage" ? Response.json({ success: false }, { status: 503 }) : Response.json({ success: t === "good", ...(at ? { hostname: at } : {}) });
+    }
     const u = new URL(url); u.hostname = "127.0.0.1"; u.port = String(port); u.protocol = "http:";
     return fetch(u, init);
   };
@@ -1210,6 +1215,15 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const testSecret = [], testLocal = [];
   for (const s of [...testSecrets, `${testSecrets[0]}\n`]) for (const origin of ["https://bareflow.1mb.dev", "https://preview.bareflow.pages.dev", "https://localhost.example"]) testSecret.push(await ask("https://a.example/page", { env: { TURNSTILE_SECRET: s }, origin }));
   for (const origin of ["http://localhost:8788", "http://127.0.0.1:8788", "http://[::1]:8788"]) testLocal.push(await ask("https://a.example/page", { env: { TURNSTILE_SECRET: testSecrets[0] }, origin }));
+  // The token's host is the asking host, by name: case and a trailing dot aside, never a subdomain.
+  const onHost = [];
+  for (const [token, origin, want] of [["good@bareflow.pages.dev", "https://bareflow.pages.dev", 200], ["good@BAREFLOW.pages.dev.", "https://bareflow.pages.dev", 200],
+    ["good@bareflow.pages.dev", "https://bareflow.pages.dev.", 200], ["good@a.bareflow.pages.dev", "https://bareflow.pages.dev", 403], ["good@", "https://bareflow.pages.dev", 403],
+    ["good@example.com", "http://localhost:8788", 403]]) {
+    const r = await ask("https://a.example/page", { token, origin });
+    if (r.status !== want || (want === 403 && (r.code !== "token" || r.calls.join() !== SITEVERIFY))) onHost.push(`${token} at ${origin}: ${r.status} ${r.code}`);
+  }
+  const testHost = await ask("https://a.example/page", { token: "good@example.com", origin: "http://localhost:8788", env: { TURNSTILE_SECRET: testSecrets[0] } });
   const ok = await ask("https://a.example/page");
   const h = ok.headers;
   const guards = await Promise.all(["https://u:p@a.example/", "http://a.example:8080/", "https://8.8.8.8/", "https://[2606:4700::1111]/", "https://1mb.dev/", "https://bareflow.1mb.dev/x", "https://x.pages.dev/", "https://1mb.dev./", "https://bareflow.1mb.dev../x", "https://x.pages.dev./", "https://localhost/", "https://a.localhost/", "https://intranet/", "file:///etc/passwd", "javascript:alert(1)"].map(refusedFirst));
@@ -1231,8 +1245,9 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("edge", "token", "no token: 403 with no request made; a failed Turnstile check: 403 after siteverify only; no secret configured or siteverify down: 503 unavailable",
     noToken.status === 403 && noToken.code === "token" && noToken.calls.length === 0 && badToken.status === 403 && badToken.calls.length === 1 && badToken.calls[0] === SITEVERIFY &&
     noSecret.status === 503 && noSecret.code === "unavailable" && noSecret.calls.length === 0 && outage.status === 503 && outage.code === "unavailable" && unreachable.status === 503 && unreachable.code === "unavailable");
-  record("edge", "test secret", "Cloudflare's 3 test secrets (and one with a trailing newline) on a public host: 503 unavailable with no request made; on localhost, 127.0.0.1, [::1]: checked as usual",
-    testSecret.every((r) => r.status === 503 && r.code === "unavailable" && r.calls.length === 0) && testLocal.every((r) => r.status === 200 && r.calls[0] === SITEVERIFY));
+  record("edge", "test secret", "Cloudflare's 3 test secrets (and one with a trailing newline) on a public host: 503 unavailable with no request made; on localhost, 127.0.0.1, [::1]: checked as usual, the token's host aside (they answer example.com)",
+    testSecret.every((r) => r.status === 503 && r.code === "unavailable" && r.calls.length === 0) && testLocal.every((r) => r.status === 200 && r.calls[0] === SITEVERIFY) && testHost.status === 200);
+  record("edge", "token host", `a token is good only on the host that asks: the same name 200 (case and a trailing dot on either side aside), a subdomain, no host, or example.com with a real secret on localhost 403 token${onHost.length ? `: ${onHost.join("; ")}` : ""}`, !onHost.length);
   record("edge", "guards", "credentials, port 8080, IPv4 and IPv6 literals, 1mb.dev, *.1mb.dev, *.pages.dev (trailing dots too), localhost, single-label names, file:, javascript: refused before Turnstile; private literal 403; a redirect to our zone or another port refused as redirect (the typed address stays url)",
     guards.every(Boolean) && priv.status === 403 && priv.code === "blocked" && priv.calls.length === 0 && toOwn.code === "redirect" && toPort.code === "redirect" && toOwn.status === 502 && toPort.status === 502);
   record("edge", "response", "a page: inert octet-stream bytes, final URL (ASCII for a non-ASCII target), no upstream headers; 404 upstream with its status and the address that answered (after a redirect too, and for a timeout), a refusal and a private literal with none; no url, POST named",
@@ -1250,7 +1265,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const through = async (headers, { endless = false, reset = false, timeout = 3000, settle = 0 } = {}) => {
     let aborted = false;
     const upstream = async (url, init) => {
-      if (url === SITEVERIFY) return Response.json({ success: true });
+      if (url === SITEVERIFY) return Response.json({ success: true, hostname: "bareflow.1mb.dev" });
       let ctl, sent = 0;
       init.signal.addEventListener("abort", () => { aborted = true; try { ctl.error(new Error("aborted")); } catch {} });
       // Each pull waits a tick, as a network does: a synchronous endless source starves the timers.
