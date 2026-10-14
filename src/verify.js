@@ -956,7 +956,9 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   }
   for (const [name, [html, title, also]] of Object.entries(KEPT)) {
     const md = (await convert({ url: "https://p.example/x", html, retrievedAt: "x", input: "fetch" }).catch((e) => ({ markdown: `threw ${e.message}` }))).markdown;
-    const text = md.split("\n---\n").slice(1).join("\n---\n"), { document: d } = parseHtml(html);
+    const text = md.split("\n---\n").slice(1).join("\n---\n");
+    let d;
+    try { d = parseHtml(html).document; } catch (e) { seam.push(`${name}: threw ${e.code ?? e.message}`); continue; }
     const one = ["html", "head", "body"].every((t) => d.querySelectorAll(t).length === 1) && d.documentElement.tagName === "HTML" && (!title || d.querySelector("head > title")?.textContent === title);
     if (!one || !text.includes("\nKept text.\n") || (also && !text.includes(also)) || (title && (!text.startsWith(`\n# ${title}\n`) || text.split(`\n${title}\n`).length !== 1))) seam.push(`${name}: ${one ? "" : "tree, "}${JSON.stringify(text.slice(0, 60))}`);
   }
