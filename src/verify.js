@@ -5,7 +5,8 @@
 // failure.
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { createServer } from "node:http";
@@ -36,7 +37,8 @@ import { sha256 } from "./sha256.js";
 import { bundle } from "../scripts/bundle.js";
 import { CARD_MARK, MARK, NOINDEX, cardTags, homeTags, site, splice } from "../scripts/site.js";
 import { EXAMPLE, LICENSE, excerpt } from "../scripts/example.js";
-import { classify } from "../scripts/probe-run.js";
+import { CONTROL, classify, PROBES, probe } from "../scripts/probe-run.js";
+import { assemble } from "../scripts/probe.js";
 import { EDGE, chunks } from "../scripts/icon.js";
 import { CARD, cardAlt, cardText, cardWords } from "../scripts/card.js";
 import { parseShare } from "../site/url.js";
@@ -1621,13 +1623,58 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   // the Function's own zone reaches its origin past Cloudflare's security settings.
   const PAGES = '# The Pages project\'s configuration, its source of truth: the dashboard cannot edit these fields.\nname = "bareflow"\npages_build_output_dir = "./dist/site"\n' +
     'compatibility_date = "2026-10-12"\n# A fetch to the Function\'s own zone goes through Cloudflare\'s front door, not straight to its origin.\ncompatibility_flags = ["global_fetch_strictly_public"]\n';
-  // The live probe's verdicts (scripts/probe-run.js): only Cloudflare's named 1xxx refusal passes; a
-  // throw, a timeout, or a 52x (Cloudflare tried to connect) says nothing about a refusal.
-  const VERDICTS = [[{ threw: "The operation was aborted due to timeout" }, "inconclusive"], [{ threw: "Network connection lost." }, "inconclusive"],
-    [{ threw: "TypeError: fetch failed" }, "inconclusive"], [{ status: 530, code: "1016" }, "pass"], [{ status: 403, code: "1002" }, "pass"], [{ status: 522, code: "522" }, "inconclusive"],
-    [{ status: 530, code: null }, "inconclusive"], [{ status: 200 }, "finding"], [{ status: 302 }, "finding"], [{ status: 404, code: null }, "inconclusive"]];
+  // The live probe's verdicts (scripts/probe-run.js): only the measured refusals (1016, 1002) pass; a
+  // status without a Cloudflare code means a connection was made; a throw or another code says nothing.
+  const VERDICTS = [[{ threw: "The operation was aborted due to timeout" }, "inconclusive"], [{ threw: "TypeError: fetch failed" }, "inconclusive"],
+    [{ status: 530, code: "1016" }, "pass"], [{ status: 403, code: "1002" }, "pass"], [{ status: 403, code: "1020" }, "inconclusive"], [{ status: 522, code: "522" }, "inconclusive"],
+    [{ status: 530, code: null }, "finding"], [{ status: 404, code: null }, "finding"], [{ status: 200, code: null }, "finding"], [{ status: 302, code: null }, "finding"]];
   const misread = VERDICTS.filter(([o, want]) => classify(o) !== want).map(([o, want]) => `${JSON.stringify(o)}: ${classify(o)}, want ${want}`);
-  record("web", "probe verdicts", `the live probe's classes: Cloudflare's named 1xxx refusal passes, a throw, timeout, or 52x is inconclusive, any response from the target is a finding${misread.length ? `: ${misread.join("; ")}` : ""}`, !misread.length);
+  record("web", "probe verdicts", `the live probe's classes: 1016 and 1002 pass, a status without a Cloudflare code is a finding, a throw or another code is inconclusive${misread.length ? `: ${misread.join("; ")}` : ""}`, !misread.length);
+  // The probe over a fake fetch that answers each name its own way; a hang ends only when its signal
+  // aborts, so no outcome rides on the clock. Four hang: more than a lane's width, so a queued name waits.
+  {
+    const chunk = new Uint8Array(1024).fill(65), ways = ["hang", "hang", "hang", "hang", "body-error", "endless", "1020", "404", "530", "1002"];
+    const way = new Map(PROBES.map((p, i) => [p.url, ways[i] ?? "1016"]));
+    const want = { hang: "inconclusive", "body-error": "finding", endless: "finding", 1020: "inconclusive", 404: "finding", 530: "finding", 1002: "pass", 1016: "pass" };
+    let open = new Set(), most = 0, early = 0, pulled = 0;
+    const fake = (control) => async (url, init) => {
+      const u = String(url);
+      if (init?.signal?.aborted) early++;
+      open.add(u); most = Math.max(most, open.size);
+      try {
+        const w = u === CONTROL.url ? control : way.get(u);
+        const aborted = () => new Error("The operation was aborted due to timeout");
+        if (w === "hang") return await new Promise((_, no) => (init.signal.aborted ? no(aborted()) : init.signal.addEventListener("abort", () => no(aborted()))));
+        if (w === "body-error") return new Response(new ReadableStream({ start(c) { c.enqueue(chunk); c.error(new Error("connection reset")); } }), { status: 200 });
+        // Each pull waits a tick (a reader that never stops must not starve the timers) and ends at the abort.
+        if (w === "endless") { let n = 0; return new Response(new ReadableStream({ async pull(c) { await new Promise((ok) => setTimeout(ok, 0)); if (init.signal?.aborted) return c.error(aborted()); n += chunk.length; pulled = Math.max(pulled, n); c.enqueue(chunk); } }, { highWaterMark: 0 }), { status: 200 }); }
+        if (w === "1020") return new Response("error code: 1020", { status: 403 });
+        if (w === "404") return new Response("not found", { status: 404 });
+        if (w === "530") return new Response("bad gateway", { status: 530 });
+        if (w === "1002") return new Response("error code: 1002", { status: 403 });
+        if (w === "ok") return new Response("<p>ok</p>", { status: 200 });
+        if (w === "fail") return new Response("down", { status: 500 });
+        return new Response("error code: 1016", { status: 530 });
+      } finally { open.delete(u); }
+    };
+    const run = await probe(fake("ok"), { timeout: 50 });
+    const wrong = run.filter((r) => r.name !== CONTROL.name && r.verdict !== want[way.get(r.url)]).map((r) => `${way.get(r.url)}: ${r.verdict}`);
+    const voided = await probe(fake("fail"), { timeout: 50 });
+    const stray = PROBES.map((p) => p.url).filter((u) => !run.some((r) => r.url === u));
+    record("web", "probe harness", `the probe keeps <= 3 names in flight, starts each timer at send, keeps a status whose body fails, reads at most 4 KB plus a chunk of an endless body, classes each answer, and a failed control voids every row${[...wrong, ...stray].length ? `: ${[...wrong, ...stray].join("; ")}` : ""}; ${most} in flight, ${early} sent already aborted, ${pulled} bytes pulled`,
+      !wrong.length && !stray.length && run.at(-1).verdict === "control ok" && voided.every((r) => r.verdict.startsWith("void")) && most <= 3 && early === 0 && pulled <= 4096 + 1024);
+  }
+  // The probe's deployable copy never lands in the repository, nor over a directory that holds anything.
+  {
+    const full = join(tmpdir(), `bareflow-probe-${process.pid}`);
+    await mkdir(full, { recursive: true });
+    await writeFile(join(full, "x"), "x");
+    const said = async (d) => assemble(d).then(() => "made", (e) => e.message);
+    const inRepo = await said(join(ROOT, "probe-out")), nonEmpty = await said(full);
+    await rm(full, { recursive: true, force: true });
+    record("web", "probe copy", "the probe's deployable copy is refused inside the repository and over a non-empty directory",
+      inRepo.includes("inside the repository") && nonEmpty.includes("not empty") && !existsSync(join(ROOT, "probe-out")));
+  }
   record("web", "pages config", "wrangler.toml exactly: the project's compatibility date, global_fetch_strictly_public, dist/site", await readFile(join(ROOT, "wrangler.toml"), "utf8") === PAGES);
   // Pages serves index.html for any path that is not a file (no 404.html), so it is the shell of
   // every share URL; / alone is rewritten to the home.
