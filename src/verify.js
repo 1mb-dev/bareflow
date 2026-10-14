@@ -969,6 +969,13 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     ["tables nested by <tbody> in a cell", `<table>${"<tr><th>x<tbody>".repeat(100)}`, "too-deep"], ["self-closed svg", `<svg>${"<svg/>".repeat(MAX_ELEMENTS)}`, "too-big"],
     ["stray </p> under 200 open", `${"<div>".repeat(200)}${"</p>".repeat(MAX_ELEMENTS)}`, "too-big"]];
   for (const [name, html, want] of LIMITS) { const got = limited(html); if (got !== want) seam.push(`${name}: ${got}, want ${want}`); }
+  // Ordinary markup stays under the caps: each family nests 300 deep if htmlparser2 stopped closing
+  // it, which the pass and linkedom would agree on.
+  const FLAT = { "unclosed li": `<ul>${"<li>x".repeat(300)}</ul>`, "unclosed p": "<p>x".repeat(300), "p before blocks": "<p>x<div>y</div>".repeat(300),
+    "rows without end tags": `<table>${"<tr><td>a<td>b".repeat(300)}</table>`, "optgroups without end tags": `<select>${"<optgroup><option>a".repeat(300)}</select>`,
+    "dt and dd": `<dl>${"<dt>a<dd>b".repeat(300)}</dl>`, "rp and rt": `<ruby>${"a<rp>(<rt>b<rp>)".repeat(300)}</ruby>`, voids: "<br><img><hr><input><meta><link>".repeat(300),
+    "self-closed paths in an svg": `<svg>${"<path/>".repeat(300)}</svg>`, "div in a script string": `<script>${"'<div>'+".repeat(300)}''</script><p>x</p>` };
+  for (const [name, html] of Object.entries(FLAT)) { const got = limited(html); if (got !== "ok") seam.push(`${name}: ${got}, want ok`); }
   // Node lists past the stack's spread limit (150,000 text and comment nodes) move intact.
   const FLOOD = "a<!---->".repeat(75000);
   for (const [name, html] of [["after </html>", `<html><body><p>x</p></body></html>${FLOOD}`], ["before <body>", `<html><head></head>${FLOOD}<body><p>x</p></body></html>`],
@@ -992,6 +999,10 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   if (refusedIn.code !== "not-html" || refusedIn.host !== "q.example") seam.push(`thread refusal: ${refusedIn.code} ${refusedIn.host}`);
   const late = await convertBounded({ ...base, html: flat(45000) }, 3000).then(() => ({}), (e) => e);
   if (late.code !== "slow" || late.host !== "q.example" || !late.started) seam.push(`thread deadline: ${late.code} ${late.host}, started ${late.started}`);
+  // The pass refuses before linkedom builds: 5 MB of nesting is too-deep well inside the deadline;
+  // built first, it would take linkedom minutes and the thread would answer slow.
+  const deep = await convertBounded({ ...base, html: "<div>".repeat(1e6) }).then(() => ({}), (e) => e);
+  if (deep.code !== "too-deep") seam.push(`a million levels in the thread: ${deep.code ?? "converted"}`);
   const appSrcText = await readFile(join(ROOT, "site/app.js"), "utf8");
   if (Number(appSrcText.match(/const CONVERT_TIMEOUT = (\d+);/)?.[1]) !== CONVERT_TIMEOUT) seam.push("site/app.js CONVERT_TIMEOUT differs from the policy's");
   record("web", "seam", `parse seam: ${Object.keys(REFUSED).length} non-HTML bodies refused by name in convert and the worker, the CLI's three sentences exit 1; ${Object.keys(KEPT).length} pages with implied tags keep their text and title once; depth and element caps at their boundaries; the CLI's conversion thread and its deadline${seam.length ? `: ${seam.join("; ")}` : ""}`, !seam.length);
