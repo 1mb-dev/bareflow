@@ -1022,7 +1022,7 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     const at = i < pages.length ? `page ${i}` : `soup ${i - pages.length}`, parsed = parsedSize(html, false), built = tree(parseHTML(html).document, 0);
     if (parsed.depth !== built.depth || parsed.elements !== built.elements) off.push(`${at}: parsed ${parsed.depth}/${parsed.elements}, linkedom ${built.depth}/${built.elements}`);
     let final;
-    try { final = tree(parseHtml(html).document.documentElement, 1); } catch (e) { if (e instanceof NotHtml) continue; throw e; }
+    try { final = tree(parseHtml(html).document.documentElement, 1); } catch (e) { if (!(e instanceof NotHtml)) band.push(`${at}: threw ${e.code ?? e.message}`); continue; }
     if (final.depth > parsed.depth + 2 || final.elements > parsed.elements + 3) band.push(`${at}: parsed ${parsed.depth}/${parsed.elements}, repaired ${final.depth}/${final.elements}`);
   }
   record("parse", "limits", `the limit pass counts what linkedom builds (depth/elements) on ${pages.length} frozen pages and ${soup.length} seeded soups of ${names.size} tag names (${sourced} from htmlparser2's source), and the repairs add at most 2 levels and 3 elements${[...off, ...band].length ? `: ${[...off, ...band].slice(0, 5).join("; ")}` : ""}`,
