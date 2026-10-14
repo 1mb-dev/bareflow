@@ -27,7 +27,7 @@ import { parseHTML } from "linkedom";
 import { main, USAGE } from "./cli.js";
 import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
-import { parseHtml, SCAN_FLAT, SCAN_RAW } from "./html.js";
+import { parseHtml } from "./html.js";
 import { convertBounded } from "./bounded.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
@@ -947,7 +947,7 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     if (!one || !text.includes("\nKept text.\n") || (also && !text.includes(also)) || (title && (!text.startsWith(`\n# ${title}\n`) || text.split(`\n${title}\n`).length !== 1))) seam.push(`${name}: ${one ? "" : "tree, "}${JSON.stringify(text.slice(0, 60))}`);
   }
   // Limits at the seam: depth (html is level 1) and element count, each refused one past its cap;
-  // the source scan refuses a depth linkedom would take minutes to parse, without recursing.
+  // the parse pass refuses a depth linkedom would take minutes to build, without recursing.
   const chain = (n) => `<html><head></head><body>${"<div>".repeat(n)}x${"</div>".repeat(n)}</body></html>`;
   const flat = (n) => `<html><head></head><body>${"<p></p>".repeat(n)}</body></html>`;
   const limited = (html) => { try { parseHtml(html); return "ok"; } catch (e) { return e.code ?? `threw ${e.message}`; } };
@@ -962,8 +962,8 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   const FLOOD = "a<!---->".repeat(75000);
   for (const [name, html] of [["after </html>", `<html><body><p>x</p></body></html>${FLOOD}`], ["before <body>", `<html><head></head>${FLOOD}<body><p>x</p></body></html>`],
     ["after a stray tbody in a cell", `<table><tr><th>x<tbody></tbody>${FLOOD}</table>`]]) { const got = limited(html); if (got !== "ok") seam.push(`150,000 nodes ${name}: ${got}`); }
-  // The scan refuses before linkedom parses (linkedom is quadratic in depth): nesting through tags
-  // it must count, values holding "<", and an apostrophe outside a quoted value.
+  // The parse pass refuses before linkedom builds (linkedom is quadratic in depth): nesting through
+  // optional-end tags, values holding "<", and an apostrophe outside a quoted value.
   const scanned = (html) => { try { parseHtml(html); return "converted"; } catch (e) { return e.scanned ? "scan" : e.code; } };
   const DEEP = 5000, BYPASS = { ...Object.fromEntries(["html", "head", "body", "thead", "tfoot", "colgroup", "caption", "rb", "rtc", "div"].map((t) => [`<${t}> x${DEEP}`, `<${t}>`.repeat(DEEP)])),
     ...Object.fromEntries(["noscript", "template", "plaintext"].map((t) => [`<${t}> then divs`, `<${t}>${"<div>".repeat(DEEP)}`])),
@@ -972,14 +972,8 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     ...Object.fromEntries(["desc", "foreignObject", "mi", "math"].map((t) => [`self-closing after a stray </${t}> in an svg`, `<svg></${t}>${"<div/>".repeat(DEEP)}`])) };
   for (const [name, html] of Object.entries(BYPASS)) { const got = scanned(html); if (got !== "scan") seam.push(`scan ${name}: ${got}`); }
   // End tags: a stray one closes nothing; a matching one closes back to its element.
-  if (scanned(`${"<div>".repeat(1000)}${"</span>".repeat(1000)}${"<div>".repeat(100)}`) !== "scan") seam.push("scan: stray end tags closed open elements");
-  if (scanned(`${"<div>".repeat(1000)}${"</div>".repeat(1000)}${"<div>".repeat(100)}x`) === "scan") seam.push("scan: matching end tags did not close");
-  // Each scan list entry is a claim about htmlparser2: flat ones repeated stay flat, raw ones hold
-  // no elements, and every other optional-end element nests.
-  const depthOf = (html) => { let max = 0; for (const st = [[parseHTML(html).document, 0]]; st.length; ) { const [n, d] = st.pop(); if (d > max) max = d; for (let c = n.firstElementChild; c; c = c.nextElementSibling) st.push([c, d + 1]); } return max; };
-  for (const t of SCAN_FLAT) if (depthOf(`<div>${`<${t}>a`.repeat(300)}</div>`) > 10) seam.push(`SCAN_FLAT ${t} nests`);
-  for (const t of SCAN_RAW) if (depthOf(`<${t}>${"<div>".repeat(300)}`) > 10) seam.push(`SCAN_RAW ${t} parses its content`);
-  for (const t of ["html", "head", "body", "thead", "tfoot", "colgroup", "caption", "rb", "rtc"]) if (depthOf(`<div>${`<${t}>a`.repeat(300)}</div>`) < 100) seam.push(`${t} no longer nests: it could join SCAN_FLAT`);
+  if (scanned(`${"<div>".repeat(200)}${"</span>".repeat(200)}${"<div>".repeat(100)}`) !== "scan") seam.push("scan: stray end tags closed open elements");
+  if (scanned(`${"<div>".repeat(200)}${"</div>".repeat(200)}${"<div>".repeat(100)}x`) === "scan") seam.push("scan: matching end tags did not close");
   for (const code of ["too-deep", "too-big"]) {
     const w = await ask({ input: "paste", url: "https://p.example/x", html: code === "too-deep" ? chain(MAX_DEPTH) : flat(MAX_ELEMENTS) });
     if (w.error !== code) seam.push(`worker ${code}: ${w.error}`);

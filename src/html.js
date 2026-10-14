@@ -2,6 +2,7 @@
 // Every read of a source page goes through here, so the pipeline and the truth scorer see the
 // same tree.
 import { parseHTML } from "linkedom";
+import { Parser } from "htmlparser2";
 import { MAX_DEPTH, MAX_ELEMENTS } from "./fetch-policy.js";
 
 const SECTION = new Set(["THEAD", "TBODY", "TFOOT"]);
@@ -87,67 +88,29 @@ export class NotHtml extends Refused {
   }
 }
 
-// Limits (src/fetch-policy.js MAX_DEPTH, MAX_ELEMENTS). linkedom's own parse is quadratic in depth
-// (100,000 levels, 0.5 MB: 4.7 s), so a linear scan of the source refuses extreme depth before it
-// parses; the parsed tree is then measured exactly. Both iterate: a recursive walk would overflow
-// the stack on the inputs it exists to refuse.
-// 4x the tree's cap and 36x the frozen pages' deepest scan (28): htmlparser2 checks each end tag
-// against its open stack, so the open depth it is handed bounds the cost of stray end tags too.
-const SCAN_DEPTH = 1024;
-const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
-// Not counted: the elements htmlparser2 closes when the next one opens (measured: repeated 3,000
-// times each, linkedom builds them flat), and the raw-text elements it does not parse inside. The
-// rest of the optional-end set (html, head, body, thead, tfoot, colgroup, caption, rb, rtc) and
-// noscript, template, plaintext nest in linkedom, so they count. A list here is a claim about the
-// parser: verify checks each entry against linkedom.
-export const SCAN_FLAT = new Set(["p", "li", "dt", "dd", "option", "optgroup", "tr", "td", "th", "tbody", "rt", "rp"]);
-export const SCAN_RAW = new Set(["script", "style", "textarea", "title", "xmp"]);
-const NAME = /[a-zA-Z][\w:-]*/y;
-// htmlparser2 honors "/>" only in foreign content, kept as its own stack: svg and math push true, an
-// HTML integration point pushes false, and an end tag of any of them pops one entry whether or not
-// that element is open (measured: <div/> nests inside <svg><foreignObject>, <svg><desc>, and after a
-// stray </desc> in an svg; math's <mi/> nests). A self-closing svg or math pops at once.
-const FOREIGN = new Set(["svg", "math"]), INTEGRATION = new Set(["mi", "mo", "mn", "ms", "mtext", "annotation-xml", "foreignobject", "desc", "title"]);
+// Limits (src/fetch-policy.js MAX_DEPTH, MAX_ELEMENTS), counted by htmlparser2 itself before
+// linkedom builds a tree. linkedom builds from these same callbacks (an open tag descends, a close
+// climbs whatever its name), so the count is the tree's depth as parsed. Refusing mid-parse bounds
+// htmlparser2's own costs: its open stack and its foreign-content stack grow by unshift (quadratic in
+// depth, and in self-closed svg or math elements, which never pop), and every end tag searches the
+// open stack. The parsed tree is then measured again after repair; the walk iterates, as a recursive
+// one would overflow the stack on the inputs it exists to refuse.
+// The options are linkedom's; htmlparser2 moves in lockstep with linkedom's range for it.
+const PARSED = { lowerCaseAttributeNames: false, decodeEntities: true, xmlMode: false };
+const tooDeep = () => new Refused("too-deep", `the page nests more than ${MAX_DEPTH} levels deep`);
+const tooBig = () => new Refused("too-big", `the page has more than ${MAX_ELEMENTS} elements`);
 
-// The depth of counted elements in the source, in one pass: each "<" is read once, a quoted
-// attribute value is skipped whole (it may hold "<" or ">"), and raw text is skipped to its end tag.
-// An end tag searches the open list only when its name is open (counted per name), and the search
-// stops at what it then removes, so stray end tags cost nothing and the whole scan stays linear.
-function scanDepth(html) {
-  const lower = html.toLowerCase(), open = [], foreign = [], count = new Map(), n = html.length;
-  const context = (name) => FOREIGN.has(name) || INTEGRATION.has(name);
-  for (let i = lower.indexOf("<"); i >= 0 && i < n; i = lower.indexOf("<", i)) {
-    if (lower.startsWith("<!--", i)) { const end = lower.indexOf("-->", i + 4); if (end < 0) break; i = end + 3; continue; }
-    const close = lower[i + 1] === "/";
-    NAME.lastIndex = i + (close ? 2 : 1);
-    const name = NAME.exec(lower)?.[0];
-    if (!name) { i++; continue; }
-    let j = NAME.lastIndex;
-    // A quote opens a value only after "=" (whitespace between allowed); elsewhere it is text.
-    for (let eq = false; j < n && lower[j] !== ">"; j++) {
-      const c = lower[j];
-      if ((c === '"' || c === "'") && eq) { j = lower.indexOf(c, j + 1); if (j < 0) return open.length; eq = false; continue; }
-      if (c === "=") eq = true;
-      else if (c !== " " && c !== "\t" && c !== "\n" && c !== "\r" && c !== "\f") eq = false;
-    }
-    if (j >= n) break;
-    i = j + 1;
-    if (close) {
-      if (context(name)) foreign.pop();
-      if (!count.get(name)) continue;
-      for (let at = open.length - 1, top; at >= 0; at--) { top = open.pop(); count.set(top, count.get(top) - 1); if (top === name) break; }
-      continue;
-    }
-    if (SCAN_RAW.has(name)) { const end = lower.indexOf(`</${name}`, i); if (end < 0) break; i = end; continue; }
-    if (context(name)) foreign.push(FOREIGN.has(name));
-    const selfClosed = lower[j - 1] === "/" && foreign.at(-1) === true;
-    if (selfClosed && context(name)) foreign.pop();
-    if (VOID.has(name) || SCAN_FLAT.has(name) || selfClosed) continue;
-    open.push(name);
-    count.set(name, (count.get(name) ?? 0) + 1);
-    if (open.length > SCAN_DEPTH) return open.length;
-  }
-  return open.length;
+function limitParse(html) {
+  let depth = 0, elements = 0;
+  const parser = new Parser({
+    onopentag() {
+      if (++elements > MAX_ELEMENTS) throw Object.assign(tooBig(), { scanned: true });
+      if (++depth > MAX_DEPTH) throw Object.assign(tooDeep(), { scanned: true });
+    },
+    onclosetag() { depth--; },
+  }, PARSED);
+  parser.write(html);
+  parser.end();
 }
 
 function measure(root) {
@@ -165,14 +128,14 @@ function measure(root) {
 export function parseHtml(html) {
   const rest = html.slice(html.match(LEAD)[0].length);
   if (/^[[{]/.test(rest)) throw new NotHtml(html);
-  if (scanDepth(html) > SCAN_DEPTH) throw Object.assign(new Refused("too-deep", `the page nests more than ${MAX_DEPTH} levels deep`), { scanned: true });
+  limitParse(html);
   const window = parseHTML(html);
   if (!window.document.documentElement) throw new NotHtml(html);
   impliedBody(window.document);
   repairTables(window.document);
   const { elements, deepest } = measure(window.document.documentElement);
-  if (deepest > MAX_DEPTH) throw new Refused("too-deep", `the page nests more than ${MAX_DEPTH} levels deep`);
-  if (elements > MAX_ELEMENTS) throw new Refused("too-big", `the page has more than ${MAX_ELEMENTS} elements`);
+  if (deepest > MAX_DEPTH) throw tooDeep();
+  if (elements > MAX_ELEMENTS) throw tooBig();
   return window;
 }
 
