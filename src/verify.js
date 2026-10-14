@@ -681,6 +681,9 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   record("notice", "pages", `every frozen page is in its manifest and in NOTICE with its URL${bad.length ? `: ${bad.join("; ")}` : ""}`, !bad.length);
 }
 
+// The browser bundle, built once: the one-Parser check below reads the bytes the parity run executes.
+const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, inputs: [], error: e }));
+
 // The versions the header and IR report match package.json and the defuddle that runs.
 {
   const pkg = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8"));
@@ -692,7 +695,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   const linkedom = JSON.parse(await readFile(join(ROOT, "node_modules/linkedom/package.json"), "utf8"));
   const from = (f) => createRequire(join(ROOT, f)).resolve("htmlparser2");
   const ours = from("src/html.js"), theirs = from("node_modules/linkedom/esm/shared/parse-from-string.js");
-  const parsers = (await bundle({ inputs: true })).inputs.filter((f) => f.endsWith("htmlparser2/dist/esm/Parser.js"));
+  const parsers = bundled.inputs.filter((f) => f.endsWith("htmlparser2/dist/esm/Parser.js"));
   record("version", "htmlparser2", `declared ${pkg.dependencies.htmlparser2}, linkedom's ${linkedom.dependencies.htmlparser2}; ${ours === theirs ? "one copy" : `two copies: ${ours}, ${theirs}`}; ${parsers.length} Parser in the bundle`,
     pkg.dependencies.htmlparser2 === linkedom.dependencies.htmlparser2 && ours === theirs && parsers.length === 1);
 }
@@ -715,7 +718,7 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
   const web = { URL, URLSearchParams, TextEncoder, TextDecoder, console, setTimeout, clearTimeout, queueMicrotask, structuredClone, atob, btoa };
   const off = [];
   let api;
-  try { api = vm.runInContext(`${await bundle()}\n;bareflow`, vm.createContext(web)); } catch (e) { off.push(`bundle: ${e.message}`); }
+  try { if (bundled.error) throw bundled.error; api = vm.runInContext(`${bundled.code}\n;bareflow`, vm.createContext(web)); } catch (e) { off.push(`bundle: ${e.message}`); }
   for (const r of api ? cliRuns : []) {
     const b = await api.convert({ url: r.url, html: r.html, retrievedAt: FIXED, input: "fetch" }).catch((e) => ({ error: String(e?.message || e) }));
     if (b.error || b.markdown !== r.markdown || JSON.stringify(b.doc) !== JSON.stringify(r.doc)) off.push(`${r.name}${b.error ? ` (${b.error.slice(0, 80)})` : ""}`);
