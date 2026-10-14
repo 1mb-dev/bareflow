@@ -1111,6 +1111,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   });
   // Idle sockets never time out, so undici (the edge's fetch here) never reuses one the server is closing.
   server.keepAliveTimeout = 0;
+  let conns = 0;
+  server.on("connection", () => conns++);
   await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
   const port = server.address().port;
   const lookup = (_host, opts, cb) => (opts?.all ? cb(null, [{ address: "127.0.0.1", family: 4 }]) : cb(null, "127.0.0.1", 4));
@@ -1142,6 +1144,10 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const inflating = await Promise.race([fetchBody(`http://site.test:${port}/gz`, nodeTransport(lookup, () => new Promise(() => {})), { timeout: 500 }).then(() => "fetched", (e) => e.message),
     new Promise((ok) => setTimeout(ok, 5000, "hung"))]);
   if (!inflating.startsWith("no answer from")) off.push(`inflate past the deadline: ${inflating}`);
+  // One socket per hop on node: a pooled one the server closes unannounced after a redirect resets the next.
+  conns = 0;
+  const sockets = await fetchSnapshot(`http://site.test:${port}/moved`, { timeout: 5000, lookup }).then(() => conns, (e) => e.message);
+  if (sockets !== 2) off.push(`/moved: ${sockets} connections for its 2 requests`);
   server.close();
   // Equal output does not show the edge stopped reading: the policy trims the body either way.
   let pulled = 0;
@@ -1154,7 +1160,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const pastWeb = pulled - WEB_MAX_BYTES;
   pulled = 0;
   const declared = await fetchBody("https://a.example/", edgeTransport(async () => new Response(new ReadableStream({ pull(c) { pulled += chunk.length; c.enqueue(chunk); } }, { highWaterMark: 0 }), { status: 200, headers: { "content-length": String(WEB_MAX_BYTES + 1) } })), { maxBytes: WEB_MAX_BYTES });
-  record("fetch", "transports", `node and edge transports agree on ${paths.length} cases (redirects, 6 hops, cap, gzip bomb, bad gzip, no location, private hop, drip, 204, 404) and ${webPaths.length} at the web cap with the limiter (endless, bomb, exactly the cap, one byte over, declared over, compressed over, declared within: piped, a page); node's deadline spans its inflate; the edge reads ${pastCap} bytes past the cap, ${pastWeb} past the web cap, and none of a declared-over body${off.length ? `: ${off.join("; ")}` : ""}`,
+  record("fetch", "transports", `node and edge transports agree on ${paths.length} cases (redirects, 6 hops, cap, gzip bomb, bad gzip, no location, private hop, drip, 204, 404) and ${webPaths.length} at the web cap with the limiter (endless, bomb, exactly the cap, one byte over, declared over, compressed over, declared within: piped, a page); node's deadline spans its inflate and it opens a socket per hop; the edge reads ${pastCap} bytes past the cap, ${pastWeb} past the web cap, and none of a declared-over body${off.length ? `: ${off.join("; ")}` : ""}`,
     !off.length && tablePiped === 1 && pastCap <= 2 * chunk.length && web.over && web.body.length === WEB_MAX_BYTES && pastWeb <= 2 * chunk.length && declared.over && pulled === 0);
 }
 
