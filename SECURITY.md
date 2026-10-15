@@ -16,6 +16,9 @@ In scope:
   http(s) and mailto, and anything that weakens the CSP in `site/_headers`.
 - The Markdown and JSON renders: page text that forges bareflow's header or loss notes, or opens
   Markdown structure of its own (README, "Trust").
+- Conversion (`src/convert.js` and what it runs): a page that holds the CLI or a browser tab past
+  the conversion deadline or the depth and element limits without being refused, or that changes
+  JavaScript's built-in objects.
 
-Out of scope: what a converted page says (bareflow keeps its words, true or not), and a lost part
-of a page that bareflow marks as a loss.
+Out of scope: what a converted page says (bareflow keeps its words, true or not), a lost part of a
+page that bareflow marks as a loss, and a page refused at a limit (too slow, too deep, too big).
