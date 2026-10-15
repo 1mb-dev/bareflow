@@ -7,7 +7,7 @@ import { CONVERT_TIMEOUT, MAX_BYTES, MAX_DEPTH, MAX_ELEMENTS } from "./fetch-pol
 
 export const USAGE = "usage: bareflow <url> [--json]";
 
-// The parse seam's refusals (src/html.js NotHtml) and the fetch cap's (src/pipeline.js), said with
+// The parse seam's refusals (src/html.js NotHtml) and the fetch cap's (fetchPage), said with
 // the host and the next step.
 function refusal(e, url) {
   const host = e?.host ?? (URL.canParse(url) ? new URL(url).hostname : url);

@@ -864,8 +864,9 @@ const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, input
   const emptyGzip = await fetchSnapshot(`http://site.test:${port}/emptygzip`, { timeout: 2000, lookup }).then((x) => `bytes ${x.bytes}`, (e) => e.message);
   const badGzip = await fetchSnapshot(`http://site.test:${port}/badgzip`, { timeout: 2000, lookup }).then(() => "fetched", (e) => e.message);
   const moved = await run({ url: `http://site.test:${port}/moved`, fetch: (u) => fetchSnapshot(u, { timeout: 3000, lookup }) });
-  const endless = await fetchSnapshot(`http://site.test:${port}/endless`, { timeout: 5000, lookup }).then((x) => `${x.bytes} ${x.over}`, (e) => e.message);
-  const exact = await fetchSnapshot(`http://site.test:${port}/exact`, { timeout: 5000, lookup }).then((x) => `${x.bytes} ${x.over}`, (e) => e.message);
+  const endless = await fetchBody(`http://site.test:${port}/endless`, nodeTransport(lookup), { timeout: 5000 }).then((x) => `${x.body.length} ${x.over}`, (e) => e.message);
+  const endlessPage = await fetchSnapshot(`http://site.test:${port}/endless`, { timeout: 5000, lookup }).then(() => "fetched", (e) => `${e.code} ${e.host}`);
+  const exact = await fetchSnapshot(`http://site.test:${port}/exact`, { timeout: 5000, lookup }).then((x) => x.bytes, (e) => e.message);
   // The CLI end to end over a body past the cap: refused by name with the host that answered, no output.
   let cut = "", cutSaid = "";
   const cutExit = await main([`http://site.test:${port}/endless`], { run: (o) => run({ ...o, fetch: (u) => fetchSnapshot(u, { timeout: 5000, lookup }), convert: async () => ({ doc: {}, markdown: "converted" }) }), out: (x) => { cut += x; }, err: (x) => { cutSaid += x; } });
@@ -879,8 +880,9 @@ const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, input
   record("fetch", "redirect", "a real redirect: finalUrl, the header's final line, links resolved against the URL read",
     moved.doc.source.finalUrl === finalUrl && moved.markdown.includes(`\nfinal: ${finalUrl}\n`) && moved.doc.sections[0].blocks[0].text.includes(`](${finalUrl}intro)`) &&
     moved.doc.sections[0].url === finalUrl && moved.doc.id === createHash("sha256").update(finalUrl).digest("hex").slice(0, 16));
-  record("fetch", "cap", "an endless body is read to the byte cap, marked over, and the connection closed, inside the budget; a body of exactly the cap is not over; the CLI refuses one over it by name, with no output",
-    endless === `${MAX_BYTES} true` && exact === `${MAX_BYTES} false` && cutExit === 1 && cut === "" && cutSaid === "bareflow: site.test's page is over 5 MB, bareflow's limit. Open it in a browser.\n");
+  record("fetch", "cap", "an endless body is read to the byte cap, marked over, and the connection closed, inside the budget; as a page it is refused by name with its host, a body of exactly the cap is not; the CLI says so, with no output",
+    endless === `${MAX_BYTES} true` && endlessPage === "over-cap site.test" && exact === MAX_BYTES && cutExit === 1 && cut === "" &&
+    cutSaid === `bareflow: site.test's page is over ${MAX_BYTES / 1048576} MB, bareflow's limit. Open it in a browser.\n`);
 }
 
 // The built site (scripts/site.js), once: the worker and shell checks below read what it wrote.
@@ -1200,7 +1202,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const port = server.address().port;
   const lookup = (_host, opts, cb) => (opts?.all ? cb(null, [{ address: "127.0.0.1", family: 4 }]) : cb(null, "127.0.0.1", 4));
   const toLocal = (url, init) => { const u = new URL(url); u.hostname = "127.0.0.1"; return fetch(u, init); };
-  const outcome = (p) => p.then((s) => `${s.finalUrl} ${s.bytes} ${s.over} ${s.fingerprint}`, (e) => e.message.replace(/\(.*?\)/, "(...)"));
+  const outcome = (p) => p.then((s) => `${s.finalUrl} ${s.bytes} ${s.fingerprint}`, (e) => e.message.replace(/\(.*?\)/, "(...)"));
   const paths = ["/page", "/moved", "/c0", "/c1", "/endless", "/bomb", "/gz", "/badgzip", "/noloc", "/priv", "/drip", "/empty", "/missing"];
   const off = [];
   // One transport at a time: run together, one's synchronous work lands inside the other's deadline.
@@ -1236,7 +1238,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   let pulled = 0;
   const chunk = new Uint8Array(64 * 1024);
   const endless = async () => new Response(new ReadableStream({ pull(c) { pulled += chunk.length; c.enqueue(chunk); } }), { status: 200 });
-  await fetchPage("https://a.example/", edgeTransport(endless));
+  await fetchPage("https://a.example/", edgeTransport(endless)).catch((e) => { if (e.code !== "over-cap") throw e; });
   const pastCap = pulled - MAX_BYTES;
   pulled = 0;
   const web = await fetchBody("https://a.example/", edgeTransport(endless), { maxBytes: WEB_MAX_BYTES });
