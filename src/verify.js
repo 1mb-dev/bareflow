@@ -803,9 +803,9 @@ const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, input
   const fetched = [];
   const spy = (pages) => async (u) => { fetched.push(u); return pagesFetch(pages)(u); };
   const cross = "https://example.com/page/";
-  const x = await run({ url: cross, fetch: spy({ [cross]: `<html><head><link rel="next" href="http://169.254.169.254/"></head><body><main><h1>Page</h1></main></body></html>` }), retrievedAt: FIXED });
+  const x = await run({ url: cross, fetch: spy({ [cross]: `<html><head><link rel="next" href="http://169.254.169.254/"></head><body><main><h1>Page</h1><p>Body.</p></main></body></html>` }), retrievedAt: FIXED });
   const same = "https://example.com/p/";
-  const l = await run({ url: same, fetch: spy({ [same]: `<html><head><link rel="next" href="/q/"></head><body><main><h1>Page</h1></main></body></html>` }), retrievedAt: FIXED });
+  const l = await run({ url: same, fetch: spy({ [same]: `<html><head><link rel="next" href="/q/"></head><body><main><h1>Page</h1><p>Body.</p></main></body></html>` }), retrievedAt: FIXED });
   record("wiring", "ssrf", "cross-origin nav not recorded, same-origin recorded, neither fetched",
     JSON.stringify(fetched) === JSON.stringify([cross, same]) && x.doc.scope.next === undefined && l.doc.scope.next?.url === "https://example.com/q/");
 }
@@ -2152,6 +2152,20 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const [none, refused] = await Promise.all([shim([]), shim(["http://127.0.0.1/"])]);
   record("cli", "shim", "bin/bareflow.js: usage exits 2, a refused fetch exits 1 with the reason",
     none.code === 2 && none.e === USAGE + "\n" && refused.code === 1 && refused.e.startsWith("bareflow: blocked address for 127.0.0.1"));
+  // A fetched page that keeps no block is refused by name, as the web refuses it.
+  const KEEPS = { nav: "<html><head><title>T</title></head><body><nav><a href=\"/a\">a</a></nav></body></html>",
+    shell: '<html><head><title>App</title><script src="/app.js"></script></head><body><div id="root"></div></body></html>',
+    paragraph: "<html><head><title>T</title></head><body><main><p>One paragraph of the page's text.</p></main></body></html>" };
+  const fetched = {};
+  for (const [k, html] of Object.entries(KEEPS)) {
+    const u = `https://p.example/${k}`, out = [], err = [];
+    const code = await main([u], { run: (o) => run({ ...o, fetch: pagesFetch({ [u]: html }) }), out: (x) => out.push(x), err: (x) => err.push(x) });
+    fetched[k] = { code, out: out.join(""), err: err.join("") };
+  }
+  const EMPTY = "bareflow: no readable text came back from p.example: a page that builds itself with JavaScript arrives empty. Open it in a browser.\n";
+  record("cli", "empty", "a fetched page that keeps no block (nav only, a JavaScript shell) exits 1 with no output and the reason by name; one paragraph converts",
+    ["nav", "shell"].every((k) => fetched[k].code === 1 && fetched[k].out === "" && fetched[k].err === EMPTY) &&
+    fetched.paragraph.code === 0 && fetched.paragraph.out.includes("One paragraph") && !fetched.paragraph.err);
 }
 // Escapes removed from IR text give back the page's text; a code span is copied as is.
 {

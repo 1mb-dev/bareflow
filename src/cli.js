@@ -12,6 +12,7 @@ export const USAGE = "usage: bareflow <url> [--json]";
 const PARTS = "If the site also publishes it in parts, convert one part; otherwise open it in a browser.";
 function refusal(e, url) {
   const host = e?.host ?? (URL.canParse(url) ? new URL(url).hostname : url);
+  if (e?.code === "empty") return `no readable text came back from ${host}: a page that builds itself with JavaScript arrives empty. Open it in a browser.`;
   if (e?.code === "blank") return `${host} returned an empty page. Open it in a browser to check.`;
   if (e?.code === "not-html") return `${host} did not return an HTML page${e.shape === "json" ? " (it looks like JSON)" : ""}. Fetch it directly.`;
   if (e?.code === "too-deep") return `${host}'s page nests more than ${MAX_DEPTH} levels deep, past bareflow's limit. Open it in a browser.`;

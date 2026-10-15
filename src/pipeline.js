@@ -2,6 +2,13 @@
 // differ; html and retrievedAt given (verify's frozen pages) make it deterministic.
 import { fetchSnapshot } from "./fetch.js";
 import { httpUrl } from "./fetch-policy.js";
+import { walk } from "./ir.js";
+
+// A fetched page that kept no block is refused by name, as the web does (site/worker.js).
+function kept(out) {
+  if (!walk(out.doc).next().done) return out;
+  throw Object.assign(new Error("no readable text came back"), { code: "empty", host: new URL(out.doc.source.finalUrl).hostname });
+}
 
 // The converter loads only when no other is given: the CLI converts in a thread (src/bounded.js).
 export async function run({ url, html, retrievedAt, fetch = fetchSnapshot, convert: given }) {
@@ -9,5 +16,5 @@ export async function run({ url, html, retrievedAt, fetch = fetchSnapshot, conve
   const conv = given ?? (await import("./convert.js")).convert;
   if (html != null) return conv({ url, html, retrievedAt: retrievedAt ?? new Date().toISOString(), input: "fetch" });
   const snap = await fetch(url);
-  return conv({ url, finalUrl: snap.finalUrl, html: snap.html, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint, input: "fetch" });
+  return kept(await conv({ url, finalUrl: snap.finalUrl, html: snap.html, retrievedAt: snap.retrievedAt, fingerprint: snap.fingerprint, input: "fetch" }));
 }
