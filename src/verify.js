@@ -882,7 +882,7 @@ const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, input
     moved.doc.sections[0].url === finalUrl && moved.doc.id === createHash("sha256").update(finalUrl).digest("hex").slice(0, 16));
   record("fetch", "cap", "an endless body is read to the byte cap, marked over, and the connection closed, inside the budget; as a page it is refused by name with its host, a body of exactly the cap is not; the CLI says so, with no output",
     endless === `${MAX_BYTES} true` && endlessPage === "over-cap site.test" && exact === MAX_BYTES && cutExit === 1 && cut === "" &&
-    cutSaid === `bareflow: site.test's page is over ${MAX_BYTES / 1048576} MB, bareflow's limit. Open it in a browser.\n`);
+    cutSaid === `bareflow: site.test's page is over ${MAX_BYTES / 1048576} MB, bareflow's limit. If the site also publishes it in parts, convert one part; otherwise open it in a browser.\n`);
 }
 
 // The built site (scripts/site.js), once: the worker and shell checks below read what it wrote.
@@ -1013,7 +1013,7 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
     if (w.error !== code) seam.push(`worker ${code}: ${w.error}`);
   }
   for (const [code, said] of [["too-deep", `bareflow: p.example's page nests more than ${MAX_DEPTH} levels deep, past bareflow's limit. Open it in a browser.\n`],
-    ["too-big", "bareflow: p.example's page has more than 50,000 elements, past bareflow's limit. Open it in a browser.\n"], ["slow", "bareflow: converting p.example's page took over 20 seconds, bareflow's limit. Open it in a browser.\n"]]) {
+    ["too-big", "bareflow: p.example's page has more than 50,000 elements, past bareflow's limit. If the site also publishes it in parts, convert one part; otherwise open it in a browser.\n"], ["slow", "bareflow: converting p.example's page took over 20 seconds, bareflow's limit. Open it in a browser.\n"]]) {
     const [exit, got] = await cliSays(Object.assign(new Error("x"), { code, host: "p.example" }));
     if (exit !== 1 || got !== said) seam.push(`cli ${code}: exit ${exit}, ${JSON.stringify(got)}`);
   }

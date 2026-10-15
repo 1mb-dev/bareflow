@@ -98,7 +98,7 @@ export async function fetchPage(url, transport, opts) {
     got.stream.cancel().catch(() => {});
     throw new Error("fetchPage needs bytes: this transport hands bodies on as streams");
   }
-  // A page cut at the cap would convert with its last block silently partial: refused, as the web does.
+  // A body cut at the cap does not convert as a prefix of the page (extraction picks from the whole DOM).
   if (got.over) throw Object.assign(new Error(`the page is over the ${(opts?.maxBytes ?? MAX_BYTES) / 1048576} MB cap`), { code: "over-cap", host: new URL(got.finalUrl).hostname });
   return snapshot(got);
 }
