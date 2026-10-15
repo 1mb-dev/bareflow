@@ -48,10 +48,10 @@ right, and the answering agent, distrusting it, substituted an API from memory.
 
 ## Status
 
-0.5.0, local only. The pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented with
-structured loss markers, and `npm run verify` scores the loss audit and nav detection against
-hand-labelled frozen fixtures, lexes every render with a CommonMark parser, and pins the CLI and
-IR surface.
+0.5.0, unreleased: run it from a clone; npm holds only the name until 0.5.0 publishes. The
+pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented with structured loss markers, and
+`npm run verify` scores the loss audit and nav detection against hand-labelled frozen fixtures,
+lexes every render with a CommonMark parser, and pins the CLI and IR surface.
 Extraction is composed (Defuddle); bareflow's work is the IR, the loss audit, and the render.
 
 - Loss recall 0.97; loss precision 0.60 over 29 pages: 0.81 on the 27 docs pages, and 0 of 12
@@ -102,8 +102,8 @@ npm run bundle                    # dist/bareflow.js: convert() for the browser,
 
 Exit 0 with the document on stdout; 2 on a usage error; 1 when the fetch or extraction fails,
 with the reason on stderr. A fetch has 30 s in total, redirects included, and the conversion 20 s.
-A page that is not HTML, or whose markup nests past 256 levels or holds over 50,000 elements, is
-refused by name.
+A page that is not HTML, is over 5 MB, or whose markup nests past 256 levels or holds over 50,000
+elements, is refused by name.
 
 ## License
 
