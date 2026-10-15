@@ -3,17 +3,19 @@
 // error, 1 fetch or extraction failure with the reason on err.
 import { run as pipelineRun } from "./pipeline.js";
 import { convertBounded } from "./bounded.js";
-import { CONVERT_TIMEOUT, MAX_DEPTH, MAX_ELEMENTS } from "./fetch-policy.js";
+import { CONVERT_TIMEOUT, MAX_BYTES, MAX_DEPTH, MAX_ELEMENTS } from "./fetch-policy.js";
 
 export const USAGE = "usage: bareflow <url> [--json]";
 
-// The parse seam's refusals (src/html.js NotHtml), said with the host and the next step.
+// The parse seam's refusals (src/html.js NotHtml) and the fetch cap's (src/pipeline.js), said with
+// the host and the next step.
 function refusal(e, url) {
   const host = e?.host ?? (URL.canParse(url) ? new URL(url).hostname : url);
   if (e?.code === "blank") return `${host} returned an empty page. Open it in a browser to check.`;
   if (e?.code === "not-html") return `${host} did not return an HTML page${e.shape === "json" ? " (it looks like JSON)" : ""}. Fetch it directly.`;
   if (e?.code === "too-deep") return `${host}'s page nests more than ${MAX_DEPTH} levels deep, past bareflow's limit. Open it in a browser.`;
   if (e?.code === "too-big") return `${host}'s page has more than ${MAX_ELEMENTS.toLocaleString("en-US")} elements, past bareflow's limit. Open it in a browser.`;
+  if (e?.code === "over-cap") return `${host}'s page is over ${MAX_BYTES / 1048576} MB, bareflow's limit. Open it in a browser.`;
   if (e?.code === "slow") return `converting ${host}'s page took over ${CONVERT_TIMEOUT / 1000} seconds, bareflow's limit. Open it in a browser.`;
   return null;
 }

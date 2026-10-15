@@ -839,6 +839,7 @@ const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, input
 {
   const server = createServer((req, res) => {
     if (req.url === "/endless") { res.writeHead(200, { "content-type": "text/html" }); const mb = Buffer.alloc(1 << 20, 97); const t = setInterval(() => res.write(mb), 5); res.on("close", () => clearInterval(t)); return; }
+    if (req.url === "/exact") { res.writeHead(200, { "content-type": "text/html" }); return res.end(Buffer.alloc(MAX_BYTES, 97)); }
     if (req.url === "/moved") { res.writeHead(302, { location: "/docs/final/" }); return res.end(); }
     if (req.url === "/docs/final/") { res.writeHead(200, { "content-type": "text/html" }); return res.end('<html><head><title>Final</title></head><body><main><h1>Final</h1><p>See <a href="intro">intro</a> for the page body.</p></main></body></html>'); }
     if (req.url === "/emptygzip") { res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip" }); return res.end(); }
@@ -863,7 +864,11 @@ const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, input
   const emptyGzip = await fetchSnapshot(`http://site.test:${port}/emptygzip`, { timeout: 2000, lookup }).then((x) => `bytes ${x.bytes}`, (e) => e.message);
   const badGzip = await fetchSnapshot(`http://site.test:${port}/badgzip`, { timeout: 2000, lookup }).then(() => "fetched", (e) => e.message);
   const moved = await run({ url: `http://site.test:${port}/moved`, fetch: (u) => fetchSnapshot(u, { timeout: 3000, lookup }) });
-  const endless = await fetchSnapshot(`http://site.test:${port}/endless`, { timeout: 5000, lookup }).then((x) => x.bytes, (e) => e.message);
+  const endless = await fetchSnapshot(`http://site.test:${port}/endless`, { timeout: 5000, lookup }).then((x) => `${x.bytes} ${x.over}`, (e) => e.message);
+  const exact = await fetchSnapshot(`http://site.test:${port}/exact`, { timeout: 5000, lookup }).then((x) => `${x.bytes} ${x.over}`, (e) => e.message);
+  // The CLI end to end over a body past the cap: refused by name with the host that answered, no output.
+  let cut = "", cutSaid = "";
+  const cutExit = await main([`http://site.test:${port}/endless`], { run: (o) => run({ ...o, fetch: (u) => fetchSnapshot(u, { timeout: 5000, lookup }), convert: async () => ({ doc: {}, markdown: "converted" }) }), out: (x) => { cut += x; }, err: (x) => { cutSaid += x; } });
   server.close();
   record("fetch", "budget", "a dripping body and a slow redirect chain stop at the budget; the chain completes within a longer one",
     /within 300 ms \(redirects included\)/.test(drip.r) && drip.ms < 1500 && /within 300 ms/.test(chainShort.r) && chainShort.ms < 1500 && chainLong.r.includes("Done"));
@@ -874,7 +879,8 @@ const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, input
   record("fetch", "redirect", "a real redirect: finalUrl, the header's final line, links resolved against the URL read",
     moved.doc.source.finalUrl === finalUrl && moved.markdown.includes(`\nfinal: ${finalUrl}\n`) && moved.doc.sections[0].blocks[0].text.includes(`](${finalUrl}intro)`) &&
     moved.doc.sections[0].url === finalUrl && moved.doc.id === createHash("sha256").update(finalUrl).digest("hex").slice(0, 16));
-  record("fetch", "cap", "an endless body is read to the byte cap and the connection closed, inside the budget", endless === MAX_BYTES);
+  record("fetch", "cap", "an endless body is read to the byte cap, marked over, and the connection closed, inside the budget; a body of exactly the cap is not over; the CLI refuses one over it by name, with no output",
+    endless === `${MAX_BYTES} true` && exact === `${MAX_BYTES} false` && cutExit === 1 && cut === "" && cutSaid === "bareflow: site.test's page is over 5 MB, bareflow's limit. Open it in a browser.\n");
 }
 
 // The built site (scripts/site.js), once: the worker and shell checks below read what it wrote.
@@ -1194,7 +1200,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const port = server.address().port;
   const lookup = (_host, opts, cb) => (opts?.all ? cb(null, [{ address: "127.0.0.1", family: 4 }]) : cb(null, "127.0.0.1", 4));
   const toLocal = (url, init) => { const u = new URL(url); u.hostname = "127.0.0.1"; return fetch(u, init); };
-  const outcome = (p) => p.then((s) => `${s.finalUrl} ${s.bytes} ${s.fingerprint}`, (e) => e.message.replace(/\(.*?\)/, "(...)"));
+  const outcome = (p) => p.then((s) => `${s.finalUrl} ${s.bytes} ${s.over} ${s.fingerprint}`, (e) => e.message.replace(/\(.*?\)/, "(...)"));
   const paths = ["/page", "/moved", "/c0", "/c1", "/endless", "/bomb", "/gz", "/badgzip", "/noloc", "/priv", "/drip", "/empty", "/missing"];
   const off = [];
   // One transport at a time: run together, one's synchronous work lands inside the other's deadline.

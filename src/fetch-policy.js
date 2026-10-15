@@ -81,10 +81,11 @@ export async function fetchBody(url, transport, { timeout = TIMEOUT, check, maxB
 }
 
 // The fetched bytes as a page: the CLI makes it after fetchBody, the browser after /_fetch.
-export function snapshot({ finalUrl, body }) {
+export function snapshot({ finalUrl, body, over = false }) {
   return {
     finalUrl,
     bytes: body.length,
+    over,
     // ignoreBOM keeps a leading BOM in the text, as the page has it.
     html: new TextDecoder("utf-8", { ignoreBOM: true }).decode(body),
     fingerprint: sha256(body).slice(0, 16),
