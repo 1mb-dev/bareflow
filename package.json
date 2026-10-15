@@ -36,7 +36,6 @@
     "NOTICE"
   ],
   "scripts": {
-    "bareflow": "node bin/bareflow.js",
     "test": "node src/verify.js",
     "verify": "node src/verify.js",
     "bundle": "node scripts/bundle.js",
