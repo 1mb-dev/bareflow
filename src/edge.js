@@ -58,7 +58,7 @@ async function readCapped(stream, max) {
 // The policy's transport over WHATWG fetch: one request, no redirect followed, aborted at the
 // policy's deadline whether headers or body are late.
 // It asks for identity: only an uncompressed declared length is the page's, so only then is a body
-// refused or piped unread. A site that compresses anyway is read, decoded, and capped.
+// within the cap piped unread. A site that compresses anyway is read, decoded, and capped.
 export const edgeTransport = (fetchImpl, { limit } = {}) => async (url, { headers, deadline, budget, maxBytes }) => {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), Math.max(0, deadline - Date.now()));
