@@ -93,7 +93,7 @@ a page cannot know its own fingerprint, so a lookalike heading in page text has 
 ## Install and run
 
 ```
-npm install && npm link           # puts `bareflow` on PATH (tested on Node 22 and 26)
+npm install && npm link           # puts `bareflow` on PATH (tested on Node 22, 24 and 26)
 bareflow <url>                      # Markdown: header, page, loss notes
 bareflow <url> --json               # the typed IR (docs/ir.md)
 npm run verify                    # truth gate: loss + nav precision/recall per fixture
