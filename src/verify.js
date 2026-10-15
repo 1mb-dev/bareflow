@@ -1079,6 +1079,67 @@ const seeded = (seed) => () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.im
   record("parse", "opening", `the page's opening class is its content token's on ${seen.size} seeded bodies (comments, doctypes, declarations, encoded spaces, end tags with attributes before it)${off.length ? `: ${off.length} differ, ${off.slice(0, 3).join("; ")}` : ""}`, !off.length && seen.size > 1500);
 }
 
+// Hostile shapes (Phase H3). The timed ones convert with time growing under 10x from 64 KB to 256 KB
+// (linear is 4x, quadratic 16x): this machine against itself, so a slow runner does not move it, as
+// it would a wall-clock bound; the row has only a 30 s ceiling. The rest convert untimed: their whole-
+// run growth already sits near any bound a ratio could hold without flaking (dense links 5.5-8x,
+// upstream's, the 20 s deadline at 1 MB, h0-threat-model.md findings; entity soup 5-10x, no stage of
+// ours superlinear in isolation). Object and Object.prototype keep every descriptor, and a page whose
+// names are Object.prototype's gives the Markdown of the same page with look-alike names.
+// In-process: a thread would hide a write.
+{
+  const rnd = seeded(7), pick = (a) => a[Math.floor(rnd() * a.length)];
+  const PROTO = ["__proto__", "constructor", "prototype", "toString", "hasOwnProperty", "valueOf"];
+  const page = (body, head = "") => `<!doctype html><html><head><title>t</title>${head}</head><body><main><h1>Title</h1>${body}</main></body></html>`;
+  const fill = (unit, n) => unit.repeat(Math.ceil(n / unit.length));
+  const times = (n, size, f) => Array.from({ length: Math.ceil(n / size) }, (_, i) => f(i)).join("");
+  const TIMED = {
+    "one element's attributes": (n) => page(`<p ${times(n, 9, (i) => `a${i}=x `)}>text</p>`),
+    "elements x 20 attributes": (n) => page(times(n, 330, (j) => `<p ${Array.from({ length: 20 }, (_, i) => `data-k${i}="v${j}" `).join("")}>p${j}</p>`)),
+    "markdown punctuation": (n) => page(`<p>${fill("*_`~#>-|\\![]()", n)}</p>`),
+  };
+  const ONCE = {
+    "entity soup": (n) => page(`<p>${fill("&amp;&#x26;&#38;&lt;", n)}</p>`),
+    "whitespace runs": (n) => page(`<p>${fill("&nbsp;\t\n ", n)}</p>`),
+    "prototype names": (n) => page(times(n, 160, () => { const [a, b, c] = [pick(PROTO), pick(PROTO), pick(PROTO)]; return `<h2 id="${a}" ${b}="x">${c}</h2><p class="${b} ${c}"><a href="#${a}">${b}</a> <code>${c}</code></p>`; })),
+    "prototype values": (n) => page("<p>text</p>", times(n, 150, () => { const [a, b, c] = [pick(PROTO), pick(PROTO), pick(PROTO)]; return `<link rel="${a} next" href="/${b}"><meta name="${b}" content="${c}"><meta property="${c}" content="${a}">`; })),
+    "dense links": (n) => page(times(n, 34, (i) => `<a href="https://e.com/${i}">link ${i}</a> `)),
+    "dense headings": (n) => page(times(n, 23, (i) => `<h2 id="h${i}">h ${i}</h2>`)),
+  };
+  const at = (html) => convert({ url: "https://example.com/p", html, retrievedAt: "2026-10-15T00:00:00Z", fingerprint: "x", input: "edge" });
+  const took = async (html) => { const t0 = performance.now(); await at(html); return performance.now() - t0; };
+  const props = (o) => Reflect.ownKeys(o).map((k) => [k, Object.getOwnPropertyDescriptor(o, k)]);
+  const FIELDS = ["value", "get", "set", "writable", "enumerable", "configurable"];
+  const same = (a, b) => a.length === b.length && a.every(([k, d], i) => k === b[i][0] && FIELDS.every((f) => Object.is(d[f], b[i][1][f])));
+  const before = [props(Object), props(Object.prototype)];
+  const off = [], grew = [], start = performance.now();
+  await took(TIMED["markdown punctuation"](16384));
+  for (const [name, make] of Object.entries(TIMED)) {
+    try {
+      const small = make(65536), large = make(262144);
+      let s = Math.min(await took(small), await took(small)), l = await took(large);
+      // A pause in either size reads as growth; growth survives the fastest of three.
+      if (l / s >= 10) [s, l] = [Math.min(s, await took(small)), Math.min(l, await took(large), await took(large))];
+      grew.push(`${name} ${(l / s).toFixed(1)}x`);
+      if (l / s >= 10) off.push(`${name}: ${Math.round(s)} -> ${Math.round(l)} ms for 4x the bytes`);
+    } catch (e) { off.push(`${name}: threw ${e.code ?? e.message}`); }
+  }
+  for (const [name, make] of Object.entries(ONCE)) await at(make(32768)).catch((e) => off.push(`${name}: threw ${e.code ?? e.message}`));
+  const LOOK = ["__qaqaq__", "qbqbqb", "qcqcqc", "qdqdqd", "qeqeqe", "qfqfqf"];
+  const named = (n) => page(n.map((x, i) => `<h2 id="${x}">${x}</h2><p class="${x}" ${x}="v">Use <code>${x}</code> and <a href="#${x}">${x}</a> with <a href="/${x}?${x}=1#${x}">${n[(i + 1) % n.length]}</a>.</p><h2 id="${x}">${x}</h2><p>again ${x}</p>`).join(""),
+    `<meta name="${n[1]}" content="${n[2]}"><meta property="${n[0]}" content="x"><script type="application/ld+json">{"${n[0]}":{"${n[3]}":"x"},"@type":"Article","author":{"${n[0]}":{"name":"${n[1]}"}}}</script><link rel="${n[0]} next" href="/${n[1]}"><link rel="${n[1]} prev" href="/${n[2]}">`);
+  // Markdown escapes "_" in both; compare unescaped, then read the look-alikes back as the names.
+  const plain = (s) => s.replace(/\\+_/g, "_"), back = (s) => LOOK.reduce((t, x, i) => t.split(x).join(PROTO[i]), plain(s));
+  try {
+    const [p, q] = [await at(named(PROTO)), await at(named(LOOK))];
+    if (plain(p.markdown) !== back(q.markdown) || plain(JSON.stringify(p.doc)) !== back(JSON.stringify(q.doc))) off.push("Object.prototype's names convert unlike look-alike names");
+  } catch (e) { off.push(`Object.prototype's names threw ${e.code ?? e.message}`); }
+  if (!same(before[0], props(Object)) || !same(before[1], props(Object.prototype))) off.push("a property of Object or Object.prototype changed");
+  const secs = (performance.now() - start) / 1000;
+  record("parse", "hostile", `${Object.keys(TIMED).length} hostile shapes convert growing under 10x from 64 KB to 256 KB (${grew.join(", ")}), ${Object.keys(ONCE).length} more convert (${Object.keys(ONCE).join(", ")}), in ${secs.toFixed(1)} s (< 30); Object and Object.prototype unchanged; Object.prototype's names as ids, classes, attributes, rel, meta and JSON-LD keys convert as look-alikes do${off.length ? `: ${off.join("; ")}` : ""}`,
+    !off.length && grew.length === Object.keys(TIMED).length && secs < 30);
+}
+
 // FixedLengthStream's contract (Workers only): the stream errors past, or short of, n bytes. The
 // Function's pass-through goes through it; piped counts its uses.
 let piped = 0;
