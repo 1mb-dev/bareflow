@@ -42,7 +42,8 @@
     "site": "node scripts/site.js",
     "parity": "node scripts/parity.js",
     "contact": "node scripts/contact.js",
-    "smoke": "node scripts/smoke.js"
+    "smoke": "node scripts/smoke.js",
+    "audit": "npm audit --audit-level=moderate && npm audit signatures"
   },
   "dependencies": {
     "defuddle": "0.19.4",
