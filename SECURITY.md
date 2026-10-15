@@ -16,9 +16,12 @@ In scope:
   http(s) and mailto, and anything that weakens the CSP in `site/_headers`.
 - The Markdown and JSON renders: page text that forges bareflow's header or loss notes, or opens
   Markdown structure of its own (README, "Trust").
-- Conversion (`src/convert.js` and what it runs): a page that holds the CLI or a browser tab past
-  the conversion deadline or the depth and element limits without being refused, or that changes
-  JavaScript's built-in objects.
+- Conversion (`src/convert.js` and what it runs) and the result view's render: a page that holds
+  the CLI or a browser tab past the conversion deadline or the depth and element limits without
+  being refused; a page under the byte limit whose conversion time grows faster than its size; a
+  render that hangs the tab after conversion; a page that changes JavaScript's built-in objects.
+  Known: pages dense with links near the web limit are refused as too slow.
 
 Out of scope: what a converted page says (bareflow keeps its words, true or not), a lost part of a
-page that bareflow marks as a loss, and a page refused at a limit (too slow, too deep, too big).
+page that bareflow marks as a loss, a page past the depth, element, or byte limits refused there, and
+draining the /_fetch quota before rate limiting ships.
