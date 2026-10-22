@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# Caps the token for every workflow called below: a nested workflow can narrow it, never widen it.
+permissions:
+  contents: read
+
 jobs:
   check:
     uses: 1mb-dev/.github/.github/workflows/ci-node.yml@main
