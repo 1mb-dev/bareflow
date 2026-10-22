@@ -2126,6 +2126,15 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const before = $("tape-more").hidden;
   $("fold").onclick();
   if ($("tape-more").hidden === before || !folded()) tapeBad.push("more/less does not toggle");
+  // The report link's prefill and the repository's issue template ask for the same fields.
+  // linkedom stores the href with %0A decoded to a newline, which a URL drops: put them back.
+  const report = new URL($("report").getAttribute("href").replaceAll("\n", "%0A")), template = await readFile(join(ROOT, ".github/ISSUE_TEMPLATE/wrong-output.md"), "utf8").catch(() => "");
+  // A field is a capitalised label or a parenthesised line outside the code fence (the header inside it varies).
+  const fieldsOf = (text) => text.replace(/```[\s\S]*?```/g, "").split("\n").flatMap((l) => (l.startsWith("(") ? [l] : l.match(/^[A-Z][A-Za-z ]*:/) ?? []));
+  const prefill = fieldsOf(report.searchParams.get("body")), asks = fieldsOf(template.split(/^---$/m).slice(2).join("---"));
+  const titled = template.includes(`title: "${report.searchParams.get("title").split(": ")[0]}: <host>"`);
+  record("view", "report", `the report link and .github/ISSUE_TEMPLATE/wrong-output.md ask for the same ${prefill.length} fields and title${JSON.stringify(prefill) === JSON.stringify(asks) && titled ? "" : `: link ${JSON.stringify(prefill)}, template ${JSON.stringify(asks)}${titled ? "" : ", title differs"}`}`,
+    report.pathname === "/1mb-dev/bareflow/issues/new" && prefill.length === 4 && JSON.stringify(prefill) === JSON.stringify(asks) && titled);
   globalThis.document = page;
   const tapeCss = [...(await readFile(join(ROOT, "site/style.css"), "utf8")).replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]*(?:\.tape|#origin)[^{}]*)\{([^}]*)\}/g)];
   const tapeRules = tapeCss.map((m) => m[2]).join(";"), originRule = tapeCss.filter((m) => m[1].includes("#origin")).map((m) => m[2]).join(";");
