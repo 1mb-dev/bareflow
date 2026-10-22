@@ -1670,6 +1670,62 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const tallied = quick.d.getElementById("status").textContent;
   record("web", "states: result", `a result keeps the view's tally over a progress line still waiting (${JSON.stringify(tallied)})`,
     tallied === "no losses marked" && !quick.d.getElementById("result").dataset.failed && !quick.thrown.length);
+  // The worker's two deadlines, on a stand-in clock: a script that never posts ends as "converter"
+  // at LOAD_TIMEOUT, not before; {started} clears it and arms CONVERT_TIMEOUT (a slow load that starts
+  // at 50 s and answers at 65 s is a result); an error event after {started} is "convert"; a message
+  // after the outcome changes nothing shown.
+  const LOAD = Number(appSrc.match(/const LOAD_TIMEOUT = (\d+);/)?.[1]);
+  const clocked = async (script) => {
+    let now = 0, worker;
+    const pending = [], ended = [];
+    const run = runApp(TARGET, null, html, false, {
+      turnstile: passed, fetch: answer({}),
+      setTimeout: (f, ms = 0) => (pending.push({ f, ms, at: now + ms }), f), clearTimeout: (f) => { const i = pending.findIndex((t) => t.f === f); if (i >= 0) pending.splice(i, 1); },
+      Worker: class { constructor() { worker = this; } postMessage() {} terminate() { ended.push(now); } },
+    });
+    const settle = async () => { for (let j = 0; j < 3; j++) await new Promise((r) => setImmediate(r)); };
+    // A timer a fired one adds is due in the same pass when its time is at or before t.
+    const to = async (t) => { await settle(); for (let due; (due = pending.filter((x) => x.at <= t).sort((a, b) => a.at - b.at)[0]);) { pending.splice(pending.indexOf(due), 1); now = due.at; due.f(); await settle(); } now = t; };
+    const said = () => ({ code: run.d.getElementById("result").dataset.failed ?? null, status: run.d.getElementById("status").textContent, view: !run.d.getElementById("view").hidden });
+    const armed = () => pending.filter((t) => t.ms >= CONVERT_TIMEOUT).map((t) => t.ms);
+    await settle();
+    const start = now;
+    return script({ to: (t) => to(start + t), post: async (data) => { worker?.onmessage?.({ data }); await settle(); }, error: async () => { worker?.onerror?.({ message: "" }); await settle(); }, said, ended, armed });
+  };
+  const loadBad = [];
+  if (LOAD !== 60000) loadBad.push(`LOAD_TIMEOUT ${LOAD}, not 60000`);
+  await clocked(async ({ to, said, ended, armed }) => {
+    if (JSON.stringify(armed()) !== JSON.stringify([LOAD])) loadBad.push(`armed at creation: ${armed()}`);
+    await to(LOAD - 1);
+    if (said().code || ended.length) loadBad.push(`never posts: ended before ${LOAD} ms (${said().code})`);
+    await to(LOAD);
+    if (said().code !== "converter" || ended.length !== 1 || armed().length) loadBad.push(`never posts: ${said().code}, terminated ${ended.length}x, ${armed().length} left armed`);
+  });
+  await clocked(async ({ to, post, said, ended, armed }) => {
+    await to(LOAD - 10000);
+    await post({ started: true });
+    if (JSON.stringify(armed()) !== JSON.stringify([CONVERT_TIMEOUT])) loadBad.push(`armed after {started}: ${armed()}`);
+    await to(LOAD + 5000);
+    await post({ ...emptyPage, losses: 0, flattened: false });
+    await to(3 * LOAD);
+    if (said().code || !said().view || ended.length !== 1) loadBad.push(`started at ${(LOAD - 10000) / 1000} s, answered at ${(LOAD + 5000) / 1000} s: ${said().code ?? "result"}${said().view ? "" : ", no view"}, terminated ${ended.length}x`);
+  });
+  await clocked(async ({ to, post, said }) => {
+    await to(LOAD);
+    const first = said();
+    await post({ started: true });
+    await to(3 * LOAD);
+    if (first.code !== "converter" || said().code !== "converter" || said().status !== first.status) loadBad.push(`late {started}: ${first.code} then ${said().code}`);
+  });
+  await clocked(async ({ to, post, error, said, ended }) => {
+    await to(1000);
+    await post({ started: true });
+    await error();
+    await to(3 * LOAD);
+    if (said().code !== "convert" || ended.length !== 1) loadBad.push(`error event after {started}: ${said().code}, terminated ${ended.length}x`);
+  });
+  record("web", "states: worker load", `a worker that never posts ends as "converter" at LOAD_TIMEOUT (${LOAD / 1000} s), not before; {started} clears it and arms CONVERT_TIMEOUT; an error event after {started} is "convert"; a late message changes nothing shown${loadBad.length ? `: ${loadBad.join("; ")}` : ""}`,
+    !loadBad.length);
   record("web", "claims", `no npx in site/, the built site, or the Function's messages (${served.length} files)${npx.length ? `: ${npx.join(", ")}` : ""}`,
     !npx.length && served.some((f) => f.endsWith(join("_app", "app.js"))) && served.some((f) => f.endsWith("index.html")));
   // The theme: theme.js is a classic script in <head> before the stylesheet, so it sets data-theme

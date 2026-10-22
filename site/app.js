@@ -8,6 +8,7 @@ const ORIGIN = location.origin;
 const ASK = "Give a page address, like https://docs.example.com/guide/install.";
 const SLOW = 10000; // ms to wait for the bot check's widget
 const CONVERT_TIMEOUT = 20000; // ms for one conversion; equals src/fetch-policy.js CONVERT_TIMEOUT
+const LOAD_TIMEOUT = 60000; // ms for the converter script to arrive and start: covers its download on a slow link
 
 // What a failure says (docs/voice.md): what happened, then what to do. Each entry gives
 // [what happened, the next step, the next step where the home shows the paste form (from 40rem,
@@ -95,14 +96,22 @@ function fail(code, { host, n, hop, detail, pasted, said } = {}) {
 
 const worker = () => new Worker("/_app/worker.js");
 // A conversion is synchronous work in the worker; only terminating the worker stops one that runs on.
-// The deadline starts when the worker says it has begun, so loading the bundle does not count.
+// A script that stalls or never runs posts nothing and fires no error: LOAD_TIMEOUT ends it. The
+// convert deadline starts only when the worker says it has begun.
 const convertIn = (msg, transfer) => new Promise((resolve) => {
   const w = worker();
-  let timer;
+  let timer, started = false;
   const done = (r) => { clearTimeout(timer); w.terminate(); resolve(r); };
-  w.onmessage = ({ data }) => (data?.started ? (timer = setTimeout(() => done({ error: "slow" }), CONVERT_TIMEOUT)) : done(data));
-  // worker.js answers every message, errors included: onerror is the script failing to load.
-  w.onerror = () => done({ error: "converter" });
+  timer = setTimeout(() => done({ error: "converter" }), LOAD_TIMEOUT);
+  w.onmessage = ({ data }) => {
+    if (!data?.started) return done(data);
+    started = true;
+    clearTimeout(timer);
+    timer = setTimeout(() => done({ error: "slow" }), CONVERT_TIMEOUT);
+  };
+  // worker.js answers every message, errors included: an error event before {started} is the script
+  // failing to load; after it, an uncaught throw in the conversion, which is bareflow's fault.
+  w.onerror = () => done({ error: started ? "convert" : "converter" });
   w.postMessage(msg, transfer);
 });
 
