@@ -132,6 +132,22 @@ async function checkToken(fetchImpl, secret, token, ip, host, test) {
   } catch { return "down"; }
 }
 
+// The outcome a response carries, as the Function counts it: the error code (absent: "ok") and the
+// upstream status class (absent: "none"). Read from the response alone, so no address or visitor can
+// reach a count; a body cut after the 200 counts as ok.
+export function outcome(res) {
+  const status = res.headers.get("x-bareflow-status") ?? "";
+  return [res.headers.get("x-bareflow-error") ?? "ok", /^[1-5]\d\d$/.test(status) ? `${status[0]}xx` : "none"];
+}
+
+// A handler whose every response is counted by write(env, outcome); a failed write is dropped and
+// never changes the response.
+export const counted = (h, write) => async (ctx) => {
+  const res = await h(ctx);
+  try { write(ctx.env, outcome(res)); } catch {}
+  return res;
+};
+
 // GET /_fetch?url=<target> with the Turnstile token in x-turnstile-token. The target and the
 // visitor are never logged.
 export const handler = (fetchImpl, { timeout, limit } = {}) => async ({ request, env }) => {

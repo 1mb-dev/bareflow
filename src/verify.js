@@ -1592,6 +1592,53 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     exact.status === 200 && exact.body.length === WEB_MAX_BYTES);
 }
 
+// The outcome counter (functions/_fetch.js, as deployed, over stub platform globals): one write per
+// response, exactly [code, class] from closed sets (the codes edge.js sends, and ok; a status class or
+// none), never the address or the host; a write that throws leaves the response as it was; the binding
+// it writes is the one wrangler.toml declares; the privacy page says what is counted.
+{
+  const edgeSrc = await readFile(join(ROOT, "src/edge.js"), "utf8"), fnSrc = await readFile(join(ROOT, "functions/_fetch.js"), "utf8");
+  const toml = await readFile(join(ROOT, "wrangler.toml"), "utf8"), privacyText = await readFile(join(ROOT, "site/privacy.html"), "utf8");
+  const CODES = new Set(["ok", ...[...edgeSrc.matchAll(/\bfail\(\d+, "([a-z-]+)"/g)].map((m) => m[1])]), CLASSES = new Set(["1xx", "2xx", "3xx", "4xx", "5xx", "none"]);
+  const { onRequestGet } = await import(pathToFileURL(join(ROOT, "functions/_fetch.js")).href);
+  const host = "bareflow.1mb.dev", target = "https://counted.example/page";
+  const answer = { "/page": () => new Response("<p>page</p>", { headers: { "content-type": "text/html" } }), "/gone": () => new Response("no", { status: 404 }), "/down": () => new Response("no", { status: 503 }) };
+  const stubFetch = async (url, init) => {
+    if (String(url) === SITEVERIFY) return JSON.parse(init.body).response === "down" ? new Response("", { status: 500 }) : Response.json({ success: JSON.parse(init.body).response === "good", hostname: host });
+    const u = new URL(url);
+    return (answer[u.pathname] ?? (() => new Response("", { status: 404 })))();
+  };
+  const CASES = [
+    ["no token", target, null, ["token", "none"]], ["no url", null, "good", ["url", "none"]], ["our zone", "https://bareflow.1mb.dev/", "good", ["url", "none"]],
+    ["bad token", target, "bad", ["token", "none"]], ["siteverify down", target, "down", ["unavailable", "none"]], ["page", target, "good", ["ok", "none"]],
+    ["upstream 404", "https://counted.example/gone", "good", ["upstream", "4xx"]], ["upstream 503", "https://counted.example/down", "good", ["upstream", "5xx"]],
+    ["no secret", target, "good", ["unavailable", "none"], {}],
+  ];
+  const call = async ([, url, token, , env = { TURNSTILE_SECRET: "real-secret" }], outcomes) => {
+    const headers = token ? { "x-turnstile-token": token } : {};
+    const res = await onRequestGet({ request: new Request(`https://${host}/_fetch${url ? `?url=${encodeURIComponent(url)}` : ""}`, { headers }), env: { ...env, OUTCOMES: outcomes } });
+    return { status: res.status, headers: JSON.stringify([...res.headers]), body: await res.text() };
+  };
+  const counterBad = [], realFetch = globalThis.fetch;
+  globalThis.fetch = stubFetch;
+  try {
+    for (const c of CASES) {
+      const writes = [];
+      const plain = await call(c, { writeDataPoint: (p) => writes.push(p) });
+      const thrown = await call(c, { writeDataPoint: () => { throw new Error("dataset down"); } }).catch((e) => ({ threw: e.message }));
+      const blobs = writes[0]?.blobs, seen = JSON.stringify(writes);
+      if (writes.length !== 1 || Object.keys(writes[0]).join() !== "blobs" || JSON.stringify(blobs) !== JSON.stringify(c[3])) counterBad.push(`${c[0]}: ${seen}, want blobs ${JSON.stringify(c[3])}`);
+      if (blobs && (!CODES.has(blobs[0]) || !CLASSES.has(blobs[1]))) counterBad.push(`${c[0]}: ${seen} outside the closed sets`);
+      if (/counted\.example|1mb\.dev|https?:/.test(seen)) counterBad.push(`${c[0]}: an address reached the count: ${seen}`);
+      if (JSON.stringify(plain) !== JSON.stringify(thrown)) counterBad.push(`${c[0]}: a throwing write changed the response`);
+    }
+  } finally { globalThis.fetch = realFetch; }
+  const bound = fnSrc.match(/\benv\.(\w+)\.writeDataPoint\b/g) ?? [], declared = [...toml.matchAll(/^binding = "(\w+)"$/gm)].map((m) => m[1]);
+  if (bound.length !== 1 || declared.length !== 1 || bound[0] !== `env.${declared[0]}.writeDataPoint`) counterBad.push(`binding: _fetch.js ${bound.join(", ") || "none"}, wrangler.toml ${declared.join(", ") || "none"}`);
+  if (!privacyText.includes("it counts only how each fetch ended (ok, or the error's name) and the site's status class") || !/^dataset = "\w+"$/m.test(toml)) counterBad.push("privacy line and dataset not both present");
+  record("web", "outcome counter", `functions/_fetch.js counts each of ${CASES.length} responses once as [code, class] from closed sets (${CODES.size} codes), no address; a throwing write leaves the response; binding = wrangler.toml's; privacy says it${counterBad.length ? `: ${counterBad.join(" | ")}` : ""}`, !counterBad.length);
+}
+
 // The built site: the shell tells curl and agents where the CLI is, scripts load from self
 // (Turnstile's on a target route only), app code writes no HTML, and _headers carries the CSP.
 {
@@ -1954,7 +2001,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   // The Pages project's configuration lives in this file, not the dashboard: without the flag, a fetch to
   // the Function's own zone reaches its origin past Cloudflare's security settings.
   const PAGES = '# The Pages project\'s configuration, its source of truth: the dashboard cannot edit these fields.\nname = "bareflow"\npages_build_output_dir = "./dist/site"\n' +
-    'compatibility_date = "2026-10-12"\n# A fetch to the Function\'s own zone goes through Cloudflare\'s front door, not straight to its origin.\ncompatibility_flags = ["global_fetch_strictly_public"]\n';
+    'compatibility_date = "2026-10-12"\n# A fetch to the Function\'s own zone goes through Cloudflare\'s front door, not straight to its origin.\ncompatibility_flags = ["global_fetch_strictly_public"]\n' +
+    '# One data point per /_fetch response: its outcome and upstream status class (src/edge.js outcome).\n[[analytics_engine_datasets]]\nbinding = "OUTCOMES"\ndataset = "bareflow_outcomes"\n';
   // The live probe's verdicts (scripts/probe-run.js): only the measured refusals (1016, 1002) pass; a
   // status without a Cloudflare code means a connection was made; a throw or another code says nothing.
   const VERDICTS = [[{ threw: "The operation was aborted due to timeout" }, "inconclusive"], [{ threw: "TypeError: fetch failed" }, "inconclusive"],
@@ -2007,7 +2055,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     record("web", "probe copy", "the probe's deployable copy is refused inside the repository and over a non-empty directory",
       inRepo.includes("inside the repository") && nonEmpty.includes("not empty") && !existsSync(join(ROOT, "probe-out")));
   }
-  record("web", "pages config", "wrangler.toml exactly: the project's compatibility date, global_fetch_strictly_public, dist/site", await readFile(join(ROOT, "wrangler.toml"), "utf8") === PAGES);
+  record("web", "pages config", "wrangler.toml exactly: the project's compatibility date, global_fetch_strictly_public, dist/site, the OUTCOMES dataset", await readFile(join(ROOT, "wrangler.toml"), "utf8") === PAGES);
   // Pages serves index.html for any path that is not a file (no 404.html), so it is the shell of
   // every share URL; / alone is rewritten to the home.
   // The home's example (scripts/example.js): in the home only, once, with no ids. Its page and

@@ -2,7 +2,7 @@
   <a class="name" href="/">bareflow</a>
   <h1>privacy</h1>
   <ul>
-    <li>bareflow logs neither the address you convert nor you. The site you name gets the request from Cloudflare, not from your IP; a Cloudflare header names the domain it came through.</li>
+    <li>bareflow logs neither the address you convert nor you; it counts only how each fetch ended (ok, or the error's name) and the site's status class, such as 4xx. The site you name gets the request from Cloudflare, not from your IP; a Cloudflare header names the domain it came through.</li>
     <li>Cloudflare hosts this site and sees each request, the address included. <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare privacy policy</a></li>
     <li>Converting an address runs Cloudflare Turnstile, which reads your IP and browser to tell a person from a bot; bareflow sends Cloudflare your IP to confirm the result. <a href="https://www.cloudflare.com/turnstile-privacy-policy/">Turnstile privacy addendum</a></li>
     <li>A pasted page stays in your browser: no Turnstile, no fetch.</li>
