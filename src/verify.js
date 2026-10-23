@@ -45,6 +45,8 @@ import { assemble } from "../scripts/probe.js";
 import { EDGE, chunks } from "../scripts/icon.js";
 import { CARD, cardAlt, cardText, cardWords } from "../scripts/card.js";
 import { deployKey, TEST_SITEKEYS } from "../scripts/sitekey.js";
+import { drift, faults, parsed, readYaml } from "../scripts/workflows.js";
+import { artifactFaults } from "../scripts/artifact.js";
 import { parseShare } from "../site/url.js";
 import { parseInline, renderDoc, renderLosses } from "../site/render.js";
 
@@ -1637,6 +1639,103 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   if (bound.length !== 1 || declared.length !== 1 || bound[0] !== `env.${declared[0]}.writeDataPoint`) counterBad.push(`binding: _fetch.js ${bound.join(", ") || "none"}, wrangler.toml ${declared.join(", ") || "none"}`);
   if (!privacyText.includes("it counts only how each fetch ended (ok, or the error's name) and the site's status class") || !/^dataset = "\w+"$/m.test(toml)) counterBad.push("privacy line and dataset not both present");
   record("web", "outcome counter", `functions/_fetch.js counts each of ${CASES.length} responses once as [code, class] from closed sets (${CODES.size} codes), no address; a throwing write leaves the response; binding = wrangler.toml's; privacy says it${counterBad.length ? `: ${counterBad.join(" | ")}` : ""}`, !counterBad.length);
+}
+
+// The workflows (.github/workflows, scripts/workflows.js): each file equals its entry in TABLE, every
+// key and value but an action's commit and a step's name, so no bless turns a changed run line, grant,
+// trigger, env pair, or unknown key green; each step's action is one of four, at a commit, exact case;
+// no workflow is missing or new. test/golden/workflows.json records the rest (commits, names): a change
+// is red until `node src/verify.js --bless-workflows`. Each mutant gives exactly its faults; the reader
+// refuses what it does not read.
+{
+  const dir = join(ROOT, ".github/workflows"), goldenFile = join(ROOT, "test/golden/workflows.json");
+  const files = Object.fromEntries(await Promise.all((await readdir(dir)).sort().map(async (f) => [f, await readFile(join(dir, f), "utf8")])));
+  if (process.argv.includes("--bless-workflows")) await writeFile(goldenFile, `${JSON.stringify(parsed(files), null, 2)}\n`);
+  let golden = {}, goldenBad = [];
+  try { golden = JSON.parse(await readFile(goldenFile, "utf8")); } catch (e) { goldenBad = [`test/golden/workflows.json unreadable (${e.message})`]; }
+  const found = [...goldenBad, ...faults(files), ...drift(files, golden)];
+  const swap = (file, from, to) => { const t = files[file]; if (!t || t.split(from).length !== 2) return null; return { ...files, [file]: t.replace(from, () => to) }; };
+  const BUILD = "  build:\n    runs-on: ubuntu-latest\n", BUILD_CHECKOUT = `${BUILD}    steps:\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n`;
+  const RULE_MUTANTS = [
+    ["an unknown top-level key", swap("probe.yml", "\njobs:\n", "\nzzz: x\n\njobs:\n"), ["table probe.yml"]],
+    ["an unknown trigger key", swap("probe.yml", "  workflow_dispatch:\n", "  workflow_dispatch:\n  zzz: x\n"), ["table probe.yml"]],
+    ["an unknown job key", swap("deploy.yml", BUILD, `${BUILD}    zzz: x\n`), ["table deploy.yml"]],
+    ["an unknown step key", swap("deploy.yml", "      - run: npm run audit\n", "      - run: npm run audit\n        zzz: x\n"), ["table deploy.yml"]],
+    ["an unknown env pair", swap("deploy.yml", "          TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}\n", "          TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}\n          zzz: x\n"), ["table deploy.yml"]],
+    ["an unknown with key", swap("deploy.yml", `${BUILD_CHECKOUT}        with:\n          persist-credentials: false\n`, `${BUILD_CHECKOUT}        with:\n          persist-credentials: false\n          zzz: x\n`), ["table deploy.yml"]],
+    ["actions/cache in build", swap("deploy.yml", "      - run: npm run audit\n", "      - run: npm run audit\n      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830\n"), ["table deploy.yml", "uses deploy.yml"]],
+    ["a floating tag", swap("deploy.yml", BUILD_CHECKOUT, BUILD_CHECKOUT.replace("3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1")), ["table deploy.yml", "uses deploy.yml"]],
+    ["a lookalike checkout", swap("deploy.yml", BUILD_CHECKOUT, BUILD_CHECKOUT.replace("actions/checkout", "Actions/checkout")), ["table deploy.yml", "uses deploy.yml"]],
+    ["deploy without its environment", swap("deploy.yml", "    environment: production\n", ""), ["table deploy.yml"]],
+    ["the token pair in the smoke step", swap("deploy.yml", "      - id: smoke\n        run: node scripts/smoke.js\n", "      - id: smoke\n        run: node scripts/smoke.js\n        env:\n          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}\n          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\n"), ["table deploy.yml"]],
+    ["a self-hosted runner", swap("deploy.yml", BUILD, "  build:\n    runs-on: self-hosted\n"), ["table deploy.yml"]],
+    ["npm run audit dropped from build", swap("deploy.yml", "      - run: npm run audit\n", ""), ["table deploy.yml"]],
+    ["npm test || true in build", swap("deploy.yml", "      - run: npm test\n", "      - run: npm test || true\n"), ["table deploy.yml"]],
+    ["pull_request_target on CI", swap("ci.yml", "  pull_request:\n", "  pull_request_target:\n"), ["table ci.yml"]],
+    ["a probe that does not probe", swap("probe.yml", "node scripts/smoke.js --probe", "node scripts/smoke.js"), ["table probe.yml"]],
+    ["a flow map in a real file", swap("probe.yml", "        with:\n          node-version: '24'\n          package-manager-cache: false\n      - run: node", "        with: {node-version: '24'}\n      - run: node"), ["unreadable probe.yml"]],
+    ["a new workflow", { ...files, "x.yml": files["probe.yml"] }, ["unknown x.yml"]],
+    ["a __proto__ env key", swap("deploy.yml", "          TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}\n", "          TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}\n          __proto__: ${{ secrets.CLOUDFLARE_API_TOKEN }}\n"), ["unreadable deploy.yml"]],
+    ["a secret in a step's name", swap("deploy.yml", "      - run: npm run audit\n", "      - name: ${{ secrets.CLOUDFLARE_API_TOKEN }}\n        run: npm run audit\n"), ["name deploy.yml"]],
+    ["a workflow deleted", Object.fromEntries(Object.entries(files).filter(([f]) => f !== "probe.yml")), ["missing probe.yml"]],
+  ];
+  const kinds = (m) => faults(m).map((f) => f.slice(0, f.indexOf(":")));
+  const missed = RULE_MUTANTS.filter(([, m, want]) => !m || JSON.stringify(kinds(m)) !== JSON.stringify(want)).map(([what, m, want]) => `${what}: ${m ? JSON.stringify(kinds(m)) : "did not apply"}, want ${JSON.stringify(want)}`);
+  // Golden mutants: what TABLE does not state (a step's name, an action's commit, the workflow's name)
+  // is red against the golden until blessed, green after (through the JSON the bless writes).
+  const GOLDEN_MUTANTS = [
+    ["a step named", swap("deploy.yml", "      - run: npm run audit\n", "      - name: audit\n        run: npm run audit\n")],
+    ["a commit-only bump", swap("deploy.yml", BUILD_CHECKOUT, BUILD_CHECKOUT.replace("3d3c42e5aac5ba805825da76410c181273ba90b1", "0".repeat(40)))],
+    ["the workflow renamed", swap("probe.yml", "name: Probe\n", "name: Probe hourly\n")],
+  ];
+  for (const [what, m] of GOLDEN_MUTANTS) {
+    if (!m) { missed.push(`golden ${what}: did not apply`); continue; }
+    const f = faults(m);
+    if (f.length) missed.push(`golden ${what}: breaks the table: ${f.join("; ")}`);
+    if (!drift(m, golden).length) missed.push(`golden ${what}: green unblessed`);
+    if (drift(m, JSON.parse(JSON.stringify(parsed(m)))).length) missed.push(`golden ${what}: red after its bless`);
+  }
+  const SHAPES = [["a flow map", "a: {b: c}\n"], ["an anchor", "a: &x b\n"], ["an alias", "a: *x\n"], ["a merge key", "a:\n  <<: b\n"], ["a tab", "a:\n\tb: c\n"],
+    ["a second document", "a: b\n---\nc: d\n"], ["a folded block", "a: >\n  b\n"], ["a tag", "a: !x b\n"], ["a duplicate key", "a: b\na: c\n"], ["a flow sequence of maps", "a: [{b: c}]\n"]];
+  const read = SHAPES.filter(([, t]) => { try { readYaml(t); return true; } catch { return false; } }).map(([what]) => what);
+  const problems = [...found, ...missed.map((m) => `mutant ${m}`), ...read.map((r) => `read: ${r}`)];
+  record("web", "workflows", `${Object.keys(files).join(", ")}: each equal to its table entry, actions at a commit, equal to test/golden/workflows.json; ${RULE_MUTANTS.length} rule mutants give exactly their faults, ${GOLDEN_MUTANTS.length} golden mutants red until blessed, ${SHAPES.length} shapes refused${problems.length ? `: ${problems.join(" | ")}; if a change is meant, update TABLE in scripts/workflows.js where it states it and run node src/verify.js --bless-workflows` : ""}`,
+    !problems.length);
+}
+
+// The artifact check (scripts/artifact.js, the deploy job's step before wrangler): verify's own build
+// passes; a _worker.js file or directory, an edited _routes.json, an extra or missing entry is refused;
+// a missing directory is a refusal line, exit 1.
+{
+  const art = join(tmpdir(), `bareflow-artifact-${process.pid}`);
+  await rm(art, { recursive: true, force: true });
+  await cp(siteOut, art, { recursive: true });
+  const artBad = [];
+  const clean = await artifactFaults(art);
+  if (clean.length) artBad.push(`verify's build: ${clean.join("; ")}`);
+  const CASES = [
+    ["a _worker.js file", () => writeFile(join(art, "_worker.js"), "export default {}"), () => rm(join(art, "_worker.js"))],
+    ["a _worker.js directory", () => mkdir(join(art, "_worker.js")), () => rm(join(art, "_worker.js"), { recursive: true })],
+    ["functions/", () => mkdir(join(art, "functions")), () => rm(join(art, "functions"), { recursive: true })],
+    ["an edited _routes.json", () => writeFile(join(art, "_routes.json"), '{"version":1,"include":[],"exclude":[]}\n'), () => cp(join(ROOT, "site/_routes.json"), join(art, "_routes.json"))],
+    ["an edited _headers", () => writeFile(join(art, "_headers"), "/*\n"), () => cp(join(ROOT, "site/_headers"), join(art, "_headers"))],
+    ["an extra page", () => writeFile(join(art, "x.html"), "x"), () => rm(join(art, "x.html"))],
+    ["a missing robots.txt", () => rm(join(art, "robots.txt")), () => cp(join(siteOut, "robots.txt"), join(art, "robots.txt"))],
+  ];
+  for (const [what, make, undo] of CASES) {
+    await make();
+    if (!(await artifactFaults(art)).length) artBad.push(`${what} passed`);
+    await undo();
+  }
+  if ((await artifactFaults(art)).length) artBad.push("not clean after the cases");
+  const missing = await new Promise((ok) => {
+    let e = "";
+    const c = spawn(process.execPath, [join(ROOT, "scripts/artifact.js"), join(art, "absent")], { timeout: 30000 });
+    c.stderr.on("data", (x) => (e += x)); c.on("close", (code) => ok({ code, e })); c.on("error", (err) => ok({ code: -1, e: err.message }));
+  });
+  if (missing.code !== 1 || missing.e !== `refused: ${join(art, "absent")}: ENOENT\n`) artBad.push(`a missing directory: exit ${missing.code}, ${JSON.stringify(missing.e.slice(0, 80))}`);
+  await rm(art, { recursive: true, force: true });
+  record("web", "artifact", `scripts/artifact.js passes verify's build and refuses ${CASES.length} changes a build job could make (_worker.js, functions/, Pages configuration, entries) and a missing directory by name${artBad.length ? `: ${artBad.join(" | ")}` : ""}`, !artBad.length);
 }
 
 // The built site: the shell tells curl and agents where the CLI is, scripts load from self
