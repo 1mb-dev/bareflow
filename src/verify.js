@@ -47,6 +47,7 @@ import { CARD, cardAlt, cardText, cardWords } from "../scripts/card.js";
 import { deployKey, TEST_SITEKEYS } from "../scripts/sitekey.js";
 import { drift, faults, parsed, readYaml } from "../scripts/workflows.js";
 import { artifactFaults } from "../scripts/artifact.js";
+import { counts, verdict } from "../scripts/counts.js";
 import { parseShare } from "../site/url.js";
 import { parseInline, renderDoc, renderLosses } from "../site/render.js";
 
@@ -1736,6 +1737,43 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   if (missing.code !== 1 || missing.e !== `refused: ${join(art, "absent")}: ENOENT\n`) artBad.push(`a missing directory: exit ${missing.code}, ${JSON.stringify(missing.e.slice(0, 80))}`);
   await rm(art, { recursive: true, force: true });
   record("web", "artifact", `scripts/artifact.js passes verify's build and refuses ${CASES.length} changes a build job could make (_worker.js, functions/, Pages configuration, entries) and a missing directory by name${artBad.length ? `: ${artBad.join(" | ")}` : ""}`, !artBad.length);
+}
+
+// The owner's counts read (scripts/counts.js) over stub API answers: invocations by status from
+// GraphQL, outcomes from the Analytics Engine SQL API; exit 1 on any exceededResources, 2 when there is
+// nothing to judge (two scripts, no invocations, no outcomes) or a read fails, exceededResources first;
+// the token goes only in the header.
+{
+  const realFetch = globalThis.fetch, sent = [];
+  const answer = (groups, rows, gqlErrors) => async (url, init) => {
+    sent.push({ url: String(url), auth: init.headers.authorization, body: String(init.body) });
+    if (String(url).endsWith("/graphql")) return Response.json(gqlErrors ? { errors: [{ message: "unknown field" }] } : { data: { viewer: { accounts: [{ pagesFunctionsInvocationsAdaptiveGroups: groups }] } } });
+    return Response.json({ data: rows });
+  };
+  const g = (status, requests, scriptName = "bareflow") => ({ sum: { requests }, dimensions: { scriptName, status } });
+  const CASES = [
+    ["clean", [g("success", 40), g("clientDisconnected", 1)], [{ outcome: "token", class: "none", n: "30" }], 0],
+    ["exceeded", [g("success", 40), g("exceededResources", 2)], [{ outcome: "ok", class: "none", n: "10" }], 1],
+    ["no invocations", [], [{ outcome: "ok", class: "none", n: "1" }], 2],
+    ["no outcomes", [g("success", 3)], [], 2],
+    ["exceeded, no outcomes", [g("exceededResources", 3)], [], 1],
+    ["two scripts, clean", [g("success", 3), g("success", 5, "other")], [{ outcome: "ok", class: "none", n: "3" }], 2],
+    ["two scripts, bareflow's overrun", [g("success", 3), g("exceededResources", 1), g("success", 5, "other")], [{ outcome: "ok", class: "none", n: "3" }], 1],
+    ["two scripts, the other's overrun", [g("success", 3), g("success", 5, "other"), g("exceededResources", 2, "other")], [{ outcome: "ok", class: "none", n: "3" }], 1],
+  ];
+  const countsBad = [];
+  try {
+    for (const [name, groups, rows, want] of CASES) {
+      globalThis.fetch = answer(groups, rows);
+      const c = await counts({ account: "acct", token: "tok-secret", days: 7 });
+      if (verdict(c) !== want) countsBad.push(`${name}: ${verdict(c)}, want ${want}`);
+    }
+    globalThis.fetch = answer([], [], true);
+    if (await counts({ account: "acct", token: "tok-secret" }).then(() => true, () => false)) countsBad.push("a GraphQL error read as counts");
+  } finally { globalThis.fetch = realFetch; }
+  if (sent.some((x) => x.auth !== "Bearer tok-secret" || x.body.includes("tok-secret") || x.url.includes("tok-secret"))) countsBad.push("the token outside the authorization header");
+  if (!sent.some((x) => x.url === "https://api.cloudflare.com/client/v4/accounts/acct/analytics_engine/sql" && /FROM bareflow_outcomes\b/.test(x.body))) countsBad.push("the SQL read is not of bareflow_outcomes");
+  record("web", "counts", `scripts/counts.js: exit 1 on exceededResources (first), 2 with two scripts, no invocations, no outcomes, or a failed read, else 0; the token only in the header; reads the OUTCOMES dataset${countsBad.length ? `: ${countsBad.join(" | ")}` : ""}`, !countsBad.length);
 }
 
 // The built site: the shell tells curl and agents where the CLI is, scripts load from self
