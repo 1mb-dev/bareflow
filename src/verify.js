@@ -44,6 +44,7 @@ import { CONTROL, classify, PROBES, probe } from "../scripts/probe-run.js";
 import { assemble } from "../scripts/probe.js";
 import { EDGE, chunks } from "../scripts/icon.js";
 import { CARD, cardAlt, cardText, cardWords } from "../scripts/card.js";
+import { deployKey, TEST_SITEKEYS } from "../scripts/sitekey.js";
 import { parseShare } from "../site/url.js";
 import { parseInline, renderDoc, renderLosses } from "../site/render.js";
 
@@ -1021,6 +1022,26 @@ const child = (args, drive = () => {}, ms = 30000) => new Promise((ok) => {
 
 // The built site (scripts/site.js), once: the worker and shell checks below read what it wrote.
 const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test-sitekey");
+
+// The deploy build's key (scripts/sitekey.js, `site.js --deploy`): unset, blank, or any of Cloudflare's
+// five test sitekeys is refused before the build; the script exits non-zero and prints no path.
+{
+  const refuses = (k) => { try { deployKey(k); return false; } catch { return true; } };
+  const bad = [undefined, "", "  ", ...TEST_SITEKEYS, ` ${[...TEST_SITEKEYS][4]} `].filter((k) => !refuses(k)).map(String);
+  const real = "0x4AAAAAAA0000000000000a";
+  const cli = (key) => new Promise((ok) => {
+    const env = { ...process.env };
+    if (key === undefined) delete env.TURNSTILE_SITEKEY; else env.TURNSTILE_SITEKEY = key;
+    let out = "", err = "";
+    const c = spawn(process.execPath, [join(ROOT, "scripts/site.js"), "--deploy"], { env });
+    c.stdout.on("data", (x) => (out += x)); c.stderr.on("data", (x) => (err += x));
+    c.on("close", (code) => ok({ code, out, err }));
+  });
+  const runs = await Promise.all([cli(undefined), cli("2x00000000000000000000AB")]);
+  const cliBad = runs.filter((r) => r.code !== 1 || r.out || !r.err.includes("TURNSTILE_SITEKEY")).map((r) => `exit ${r.code}${r.out ? `, printed ${r.out.trim()}` : ""}`);
+  record("web", "deploy key", `site.js --deploy refuses an unset key and the ${TEST_SITEKEYS.size} test sitekeys, exit 1 before the build; a real-shaped key passes${bad.length || cliBad.length || refuses(real) ? `: ${[...bad, ...cliBad, refuses(real) ? "real key refused" : ""].filter(Boolean).join("; ")}` : ""}`,
+    !bad.length && !cliBad.length && !refuses(real) && TEST_SITEKEYS.size === 5);
+}
 
 // The share URL grammar (site/url.js): the browser's collapsed slash, an encoded target, query
 // and fragment kept, a bare host sent on as https, and every other scheme refused.

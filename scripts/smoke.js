@@ -11,7 +11,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { TEST_SITEKEY } from "./sitekey.js";
+import { TEST_SITEKEYS } from "./sitekey.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist/site");
@@ -36,7 +36,7 @@ if (opts.burst && !(base.hostname === "1mb.dev" || base.hostname.endsWith(".1mb.
 
 const built = async (f) => readFile(join(DIST, f));
 const home = await built("_app/home.html");
-if (!local && home.includes(TEST_SITEKEY)) throw new Error("dist/site was built with the test sitekey, so no deploy serves it: build with the deploy's TURNSTILE_SITEKEY, or run this in the deploy job");
+if (!local && [...TEST_SITEKEYS].some((k) => home.includes(k))) throw new Error("dist/site was built with a test sitekey, so no deploy serves it: build with the deploy's TURNSTILE_SITEKEY, or run this in the deploy job");
 const shell = await built("index.html"), privacy = await built("privacy.html"), robots = await built("robots.txt");
 // The /* block of _headers: an unindented line names a path, indented lines are its headers.
 const HEADERS = [];

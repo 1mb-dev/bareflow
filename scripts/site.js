@@ -1,6 +1,7 @@
 // The web app: `npm run site` writes dist/site/, the Pages output directory (functions/ is beside
 // it at the repo root). The worker is the verified bundle (scripts/bundle.js) plus site/worker.js.
-// TURNSTILE_SITEKEY sets the widget's key; unset, it is Cloudflare's always-pass test key.
+// TURNSTILE_SITEKEY sets the widget's key; unset, it is Cloudflare's always-pass test key. With
+// --deploy (the deploy job's build), an unset or test key is refused before anything is written.
 // Pages serves index.html for every path that is not a file, so it is the shell of every share
 // URL; the home is _app/home.html, served at / by _redirects. The icons are drawn from tokens.css
 // here (scripts/icon.js); the OG card is committed (scripts/card.js needs Chrome) and goes in the
@@ -18,7 +19,7 @@ import { stylesheet } from "./stylesheet.js";
 import { iconIco, iconPng, iconSvg, palette } from "./icon.js";
 import { CARD, ORIGIN, cardAlt, cardWords } from "./card.js";
 import { VERSION } from "../src/version.js";
-import { TEST_SITEKEY } from "./sitekey.js";
+import { deployKey, TEST_SITEKEY } from "./sitekey.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // Where the home's example goes in the template; the shell gets nothing there. A function, not a
@@ -94,6 +95,11 @@ export async function site(out = join(ROOT, "dist/site"), sitekey = process.env.
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
-  if (!process.env.TURNSTILE_SITEKEY) console.error(`TURNSTILE_SITEKEY unset: built with Cloudflare's always-pass test key ${TEST_SITEKEY}; local use only, a deploy needs the real key`);
-  console.log(await site());
+  const args = process.argv.slice(2);
+  if (args.length > 1 || (args.length && args[0] !== "--deploy")) throw new Error("usage: node scripts/site.js [--deploy]");
+  let key;
+  if (args[0] === "--deploy") {
+    try { key = deployKey(process.env.TURNSTILE_SITEKEY); } catch (e) { console.error(e.message); process.exit(1); }
+  } else if (!process.env.TURNSTILE_SITEKEY) console.error(`TURNSTILE_SITEKEY unset: built with Cloudflare's always-pass test key ${TEST_SITEKEY}; local use only, a deploy needs the real key`);
+  console.log(await site(undefined, key));
 }
