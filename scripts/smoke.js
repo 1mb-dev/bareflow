@@ -2,6 +2,7 @@
 // Function), never the content verify already proves. The build is dist/site, byte for byte, sitekey
 // included: against a deploy, run it in the job that built and deployed, after the deploy.
 //   node scripts/smoke.js [base] [--preview <host>] [--burst <n>]
+//   node scripts/smoke.js [base] --probe    the tokenless /_fetch row alone, no build (probe.yml, hourly)
 // base defaults to https://bareflow.1mb.dev. Locally (wrangler takes functions/ from the cwd; wrangler
 // 4.67.0; parallel instances need distinct --inspector-port):
 //   npm run site && wrangler pages dev dist/site --ip 127.0.0.1 --port 8788 \
@@ -17,35 +18,23 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = join(ROOT, "dist/site");
 const SHARE = "/https://docs.deno.com/runtime/reference/cli/add/";
 const SETTLE = 120000, POLL = 5000, REQUEST = 15000;
-const USAGE = "usage: node scripts/smoke.js [base] [--preview <host>] [--burst <n>]";
+const USAGE = "usage: node scripts/smoke.js [base] [--preview <host>] [--burst <n>] | [base] --probe";
 
 const args = process.argv.slice(2), opts = {};
 for (let i = 0; i < args.length; i++) {
   if (!args[i].startsWith("--")) continue;
+  if (args[i] === "--probe") { opts.probe = true; args.splice(i--, 1); continue; }
   const [name, value] = [args[i], args[i + 1]];
   if (!["--preview", "--burst"].includes(name) || !value || value.startsWith("--")) throw new Error(`${name}: ${USAGE}`);
   opts[name.slice(2)] = value;
   args.splice(i--, 2);
 }
-if (args.length > 1) throw new Error(USAGE);
+if (args.length > 1 || (opts.probe && (opts.preview || opts.burst))) throw new Error(USAGE);
 if (opts.burst !== undefined && !(Number.isInteger(Number(opts.burst)) && Number(opts.burst) > 0)) throw new Error(`--burst takes a count: ${USAGE}`);
 const base = new URL(args[0] ?? "https://bareflow.1mb.dev");
 const local = ["127.0.0.1", "localhost", "[::1]"].includes(base.hostname), pagesDev = base.hostname.endsWith(".pages.dev");
 // The rate rule lives in the 1mb.dev zone only: anywhere else a burst spends quota and meets nothing.
 if (opts.burst && !(base.hostname === "1mb.dev" || base.hostname.endsWith(".1mb.dev"))) throw new Error(`--burst needs a host in the 1mb.dev zone, where the rate rule is; ${base.hostname} has none`);
-
-const built = async (f) => readFile(join(DIST, f));
-const home = await built("_app/home.html");
-if (!local && [...TEST_SITEKEYS].some((k) => home.includes(k))) throw new Error("dist/site was built with a test sitekey, so no deploy serves it: build with the deploy's TURNSTILE_SITEKEY, or run this in the deploy job");
-const shell = await built("index.html"), privacy = await built("privacy.html"), robots = await built("robots.txt");
-// The /* block of _headers: an unindented line names a path, indented lines are its headers.
-const HEADERS = [];
-let block;
-for (const line of (await readFile(join(DIST, "_headers"), "utf8")).split("\n")) {
-  if (/^\S/.test(line)) block = line.trim();
-  else if (block === "/*" && line.includes(":")) { const at = line.indexOf(":"); HEADERS.push([line.slice(0, at).trim(), line.slice(at + 1).trim()]); }
-}
-if (!HEADERS.length) throw new Error("dist/site/_headers has no /* headers to check");
 
 // Each request is bounded: the settle deadline is read between requests, so one that never answers
 // would outlast it.
@@ -56,6 +45,31 @@ let failed = 0;
 const row = (ok, name, saw) => { if (!ok) failed++; console.log(`${ok ? "ok  " : "FAIL"}  ${name}${saw ? `: ${saw}` : ""}`); };
 // A request that fails outright is that row's FAIL, never the end of the run.
 const check = async (name, fn) => { try { await fn(); } catch (e) { row(false, name, e.cause?.message ?? e.message); } };
+const done = () => { console.log(failed ? `${failed} failed` : "all rows ok"); process.exit(failed ? 1 : 0); };
+
+// The Function, tokenless: refused before any fetch or siteverify call, inert where it lands. Alone
+// (--probe), it is what a quota spent, a fail-open route, a broken deploy, or DNS changes.
+const tokenless = () => check("/_fetch without a token", async () => {
+  const r = await get(`/_fetch?url=${encodeURIComponent("https://example.com/")}`);
+  const h = r.headers;
+  const ok = r.status === 403 && h.get("x-bareflow-error") === "token" && h.get("x-content-type-options") === "nosniff" &&
+    h.get("content-security-policy") === "sandbox; default-src 'none'" && h.get("cache-control") === "no-store" && !h.has("access-control-allow-origin");
+  row(ok, "/_fetch without a token: 403 token, inert, no CORS", ok ? "" : `${r.status} ${h.get("x-bareflow-error")} ${h.get("content-type")}`);
+});
+if (opts.probe) { await tokenless(); done(); }
+
+const built = async (f) => readFile(join(DIST, f));
+const home = await built("_app/home.html");
+if (!local && [...TEST_SITEKEYS].some((k) => home.includes(k))) throw new Error("dist/site was built with a test sitekey, so no deploy serves it: build with the deploy's TURNSTILE_SITEKEY, or run this in the deploy job");
+const shell = await built("index.html"), privacy = await built("privacy.html"), robots = await built("robots.txt"), worker = await built("_app/worker.js");
+// The /* block of _headers: an unindented line names a path, indented lines are its headers.
+const HEADERS = [];
+let block;
+for (const line of (await readFile(join(DIST, "_headers"), "utf8")).split("\n")) {
+  if (/^\S/.test(line)) block = line.trim();
+  else if (block === "/*" && line.includes(":")) { const at = line.indexOf(":"); HEADERS.push([line.slice(0, at).trim(), line.slice(at + 1).trim()]); }
+}
+if (!HEADERS.length) throw new Error("dist/site/_headers has no /* headers to check");
 
 // Settle on identity: a fresh deploy serves the previous one (or none) for a while; a row retried
 // until green would hide one that flaps between the two.
@@ -68,11 +82,13 @@ for (let n = 1; ; n++) {
   await new Promise((ok) => setTimeout(ok, POLL));
 }
 
-for (const [path, want, name] of [["/", home, "home"], ["/privacy", privacy, "privacy page"], [SHARE, shell, "shell"], ["/_app/home", home, "home"], ["/robots.txt", robots, "robots.txt"]]) {
+// The worker is fetched by script: a wrong type would be refused (nosniff) as a module of no use.
+for (const [path, want, name, type] of [["/", home, "home"], ["/privacy", privacy, "privacy page"], [SHARE, shell, "shell"], ["/_app/home", home, "home"], ["/robots.txt", robots, "robots.txt"],
+  ["/_app/worker.js", worker, "worker", /^(text|application)\/javascript\b/]]) {
   await check(`${path} is the built ${name}`, async () => {
     const r = await get(path);
-    const same = r.status === 200 && (await bytes(r)).equals(want);
-    row(same, `${path} is the built ${name}`, same ? "" : `${r.status} ${r.headers.get("content-type")}`);
+    const same = r.status === 200 && (await bytes(r)).equals(want) && (!type || type.test(r.headers.get("content-type") ?? ""));
+    row(same, `${path} is the built ${name}${type ? ", served as JavaScript" : ""}`, same ? "" : `${r.status} ${r.headers.get("content-type")}`);
     if (path === "/robots.txt") return;
     // pages.dev hosts carry _headers' noindex rule; any other host must not.
     const off = HEADERS.filter(([k, v]) => r.headers.get(k) !== v).map(([k]) => k), tag = r.headers.get("x-robots-tag");
@@ -82,14 +98,7 @@ for (const [path, want, name] of [["/", home, "home"], ["/privacy", privacy, "pr
   });
 }
 
-// The Function, tokenless: refused before any fetch or siteverify call, inert where it lands.
-await check("/_fetch without a token", async () => {
-  const r = await get(`/_fetch?url=${encodeURIComponent("https://example.com/")}`);
-  const h = r.headers;
-  const ok = r.status === 403 && h.get("x-bareflow-error") === "token" && h.get("x-content-type-options") === "nosniff" &&
-    h.get("content-security-policy") === "sandbox; default-src 'none'" && h.get("cache-control") === "no-store" && !h.has("access-control-allow-origin");
-  row(ok, "/_fetch without a token: 403 token, inert, no CORS", ok ? "" : `${r.status} ${h.get("x-bareflow-error")} ${h.get("content-type")}`);
-});
+await tokenless();
 
 // A preview is behind Cloudflare Access: its /_fetch answers Access's redirect, not the Function.
 if (opts.preview) {
@@ -118,5 +127,4 @@ if (opts.burst) {
   });
 }
 
-console.log(failed ? `${failed} failed` : "all rows ok");
-process.exit(failed ? 1 : 0);
+done();
