@@ -1,0 +1,64 @@
+name: Publish
+
+# Every key and value here but action commits and step names is also stated in scripts/workflows.js
+# (TABLE); verify fails until both agree and test/golden/workflows.json is blessed.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  # Runs every dependency's code (tests, audit), so it holds no environment and no id-token.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run audit
+
+  # Trusted publishing: id-token reaches every step of this job, so it installs nothing and runs no
+  # package code (--ignore-scripts). Node 24's npm (>= 11.5.1) publishes through OIDC; --provenance
+  # fails the publish where no attestation can be made.
+  publish:
+    needs: check
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: the tag is a plain version, the package's
+        run: grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' <<< "$GITHUB_REF_NAME" && test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
+      - name: the tagged commit is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - run: npm publish --ignore-scripts --provenance
+
+  # A draft release for the tag; the owner publishes it.
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - run: gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}

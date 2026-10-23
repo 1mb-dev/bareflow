@@ -45,7 +45,7 @@ import { assemble } from "../scripts/probe.js";
 import { EDGE, chunks } from "../scripts/icon.js";
 import { CARD, cardAlt, cardText, cardWords } from "../scripts/card.js";
 import { deployKey, TEST_SITEKEYS } from "../scripts/sitekey.js";
-import { drift, faults, parsed, readYaml } from "../scripts/workflows.js";
+import { drift, faults, parsed, readYaml, TABLE } from "../scripts/workflows.js";
 import { artifactFaults } from "../scripts/artifact.js";
 import { counts, verdict } from "../scripts/counts.js";
 import { lessInjected } from "../scripts/injected.js";
@@ -1677,6 +1677,15 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     ["npm test || true in build", swap("deploy.yml", "      - run: npm test\n", "      - run: npm test || true\n"), ["table deploy.yml"]],
     ["pull_request_target on CI", swap("ci.yml", "  pull_request:\n", "  pull_request_target:\n"), ["table ci.yml"]],
     ["a probe that does not probe", swap("probe.yml", "node scripts/smoke.js --probe", "node scripts/smoke.js"), ["table probe.yml"]],
+    ["the guards after npm publish", swap("publish.yml", "      - name: the tag is a plain version, the package's\n", "      - run: npm publish --ignore-scripts --provenance\n      - name: the tag is a plain version, the package's\n"), ["table publish.yml"]],
+    ["an install in publish", swap("publish.yml", "      - run: npm publish --ignore-scripts --provenance\n", "      - run: npm ci --ignore-scripts\n      - run: npm publish --ignore-scripts --provenance\n"), ["table publish.yml"]],
+    ["publish running package scripts", swap("publish.yml", "npm publish --ignore-scripts --provenance", "npm publish --provenance"), ["table publish.yml"]],
+    ["a release not drafted", swap("publish.yml", "--draft --verify-tag", "--verify-tag"), ["table publish.yml"]],
+    ["npm test || true in check", swap("publish.yml", "      - run: npm ci --ignore-scripts\n      - run: npm test\n", "      - run: npm ci --ignore-scripts\n      - run: npm test || true\n"), ["table publish.yml"]],
+    ["publish not needing check", swap("publish.yml", "    needs: check\n", ""), ["table publish.yml"]],
+    ["publish on any tag", swap("publish.yml", "      - 'v*'\n", "      - '*'\n"), ["table publish.yml"]],
+    ["a publish checkout of another ref", swap("publish.yml", "          fetch-depth: 0\n", "          fetch-depth: 0\n          ref: refs/heads/dev\n"), ["table publish.yml"]],
+    ["if: always() on publish", swap("publish.yml", "    needs: check\n", "    needs: check\n    if: always()\n"), ["table publish.yml"]],
     ["a flow map in a real file", swap("probe.yml", "        with:\n          node-version: '24'\n          package-manager-cache: false\n      - run: node", "        with: {node-version: '24'}\n      - run: node"), ["unreadable probe.yml"]],
     ["a new workflow", { ...files, "x.yml": files["probe.yml"] }, ["unknown x.yml"]],
     ["a __proto__ env key", swap("deploy.yml", "          TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}\n", "          TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}\n          __proto__: ${{ secrets.CLOUDFLARE_API_TOKEN }}\n"), ["unreadable deploy.yml"]],
@@ -1705,6 +1714,51 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const problems = [...found, ...missed.map((m) => `mutant ${m}`), ...read.map((r) => `read: ${r}`)];
   record("web", "workflows", `${Object.keys(files).join(", ")}: each equal to its table entry, actions at a commit, equal to test/golden/workflows.json; ${RULE_MUTANTS.length} rule mutants give exactly their faults, ${GOLDEN_MUTANTS.length} golden mutants red until blessed, ${SHAPES.length} shapes refused${problems.length ? `: ${problems.join(" | ")}; if a change is meant, update TABLE in scripts/workflows.js where it states it and run node src/verify.js --bless-workflows` : ""}`,
     !problems.length);
+}
+
+// publish.yml's guards (the lines TABLE states), run as the runner runs a step (bash --noprofile
+// --norc -eo pipefail): the tag is a plain vX.Y.Z equal to package.json's version (the prerelease and
+// four-part cases carry a matching package.json, so the plain-version check alone refuses them); the
+// tagged commit is an ancestor of origin/main, in a scratch repository with no config, hooks, or GIT_*
+// from this process. Any setup failure is a red row.
+{
+  const guardBad = [], scratch = join(tmpdir(), `bareflow-guards-${process.pid}`);
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
+  Object.assign(env, { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "v", GIT_AUTHOR_EMAIL: "v@x", GIT_COMMITTER_NAME: "v", GIT_COMMITTER_EMAIL: "v@x" });
+  const run = (cmd, args, extra = {}) => new Promise((ok) => {
+    let out = "";
+    const c = spawn(cmd, args, { cwd: scratch, env: { ...env, ...extra }, timeout: 30000 });
+    c.stdout.on("data", (x) => (out += x));
+    c.on("close", (code) => ok({ code, out: out.trim() })); c.on("error", (e) => ok({ code: -1, out: e.message }));
+  });
+  const bash = (line, extra) => run("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", line], extra);
+  const git = async (...a) => { const r = await run("git", ["-c", "init.defaultBranch=main", "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", ...a]); if (r.code !== 0) throw new Error(`git ${a[0]}: exit ${r.code}`); return r.out; };
+  try {
+    const runs = TABLE["publish.yml"].jobs.publish.steps.map((st) => st.run).filter(Boolean);
+    const tagLine = runs.find((r) => r.includes("GITHUB_REF_NAME")), mainLine = runs.find((r) => r.startsWith("git merge-base"));
+    if (!tagLine || !mainLine) throw new Error("a guard step is missing");
+    await rm(scratch, { recursive: true, force: true });
+    await mkdir(scratch, { recursive: true });
+    for (const [tag, version, want] of [["v0.5.0", "0.5.0", 0], ["v0.5.1", "0.5.0", 1], ["v0.5.0-rc.1", "0.5.0-rc.1", 1], ["0.5.0", "0.5.0", 1], ["v0.5.0.1", "0.5.0.1", 1]]) {
+      await writeFile(join(scratch, "package.json"), JSON.stringify({ version }));
+      const { code } = await bash(tagLine, { GITHUB_REF_NAME: tag });
+      if ((code === 0) !== (want === 0)) guardBad.push(`tag ${JSON.stringify(tag)}: exit ${code}`);
+    }
+    await git("init", "-q");
+    await git("commit", "-q", "--allow-empty", "-m", "a");
+    const a = await git("rev-parse", "HEAD");
+    await git("commit", "-q", "--allow-empty", "-m", "b");
+    const b = await git("rev-parse", "HEAD");
+    await git("checkout", "-q", "-b", "side", a);
+    await git("commit", "-q", "--allow-empty", "-m", "c");
+    const c = await git("rev-parse", "HEAD");
+    await git("update-ref", "refs/remotes/origin/main", b);
+    for (const [name, commit, want] of [["an ancestor of main", a, 0], ["main's tip", b, 0], ["a commit off main", c, 1]]) {
+      const { code } = await bash(mainLine, { GITHUB_SHA: commit });
+      if ((code === 0) !== (want === 0)) guardBad.push(`${name}: exit ${code}`);
+    }
+  } catch (e) { guardBad.push(`setup: ${e.message}`); } finally { await rm(scratch, { recursive: true, force: true }); }
+  record("web", "publish guards", `publish.yml's guards as the runner runs them: v0.5.0 passes; a mismatch, a prerelease, no v, four parts refused; on main passes, off main refused${guardBad.length ? `: ${guardBad.join(" | ")}` : ""}`, !guardBad.length);
 }
 
 // The artifact check (scripts/artifact.js, the deploy job's step before wrangler): verify's own build

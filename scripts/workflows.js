@@ -138,6 +138,24 @@ export const TABLE = {
       },
     },
   },
+  "publish.yml": {
+    on: { push: { tags: ["v*"] } },
+    permissions: { contents: "read" },
+    jobs: {
+      check: { "runs-on": "ubuntu-latest", steps: [CHECKOUT, NODE, { run: "npm ci --ignore-scripts" }, { run: "npm test" }, { run: "npm run audit" }] },
+      publish: {
+        needs: "check", "runs-on": "ubuntu-latest", environment: "npm", permissions: { contents: "read", "id-token": "write" },
+        steps: [{ uses: CHECKOUT.uses, with: { "fetch-depth": "0", "persist-credentials": "false" } }, NODE,
+          { run: `grep -Eq '^v[0-9]+\\.[0-9]+\\.[0-9]+$' <<< "$GITHUB_REF_NAME" && test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"` },
+          { run: 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' },
+          { run: "npm publish --ignore-scripts --provenance" }],
+      },
+      release: {
+        needs: "publish", "runs-on": "ubuntu-latest", permissions: { contents: "write" },
+        steps: [{ run: 'gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes --repo "$GITHUB_REPOSITORY"', env: { GH_TOKEN: "${{ github.token }}" } }],
+      },
+    },
+  },
   "probe.yml": {
     on: { schedule: [{ cron: "17 * * * *" }], workflow_dispatch: null },
     permissions: { contents: "read" },
