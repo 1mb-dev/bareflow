@@ -1,8 +1,9 @@
 // The worker thread src/bounded.js starts: one conversion, its result or its error's fields back.
-import { parentPort, workerData } from "node:worker_threads";
+import { parentPort, resourceLimits, workerData } from "node:worker_threads";
 import { convert } from "./convert.js";
 
-parentPort.postMessage({ started: true });
+// The cap as this thread was given it, so a refusal names it.
+parentPort.postMessage({ started: true, heapMb: resourceLimits.maxOldGenerationSizeMb });
 try {
   parentPort.postMessage({ result: await convert(workerData) });
 } catch (e) {

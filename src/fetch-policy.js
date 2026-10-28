@@ -9,6 +9,11 @@ export const MAX_BYTES = 5 * 1024 * 1024;
 export const MAX_HOPS = 5;
 export const TIMEOUT = 30000; // ms for the whole fetch, redirects included
 export const CONVERT_TIMEOUT = 20000; // ms for one conversion, CLI (src/bounded.js) and web (site/app.js)
+// MB of V8 old space for one CLI conversion thread (src/bounded.js; never above the process's whole
+// heap limit); the web worker has no such knob. Keep it at twice or more the unconstrained peak of a
+// page at every other limit (verify: cli memory converts one under it), and unequal to Node's default,
+// which a cap left off would also read back.
+export const HEAP_MB = 1536;
 // Past these a page is refused by name as htmlparser2 parses it, before a tree is built
 // (src/html.js); they bound the parse. CONVERT_TIMEOUT, not these, bounds a conversion: extraction
 // time grows with depth times text, so a page inside both can still run out the clock.

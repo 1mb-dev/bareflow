@@ -101,7 +101,8 @@ npm run bundle                    # dist/bareflow.js: convert() for the browser,
 ```
 
 Exit 0 with the document on stdout; 2 on a usage error; 1 when the fetch or extraction fails,
-with the reason on stderr. A fetch has 30 s in total, redirects included, and the conversion 20 s.
+with the reason on stderr. A fetch has 30 s in total, redirects included, and the conversion 20 s
+and up to 1536 MB of heap (a V8 heap flag in NODE_OPTIONS replaces that cap).
 A page that is not HTML, is over 5 MB, or whose markup nests past 256 levels or holds over 50,000
 elements, is refused by name, and so is one that keeps no readable text (a page built by JavaScript).
 

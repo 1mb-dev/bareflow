@@ -20,7 +20,7 @@ import { convert } from "./convert.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
 import { decompress, fetchSnapshot, nodeTransport } from "./fetch.js";
-import { CONVERT_TIMEOUT, fetchBody, fetchPage, MAX_BYTES, MAX_DEPTH, MAX_ELEMENTS, snapshot, TIMEOUT } from "./fetch-policy.js";
+import { CONVERT_TIMEOUT, fetchBody, fetchPage, HEAP_MB, MAX_BYTES, MAX_DEPTH, MAX_ELEMENTS, snapshot, TIMEOUT } from "./fetch-policy.js";
 import { edgeTransport, handler, SITEVERIFY, WEB_MAX_BYTES } from "./edge.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
@@ -31,7 +31,7 @@ import { main, USAGE } from "./cli.js";
 import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
 import { NotHtml, parseHtml, parsedSize } from "./html.js";
-import { convertBounded } from "./bounded.js";
+import { convertBounded, heapCap } from "./bounded.js";
 import { scoreLoss, scoreNav } from "./truth.js";
 import { VERSION, EXTRACTOR_VERSION } from "./version.js";
 import { sha256 } from "./sha256.js";
@@ -1030,6 +1030,30 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   // Only a refusal before linkedom builds answers 5 MB of nesting inside the deadline.
   const deep = await convertBounded({ ...base, html: "<div>".repeat(1e6) }).then(() => ({}), (e) => e);
   if (deep.code !== "too-deep") seam.push(`a million levels in the thread: ${deep.code ?? "converted"}`);
+  // The thread's old space is capped at HEAP_MB, clamped on a host whose heap limit is lower (read
+  // back); past a cap it ends as "memory", named, and this process goes on. 24 MB: flat(45000) starts
+  // under it (12 MB is the load edge) and needs over 64 MB, so the cap, not the clock, ends it. A V8
+  // heap flag on this process replaces every thread's cap, and then no cap here holds.
+  const mem = [];
+  const FLAG = "a cap did not hold: a V8 heap flag on this process (NODE_OPTIONS or node's own) replaces every thread's cap; run verify without one";
+  if (late.heapMb !== heapCap()) mem.push(`heap read back ${late.heapMb}, want ${heapCap()}`);
+  const over = await convertBounded({ ...base, html: flat(45000) }, CONVERT_TIMEOUT, 24).then(() => ({}), (e) => e);
+  if (over.code !== "memory" || over.host !== "q.example" || !over.started || over.heapMb !== 24) mem.push(`24 MB: ${over.code ?? "converted"} ${over.host}, started ${over.started}, read back ${over.heapMb}${over.code ? "" : ` (${FLAG})`}`);
+  // 4 MB: the converter cannot load, which is not the page's: Node's own error, never "memory".
+  const unloaded = await convertBounded({ ...base, html: flat(10) }, CONVERT_TIMEOUT, 4).then(() => ({}), (e) => e);
+  if (unloaded.code !== "ERR_WORKER_OUT_OF_MEMORY") mem.push(`4 MB: ${unloaded.code ?? "converted"}, want Node's ERR_WORKER_OUT_OF_MEMORY${unloaded.code ? "" : ` (${FLAG})`}`);
+  const MEM_SAID = (mb) => `bareflow: converting p.example's page needed more than ${mb} MB of memory, bareflow's limit. If the site also publishes it in parts, convert one part; otherwise open it in a browser.\n`;
+  for (const heapMb of [HEAP_MB, 24]) {
+    const [exit, said] = await cliSays(Object.assign(new Error("x"), { code: "memory", host: "p.example", heapMb }));
+    if (exit !== 1 || said !== MEM_SAID(heapMb)) mem.push(`cli ${heapMb}: exit ${exit}, ${JSON.stringify(said)}`);
+  }
+  if (!(await readFile(join(ROOT, "README.md"), "utf8")).includes(`${HEAP_MB} MB of heap`)) mem.push(`README does not state ${HEAP_MB} MB of heap`);
+  // A page at every other limit (49,000 items, 4.4 MB; ~570 MB unconstrained on Node 22, under 400 MB
+  // capped) converts under the cap. The deadline is lifted: this row measures memory, the seam row the clock.
+  const atBound = `<html><head><title>T</title></head><body><main><ul>${Array.from({ length: 49000 }, (_, i) => `<li>item ${i} ${"word ".repeat(15)}</li>`).join("")}</ul></main></body></html>`;
+  const fits = await convertBounded({ ...base, html: atBound }, 120000).then(() => "ok", (e) => e.code ?? e.message);
+  if (fits !== "ok") mem.push(`at-bound page under ${heapCap()} MB: ${fits}`);
+  record("cli", "memory", `the conversion thread's old space is capped at ${heapCap()} MB (HEAP_MB ${HEAP_MB}${heapCap() < HEAP_MB ? ", clamped to this host's heap limit" : ""}) (read back); a thread past a 24 MB cap ends as "memory" with its host and the process goes on, one that cannot load under 4 MB as Node's error; the CLI names the cap, exit 1; README states it; a page at every other limit converts under it${mem.length ? `: ${mem.join("; ")}` : ""}`, !mem.length);
   const appSrcText = await readFile(join(ROOT, "site/app.js"), "utf8");
   if (Number(appSrcText.match(/const CONVERT_TIMEOUT = (\d+);/)?.[1]) !== CONVERT_TIMEOUT) seam.push("site/app.js CONVERT_TIMEOUT differs from the policy's");
   record("web", "seam", `parse seam: ${Object.keys(REFUSED).length} non-HTML bodies refused by name in convert and the worker, the CLI's three sentences exit 1; ${Object.keys(KEPT).length} pages with implied tags keep their text and title once; depth and element caps at their boundaries; the CLI's conversion thread and its deadline${seam.length ? `: ${seam.join("; ")}` : ""}`, !seam.length);

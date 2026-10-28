@@ -19,6 +19,7 @@ function refusal(e, url) {
   if (e?.code === "too-big") return `${host}'s page has more than ${MAX_ELEMENTS.toLocaleString("en-US")} elements, past bareflow's limit. ${PARTS}`;
   if (e?.code === "over-cap") return `${host}'s page is over ${MAX_BYTES / 1048576} MB, bareflow's limit. ${PARTS}`;
   if (e?.code === "slow") return `converting ${host}'s page took over ${CONVERT_TIMEOUT / 1000} seconds, bareflow's limit. Open it in a browser.`;
+  if (e?.code === "memory") return `converting ${host}'s page needed more than ${e.heapMb} MB of memory, bareflow's limit. ${PARTS}`;
   return null;
 }
 
