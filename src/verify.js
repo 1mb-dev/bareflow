@@ -5,13 +5,13 @@
 // failure.
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { createServer } from "node:http";
 import vm from "node:vm";
-import { join, dirname } from "node:path";
+import { join, dirname, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import { gzipSync, inflateSync } from "node:zlib";
@@ -698,8 +698,9 @@ const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, input
 {
   const pkg = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8"));
   const defuddle = JSON.parse(await readFile(join(ROOT, "node_modules/defuddle/package.json"), "utf8"));
-  record("version", "pinned", `src/version.js is ${VERSION}, defuddle ${EXTRACTOR_VERSION}; package.json ${pkg.version}, defuddle pinned ${pkg.dependencies.defuddle}, installed ${defuddle.version}`,
-    VERSION === pkg.version && EXTRACTOR_VERSION === defuddle.version && pkg.dependencies.defuddle === defuddle.version);
+  const wrap = JSON.parse(await readFile(join(ROOT, "npm-shrinkwrap.json"), "utf8"));
+  record("version", "pinned", `src/version.js is ${VERSION}, defuddle ${EXTRACTOR_VERSION}; package.json ${pkg.version}, npm-shrinkwrap.json ${wrap.version} (root ${wrap.packages[""].version}), defuddle pinned ${pkg.dependencies.defuddle}, installed ${defuddle.version}`,
+    VERSION === pkg.version && wrap.version === pkg.version && wrap.packages[""].version === pkg.version && EXTRACTOR_VERSION === defuddle.version && pkg.dependencies.defuddle === defuddle.version);
   // htmlparser2 runs twice per page, as the limit pass (src/html.js) and inside linkedom: declared
   // with linkedom's own range, resolved to one copy from both, bundled once.
   const linkedom = JSON.parse(await readFile(join(ROOT, "node_modules/linkedom/package.json"), "utf8"));
@@ -2219,6 +2220,79 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("surface", "golden", golden === text ? "CLI, IR shape, header, note sources unchanged" : `changed against test/golden/surface.json; if meant, run node src/verify.js --bless-surface\n${text}`, golden === text);
 }
 
+// The package as npm publishes it, packed once into a temp dir under os.tmpdir() (no node_modules
+// above it to fall back on). Its sorted file list equals test/golden/pack.json (--bless-pack after
+// a meant change): a stray file and a missing one are both red. Installed there with the
+// shrinkwrap's runtime entries only (neither dev, optional nor devOptional: --omit=optional drops
+// the optional ones), each the version the lock names, its bin answers --version and its CLI's output
+// on a frozen page equals this tree's byte for byte. A bare import in a packed file names a
+// dependency or node:, and a devDependency cannot be reached from it. Not npm's own installer
+// (offline it cannot resolve the tarball's dependencies): the lock's layout instead.
+{
+  const bad = [], tmp = await mkdtemp(join(tmpdir(), "bareflow-pack-"));
+  const exec = (cmd, args, opts = {}) => new Promise((ok) => { let out = "", err = ""; const c = spawn(cmd, args, { ...opts, env: { ...process.env, NODE_OPTIONS: "", NODE_PATH: "" } }); c.stdout.on("data", (x) => (out += x)); c.stderr.on("data", (x) => (err += x)); c.on("close", (code) => ok({ code, out, err })); c.on("error", (e) => ok({ code: -1, out, err: e.message })); });
+  try {
+    const packed = await exec("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", tmp], { cwd: ROOT });
+    const info = packed.code === 0 ? JSON.parse(packed.out)[0] : null;
+    if (!info) throw new Error(`npm pack: exit ${packed.code} ${packed.err.slice(0, 200)}`);
+    const files = info.files.map((f) => f.path).sort(), goldenPath = join(ROOT, "test/golden/pack.json"), text = JSON.stringify(files, null, 1) + "\n";
+    if (process.argv.includes("--bless-pack")) await writeFile(goldenPath, text);
+    const golden = JSON.parse(await readFile(goldenPath, "utf8").catch(() => "[]"));
+    const stray = files.filter((f) => !golden.includes(f)), missing = golden.filter((f) => !files.includes(f));
+    if (stray.length || missing.length) bad.push(`pack differs from test/golden/pack.json (stray ${stray.join(", ") || "none"}; missing ${missing.join(", ") || "none"}); if meant, run node src/verify.js --bless-pack`);
+    const untar = await exec("tar", ["xzf", join(tmp, info.filename), "-C", tmp]);
+    if (untar.code !== 0) throw new Error(`tar: ${untar.err.slice(0, 200)}`);
+    const pkgDir = join(tmp, "node_modules/bareflow");
+    await mkdir(join(tmp, "node_modules"), { recursive: true });
+    await rename(join(tmp, "package"), pkgDir);
+    const lock = JSON.parse(await readFile(join(ROOT, "npm-shrinkwrap.json"), "utf8")).packages;
+    const runtime = Object.entries(lock).filter(([k, v]) => k && !v.dev && !v.optional && !v.devOptional);
+    // Each entry alone: its nested node_modules are entries of their own, copied only if runtime.
+    // By depth, parents before the entries nested in them (copied together they race on mkdir); a
+    // level in parallel, settled, so every copy ends before the temp dir is removed.
+    const depth = ([k]) => k.split("node_modules/").length;
+    for (const d of [...new Set(runtime.map(depth))].sort((x, y) => x - y)) {
+      const level = runtime.filter((e) => depth(e) === d);
+      bad.push(...(await Promise.allSettled(level.map(async ([k, v]) => {
+        await cp(join(ROOT, k), join(tmp, k), { recursive: true, filter: (src) => !relative(join(ROOT, k), src).split(sep).includes("node_modules") });
+        const got = JSON.parse(await readFile(join(tmp, k, "package.json"), "utf8")).version;
+        return got === v.version ? null : `${k}: ${got}, the lock names ${v.version}`;
+      }))).map((r, i) => r.status === "rejected" ? `${level[i][0]}: ${String(r.reason?.message ?? r.reason)}` : r.value).filter(Boolean));
+    }
+    const deps = new Set(Object.keys(JSON.parse(await readFile(join(pkgDir, "package.json"), "utf8")).dependencies));
+    const SPEC = /\bfrom\s*["']([^"']+)["']|\b(?:import|require)\s*\(\s*["']([^"']+)["']\s*\)|^\s*import\s*["']([^"']+)["']/gm;
+    const name = (spec) => spec.split("/").slice(0, spec.startsWith("@") ? 2 : 1).join("/");
+    for (const f of files.filter((f) => f.endsWith(".js"))) {
+      for (const m of (await readFile(join(pkgDir, f), "utf8")).matchAll(SPEC)) {
+        const spec = m[1] ?? m[2] ?? m[3];
+        if (!spec.startsWith(".") && !spec.startsWith("node:") && !deps.has(name(spec))) bad.push(`${f} imports ${spec}, not a dependency`);
+      }
+    }
+    const devDeps = Object.keys(JSON.parse(await readFile(join(ROOT, "package.json"), "utf8")).devDependencies);
+    for (const [i, d] of devDeps.entries()) {
+      const probe = join(pkgDir, `src/__dev-${i}.js`);
+      await writeFile(probe, `import ${JSON.stringify(d)};\n`);
+      const got = await import(pathToFileURL(probe).href).then(() => "imported", (e) => e.code);
+      if (got !== "ERR_MODULE_NOT_FOUND") bad.push(`devDependency ${d} from the installed tree: ${got}, want ERR_MODULE_NOT_FOUND`);
+    }
+    // npm links the bin and sets its mode; what it needs from the file is the interpreter line.
+    const shebang = (await readFile(join(pkgDir, "bin/bareflow.js"), "utf8")).split("\n")[0];
+    if (shebang !== "#!/usr/bin/env node") bad.push(`bin/bareflow.js starts ${JSON.stringify(shebang)}, not #!/usr/bin/env node`);
+    const v = await exec(process.execPath, [join(pkgDir, "bin/bareflow.js"), "--version"]);
+    if (v.code !== 0 || v.out !== `${VERSION}\n`) bad.push(`installed bin --version: exit ${v.code}, ${JSON.stringify(v.out || v.err.slice(0, 200))}`);
+    const [name0, page0] = Object.entries(realPages)[0], html0 = await readFile(join(ROOT, "test/pages", name0), "utf8");
+    const said = async (cliMod, pipeMod, boundMod) => { let out = ""; const code = await cliMod.main([page0.url], { run: ({ url }) => pipeMod.run({ url, html: html0, retrievedAt: FIXED, convert: boundMod.convertBounded }), out: (x) => (out += x), err: (x) => (out += x) }); return `${code}\n${out}`; };
+    const inst = await Promise.all(["src/cli.js", "src/pipeline.js", "src/bounded.js"].map((f) => import(pathToFileURL(join(pkgDir, f)).href)));
+    const [installed, here] = await Promise.all([said(...inst), said({ main }, { run }, { convertBounded })]);
+    if (installed !== here) { const a = installed.split("\n"), b = here.split("\n"), at = Array.from({ length: Math.max(a.length, b.length) }, (_, i) => i).find((i) => a[i] !== b[i]); bad.push(`installed CLI on ${name0} differs from this tree's at line ${at + 1}: ${JSON.stringify(a[at]?.slice(0, 100))} vs ${JSON.stringify(b[at]?.slice(0, 100))}`); }
+    record("cli", "package", `npm pack: ${files.length} files equal to test/golden/pack.json; installed under the temp dir with the ${runtime.length} runtime lock entries at their versions, its bin's interpreter line and --version ${VERSION}, its CLI byte-equal to this tree's on ${name0}; bare imports only dependencies and node:, none of ${devDeps.length} devDependencies reachable${bad.length ? `: ${bad.join("; ")}` : ""}`, !bad.length);
+  } catch (e) {
+    record("cli", "package", `npm pack and the installed tree: ${[...bad, e.message].join("; ")}`, false);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+}
+
 // The CLI, in process through main() with run() over a frozen page: a usage error exits 2 and
 // never reaches run(); a parsed call reaches it with the URL; Markdown by default, the IR with
 // --json, exit 0. The shim (bin/bareflow.js) is spawned once: usage error, and a refused fetch.
@@ -2234,9 +2308,9 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("cli", "args", "--siblings, a second URL, an unknown flag, --version beside anything, or no URL: exit 2 with usage, run() never called",
     usage.every((r) => r.code === 2 && r.err === USAGE + "\n" && !r.urls.length && !r.out));
   const [md, js, js2] = [await call([page]), await call([page, "--json"]), await call(["--json", page])];
-  const version = await call(["--version"]), pkgVersion = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8")).version;
-  record("cli", "version", `--version alone: ${VERSION} and a newline on stdout, package.json's version, exit 0, run() never called`,
-    version.code === 0 && version.out === `${VERSION}\n` && VERSION === pkgVersion && !version.err && !version.urls.length);
+  const version = await call(["--version"]);
+  record("cli", "version", `--version alone: ${VERSION} and a newline on stdout, exit 0, run() never called`,
+    version.code === 0 && version.out === `${VERSION}\n` && !version.err && !version.urls.length);
   record("cli", "success", "Markdown by default, the IR with --json either side, exit 0, run() called with the URL",
     md.code === 0 && md.out.startsWith("---\nbareflow: ") && headerOk(md.out) && js.code === 0 && (() => { try { return JSON.parse(js.out).schema === SCHEMA; } catch { return false; } })() &&
     js2.out === js.out && JSON.stringify(md.urls) === JSON.stringify([page]) && !md.err);
