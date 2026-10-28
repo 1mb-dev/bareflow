@@ -32,8 +32,9 @@
     "!src/verify.js",
     "!src/truth.js",
     "!src/edge.js",
-    "docs",
-    "NOTICE"
+    "docs/ir.md",
+    "NOTICE",
+    "npm-shrinkwrap.json"
   ],
   "scripts": {
     "test": "node src/verify.js",
