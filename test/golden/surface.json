@@ -1,6 +1,6 @@
 {
  "cli": {
-  "usage": "usage: bareflow <url> [--json]",
+  "usage": "usage: bareflow <url> [--json] | bareflow --version",
   "usageExit": 2,
   "errorExit": 1,
   "env": []

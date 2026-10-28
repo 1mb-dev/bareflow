@@ -4,8 +4,9 @@
 import { run as pipelineRun } from "./pipeline.js";
 import { convertBounded } from "./bounded.js";
 import { CONVERT_TIMEOUT, MAX_BYTES, MAX_DEPTH, MAX_ELEMENTS } from "./fetch-policy.js";
+import { VERSION } from "./version.js";
 
-export const USAGE = "usage: bareflow <url> [--json]";
+export const USAGE = "usage: bareflow <url> [--json] | bareflow --version";
 
 // The parse seam's refusals (src/html.js NotHtml) and the fetch cap's (fetchPage), said with
 // the host and the next step.
@@ -24,6 +25,8 @@ function refusal(e, url) {
 }
 
 export async function main(args, { run = (o) => pipelineRun({ ...o, convert: convertBounded }), out = (s) => process.stdout.write(s), err = (s) => process.stderr.write(s) } = {}) {
+  // --version alone; beside anything else it is a usage error, as any unknown flag is.
+  if (args.length === 1 && args[0] === "--version") { out(VERSION + "\n"); return 0; }
   let url, asJson = false, bad = false;
   // One URL; an unknown flag or a second URL is a usage error, never silently ignored or read as
   // the URL.

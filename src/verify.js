@@ -2230,10 +2230,13 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     const code = await main(args, { run: (o) => { urls.push(o.url); return frozenRun(o); }, out: (x) => out.push(x), err: (x) => err.push(x) });
     return { code, out: out.join(""), err: err.join(""), urls };
   };
-  const usage = await Promise.all([[page, "--siblings=full"], [page, "--siblings", "full"], [page, page], [page, "--jsn"], []].map((a) => call(a)));
-  record("cli", "args", "--siblings, a second URL, an unknown flag, or no URL: exit 2 with usage, run() never called",
+  const usage = await Promise.all([[page, "--siblings=full"], [page, "--siblings", "full"], [page, page], [page, "--jsn"], [], ["--version", page], [page, "--version"], ["--version", "--version"]].map((a) => call(a)));
+  record("cli", "args", "--siblings, a second URL, an unknown flag, --version beside anything, or no URL: exit 2 with usage, run() never called",
     usage.every((r) => r.code === 2 && r.err === USAGE + "\n" && !r.urls.length && !r.out));
   const [md, js, js2] = [await call([page]), await call([page, "--json"]), await call(["--json", page])];
+  const version = await call(["--version"]), pkgVersion = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8")).version;
+  record("cli", "version", `--version alone: ${VERSION} and a newline on stdout, package.json's version, exit 0, run() never called`,
+    version.code === 0 && version.out === `${VERSION}\n` && VERSION === pkgVersion && !version.err && !version.urls.length);
   record("cli", "success", "Markdown by default, the IR with --json either side, exit 0, run() called with the URL",
     md.code === 0 && md.out.startsWith("---\nbareflow: ") && headerOk(md.out) && js.code === 0 && (() => { try { return JSON.parse(js.out).schema === SCHEMA; } catch { return false; } })() &&
     js2.out === js.out && JSON.stringify(md.urls) === JSON.stringify([page]) && !md.err);
