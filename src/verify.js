@@ -925,6 +925,11 @@ const child = (args, drive = () => {}, ms = 30000) => new Promise((ok) => {
   record("fetch", "held body", `a status that ends a hop closes a body the server never finishes, under the policy's budget: 404 ${gone}, 302 ${hop}`, gone === "404 closed" && hop === "302 closed");
   const flags = ["--import", hooks, bin], kill = TIMEOUT - 10000, refused = await child([...flags, `http://127.0.0.1:${port}/gone`], undefined, kill), paged = await child([...flags, `http://127.0.0.1:${port}/hop`], undefined, kill);
   record("cli", "held body", `the bin exits on a 404 and a 302 with an endless body: exit ${refused.code} and ${paged.code}`, refused.code === 1 && refused.err === `bareflow: HTTP 404 from http://127.0.0.1:${port}/gone; check the URL (bareflow does not retry)\n` && paged.code === 0 && paged.out.includes(`final: http://127.0.0.1:${port}/page`));
+  // A write in the thread with stderr closed. `ran`: a plant that never loaded exits 0 with the page too.
+  const ran = join(tmp, "ran"), noisy = join(tmp, "noisy.cjs"), page = `http://127.0.0.1:${port}/page`, undated = (s) => s.replace(/^retrieved: .*$/m, "");
+  await writeFile(noisy, `if (!require("node:worker_threads").isMainThread) { require("node:fs").writeFileSync(${JSON.stringify(ran)}, "x"); console.log("thread-console"); }\n`);
+  const open = await child([...flags, page]), shut = await child(["--require", noisy, ...flags, page], (c) => c.stderr.destroy());
+  record("cli", "closed stderr", `a closed stderr costs neither the page nor the exit code: exit ${shut.code}, ${shut.out.length} bytes, the plant ran: ${existsSync(ran)}`, open.code === 0 && shut.code === 0 && undated(shut.out) === undated(open.out) && existsSync(ran));
   server.closeAllConnections();
   await new Promise((ok) => server.close(ok));
   // Port 1 refuses: one address rejects with Node's text, two with an AggregateError whose message is empty.
@@ -1104,6 +1109,17 @@ const siteOut = await site(join(tmpdir(), `bareflow-site-${process.pid}`), "test
   const fits = await convertBounded({ ...base, html: atBound }, 120000).then(() => "ok", (e) => e.code ?? e.message);
   if (fits !== "ok") mem.push(`at-bound page under ${heapCap()} MB: ${fits}`);
   record("cli", "memory", `the conversion thread's old space is capped at ${heapCap()} MB (HEAP_MB ${HEAP_MB}${heapCap() < HEAP_MB ? ", clamped to this host's heap limit" : ""}; read back); a thread past a 24 MB cap ends as "memory" with its host and the process goes on, one that cannot load under 4 MB as Node's error; the CLI names the cap, exit 1; README states it; a page at every other limit converts under it${mem.length ? `: ${mem.join("; ")}` : ""}`, !mem.length);
+  // A --require preload runs in worker threads too (loader hooks do not), so the write lands in the
+  // real thread with no seam in the product. `ran` is the plant's own proof: without it a preload that
+  // never loaded reads as clean stdout. Thread output to stderr can lose its tail at terminate: not asserted.
+  const planted = await mkdtemp(join(tmpdir(), "bareflow-thread-"));
+  try {
+    const ran = join(planted, "ran"), noisy = join(planted, "noisy.cjs"), driver = join(planted, "driver.mjs");
+    await writeFile(noisy, `if (!require("node:worker_threads").isMainThread) { require("node:fs").writeFileSync(${JSON.stringify(ran)}, "x"); console.log("thread-console"); process.stdout.write("thread-write"); }\n`);
+    await writeFile(driver, `import { convertBounded } from ${JSON.stringify(pathToFileURL(join(ROOT, "src/bounded.js")).href)};\nawait convertBounded(${JSON.stringify({ ...base, html: page })});\nprocess.stdout.write("page");\n`);
+    const out = await child(["--require", noisy, driver]);
+    record("cli", "thread stdout", `a write in the conversion thread stays off this process's stdout: ${JSON.stringify(out.out)}, exit ${out.code}, the plant ran: ${existsSync(ran)}`, out.code === 0 && out.out === "page" && existsSync(ran));
+  } finally { await rm(planted, { recursive: true, force: true }); }
   const appSrcText = await readFile(join(ROOT, "site/app.js"), "utf8");
   if (Number(appSrcText.match(/const CONVERT_TIMEOUT = (\d+);/)?.[1]) !== CONVERT_TIMEOUT) seam.push("site/app.js CONVERT_TIMEOUT differs from the policy's");
   record("web", "seam", `parse seam: ${Object.keys(REFUSED).length} non-HTML bodies refused by name in convert and the worker, the CLI's three sentences exit 1; ${Object.keys(KEPT).length} pages with implied tags keep their text and title once; depth and element caps at their boundaries; the CLI's conversion thread and its deadline${seam.length ? `: ${seam.join("; ")}` : ""}`, !seam.length);

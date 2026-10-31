@@ -6,6 +6,7 @@
 // generation comes on top): past it Node ends the thread (the process lives), refused as "memory"
 // once the conversion has started. `heapMb` on a slow or memory error is the cap the thread was
 // given. A V8 heap flag on the process (NODE_OPTIONS) replaces every thread's cap; README says so.
+// A Worker's stdout reaches this process's stdout by default, where the page goes: to stderr instead.
 import { getHeapStatistics } from "node:v8";
 import { Worker } from "node:worker_threads";
 import { CONVERT_TIMEOUT, HEAP_MB } from "./fetch-policy.js";
@@ -15,7 +16,8 @@ export const heapCap = (heapMb = HEAP_MB) => Math.min(heapMb, Math.floor(getHeap
 export function convertBounded(args, timeout = CONVERT_TIMEOUT, heapMb = HEAP_MB) {
   const host = URL.canParse(args.finalUrl ?? args.url) ? new URL(args.finalUrl ?? args.url).hostname : undefined;
   return new Promise((resolve, reject) => {
-    const thread = new Worker(new URL("./convert-thread.js", import.meta.url), { workerData: args, resourceLimits: { maxOldGenerationSizeMb: heapCap(heapMb) } });
+    const thread = new Worker(new URL("./convert-thread.js", import.meta.url), { workerData: args, stdout: true, resourceLimits: { maxOldGenerationSizeMb: heapCap(heapMb) } });
+    thread.stdout.pipe(process.stderr);
     let started = false, settled = false, readBack;
     const done = (settle, value) => { if (settled) return; settled = true; clearTimeout(timer); thread.terminate(); settle(value); };
     const timer = setTimeout(() => done(reject, Object.assign(new Error(`the conversion took over ${timeout} ms`), { code: "slow", host, started, heapMb: readBack })), timeout);
