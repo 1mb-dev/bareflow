@@ -10,6 +10,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { createServer } from "node:http";
+import { Readable } from "node:stream";
 import vm from "node:vm";
 import { join, dirname, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -20,7 +21,7 @@ import { convert } from "./convert.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
 import { decompress, fetchSnapshot, nodeTransport } from "./fetch.js";
-import { CONVERT_TIMEOUT, fetchBody, fetchPage, HEAP_MB, MAX_BYTES, MAX_DEPTH, MAX_ELEMENTS, REQUEST_HEADERS, snapshot, TIMEOUT } from "./fetch-policy.js";
+import { CONVERT_TIMEOUT, fetchBody, fetchPage, HEAP_MB, MAX_BYTES, MAX_DEPTH, MAX_ELEMENTS, MAX_LINE, REQUEST_HEADERS, snapshot, TIMEOUT } from "./fetch-policy.js";
 import { edgeTransport, handler, SITEVERIFY, WEB_MAX_BYTES } from "./edge.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
@@ -28,6 +29,7 @@ import { renderMarkdown, NOTE_SOURCES, REASON_IS_OWN } from "./render.js";
 import { marked } from "marked";
 import { parseHTML } from "linkedom";
 import { main, USAGE } from "./cli.js";
+import { serve, TOOLS } from "./mcp.js";
 import { unescape } from "./md.js";
 import { extractNav } from "./compose.js";
 import { NotHtml, parseHtml, parsedSize } from "./html.js";
@@ -2278,6 +2280,9 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     section: keys(sec), loss: keys(loss), blockTypes: [...BLOCK_TYPES].sort(),
     header: fullMd.slice(1, fullMd.indexOf("---", 1)).map((l) => l.split(":")[0]),
     noteSources: [...NOTE_SOURCES].sort(),
+    tools: TOOLS,
+    maxLine: MAX_LINE,
+    requestHeaders: REQUEST_HEADERS,
   };
   const goldenPath = join(ROOT, "test/golden/surface.json");
   const text = JSON.stringify(current, null, 1) + "\n";
@@ -2346,6 +2351,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     if (shebang !== "#!/usr/bin/env node") bad.push(`bin/bareflow.js starts ${JSON.stringify(shebang)}, not #!/usr/bin/env node`);
     const v = await exec(process.execPath, [join(pkgDir, "bin/bareflow.js"), "--version"]);
     if (v.code !== 0 || v.out !== `${VERSION}\n`) bad.push(`installed bin --version: exit ${v.code}, ${JSON.stringify(v.out || v.err.slice(0, 200))}`);
+    const init = await child([join(pkgDir, "bin/bareflow.js"), "mcp"], (c) => c.stdin.end('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}\n'));
+    if (init.code !== 0 || !init.out.includes(`"serverInfo":{"name":"bareflow","version":"${VERSION}"}`)) bad.push(`installed bin mcp: exit ${init.code}, ${JSON.stringify(init.out.slice(0, 200))}`);
     const [name0, page0] = Object.entries(realPages)[0], html0 = await readFile(join(ROOT, "test/pages", name0), "utf8");
     const said = async (cliMod, pipeMod, boundMod) => { let out = ""; const code = await cliMod.main([page0.url], { run: ({ url }) => pipeMod.run({ url, html: html0, retrievedAt: FIXED, convert: boundMod.convertBounded }), out: (x) => (out += x), err: (x) => (out += x) }); return `${code}\n${out}`; };
     const inst = await Promise.all(["src/cli.js", "src/pipeline.js", "src/bounded.js"].map((f) => import(pathToFileURL(join(pkgDir, f)).href)));
@@ -2357,6 +2364,145 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
+}
+
+// fetch_doc through the shipped route (7.2). A preload swaps src/fetch.js under the real bin, so a spawned
+// server converts a frozen page with no seam in the product; the swap also drops the SSRF checks, so
+// refusals run on a bare spawn. The SDK's reader skips an unparsable line through onerror: onerror fails the
+// row, or a polluted stdout reads as green. Hooks do not reach the thread, so its plant is a --require.
+{
+  const bad = [], tmp = await mkdtemp(join(tmpdir(), "bareflow-mcp-"));
+  let client;
+  const bin = join(ROOT, "bin/bareflow.js"), done = () => rm(tmp, { recursive: true, force: true });
+  try {
+    const [name0, page0] = Object.entries(realPages)[0], noisy = join(tmp, "noisy.cjs"), hooks = join(tmp, "hooks.mjs");
+    const STUB = `import { readFileSync } from "node:fs";
+import { snapshot } from ${JSON.stringify(pathToFileURL(join(ROOT, "src/fetch-policy.js")).href)};
+export function fetchSnapshot(...a) {
+  if (a.length !== 1) throw new Error("fetch reached with " + a.length + " arguments");
+  globalThis.hanging = a[0].endsWith("/hang");
+  if (process.argv.at(-1) === "mcp") { console.log("main-console"); console.dir({ main: "dir" }); process.stdout.write("main-write\\n"); }
+  return { ...snapshot({ finalUrl: a[0], body: readFileSync(${JSON.stringify(join(ROOT, "test/pages", name0))}) }), retrievedAt: "2026-10-13T00:00:00.000Z" };
+}
+`;
+    await writeFile(noisy, `const { isMainThread, workerData } = require("node:worker_threads");
+if (isMainThread) { const timer = setTimeout; globalThis.setTimeout = (f, ms, ...a) => timer(f, ms === ${CONVERT_TIMEOUT} && globalThis.hanging ? 1000 : ms, ...a); }
+else {
+  console.log("thread-console");
+  if (String(workerData.url).endsWith("/die")) process.exit(3);
+  const { parentPort } = require("node:worker_threads"), post = parentPort.postMessage.bind(parentPort);
+  parentPort.postMessage = (m) => { post(m); if (m.started && String(workerData.url).endsWith("/hang")) for (;;); };
+}
+`);
+    await writeFile(hooks, `import module from "node:module";\nconst STUB = ${JSON.stringify(STUB)};\nmodule.registerHooks({ load: (url, context, next) => (url.endsWith("/src/fetch.js") ? { format: "module", source: STUB, shortCircuit: true } : next(url, context)) });\n`);
+    const flags = ["--require", noisy, "--import", hooks, bin];
+    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+    const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js");
+    client = new Client({ name: "verify", version: "0" });
+    client.onerror = (e) => bad.push(`client: ${e.message.slice(0, 120)}`);
+    await client.connect(new StdioClientTransport({ command: process.execPath, args: [...flags, "mcp"], env: CHILD_ENV, stderr: "pipe" }));
+    const { tools } = await client.listTools();
+    const fetched = (args) => client.callTool({ name: "fetch_doc", arguments: args });
+    const [cliMd, cliJson] = [await child([...flags, page0.url], () => {}), await child([...flags, page0.url, "--json"], () => {})];
+    const md = await fetched({ url: page0.url }), json = await fetched({ url: page0.url, format: "json" });
+    // A thread that ends mid-call is a refusal for that call alone, and proves the call ran in a thread.
+    const died = await fetched({ url: `${page0.url}/die` }), after = await fetched({ url: page0.url });
+    const hung = await client.callTool({ name: "fetch_doc", arguments: { url: `${page0.url}/hang` } }, undefined, { timeout: 8000 }), afterHung = await fetched({ url: page0.url });
+    if (cliMd.code !== 0 || cliJson.code !== 0) bad.push(`cli on the stub: exit ${cliMd.code}, ${cliJson.code}`);
+    if (tools.map((t) => t.name).join() !== "fetch_doc") bad.push(`tools: ${tools.map((t) => t.name)}`);
+    if (md.isError || md.content[0].text !== cliMd.out) bad.push("markdown differs from the CLI");
+    if (json.isError || json.content[0].text !== cliJson.out) bad.push("json differs from the CLI");
+    if (!died.isError || !died.content[0].text.startsWith("bareflow: the conversion thread exited (code 3)")) bad.push(`a dead thread: ${JSON.stringify(died).slice(0, 160)}`);
+    if (after.isError || after.content[0].text !== cliMd.out) bad.push("the call after a dead thread differs");
+    if (!hung.isError || hung.content[0].text !== `bareflow: converting ${new URL(page0.url).hostname}'s page took over ${CONVERT_TIMEOUT / 1000} seconds, bareflow's limit. Open it in a browser.\n`) bad.push(`a hung thread: ${JSON.stringify(hung).slice(0, 200)}`);
+    if (afterHung.isError || afterHung.content[0].text !== cliMd.out) bad.push("the call after a hung thread differs");
+  } catch (e) { bad.push(e.message); } finally { await client?.close(); } // a call that timed out left its server busy
+  record("cli", "mcp", `SDK client on the real bin with src/fetch.js swapped: one tool, Markdown and JSON byte-equal to the CLI, a dead and a hung thread refused for their call alone, fetch reached with the url alone, nothing but JSON-RPC on stdout${bad.length ? `: ${bad.join("; ")}` : ""}`, !bad.length);
+
+  try {
+    const said = [], { JSONRPCMessageSchema } = await import("@modelcontextprotocol/sdk/types.js");
+    const line = (o) => JSON.stringify({ jsonrpc: "2.0", ...o }) + "\n", call = (id, args) => line({ id, method: "tools/call", params: { name: "fetch_doc", arguments: args } });
+    const refused = [
+      [{ url: "http://127.0.0.1/" }, "bareflow: blocked address for 127.0.0.1: bareflow fetches public addresses only\n"],
+      [{ url: "file:///etc/passwd" }, "bareflow: unsupported protocol file: in file:///etc/passwd; give an http(s) URL\n"],
+      [{ url: "--version" }, "bareflow: not a URL: --version; give a full http(s) URL\n"],
+      [{ url: "http://127.0.0.1/", html: "<p>x" }, "bareflow: fetch_doc takes url and format, not html\n"],
+      [{ url: "http://127.0.0.1/", timeout: 1 }, "bareflow: fetch_doc takes url and format, not timeout\n"],
+      [{ url: ["http://127.0.0.1/"] }, "bareflow: fetch_doc needs url, a string\n"],
+      [{ url: "http://127.0.0.1/", format: "html" }, 'bareflow: fetch_doc format is "markdown" or "json"\n'],
+      [[], "bareflow: fetch_doc takes an object with url and format\n"],
+      [{}, "bareflow: fetch_doc needs url, a string\n"],
+    ];
+    const script = [
+      line({ id: "a", method: "initialize", params: { protocolVersion: "2025-06-18" } }), line({ id: "b", method: "initialize", params: { protocolVersion: "2025-03-26" } }),
+      line({ id: "g", method: "initialize", params: { protocolVersion: "1999-01-01" } }), "\n", line({ method: "notifications/initialized" }), line({ id: "c", method: "ping" }), line({ id: "d", method: "nope" }),
+      line({ id: "e", method: "tools/call", params: { name: { toString: 1 }, arguments: {} } }), line({ id: "f", method: 5 }), '{"jsonrpc":"2.0","id":1e999,"method":"ping"}\n', '{"jsonrpc":"2.0","id":1.5,"method":"ping"}\n', '{"jsonrpc":"2.0","id":9007199254740993,"method":"ping"}\n', "{not json\n", "[]\n", ...refused.map(([args], i) => call(i, args)),
+    ];
+    const all = await child([bin, "mcp"], (c) => c.stdin.end(script.join("")));
+    const lines = all.out.split("\n").slice(0, -1), parsed = [];
+    for (const l of lines) {
+      try { parsed.push(JSON.parse(l)); } catch { said.push(`stdout line not JSON: ${l.slice(0, 80)}`); }
+      if (!JSONRPCMessageSchema.safeParse(parsed.at(-1)).success) said.push(`not an MCP message: ${l.slice(0, 80)}`);
+    }
+    const byId = new Map(parsed.map((m) => [m.id, m]));
+    if (all.code !== 0) said.push(`exit at EOF: ${all.code}`);
+    if (parsed.length !== script.length - 2 || parsed.some((m) => m.jsonrpc !== "2.0")) said.push(`${parsed.length} replies to ${script.length - 2} requests`);
+    if (byId.get("a")?.result?.protocolVersion !== "2025-06-18" || byId.get("b")?.result?.protocolVersion !== "2024-11-05" || byId.get("g")?.result?.protocolVersion !== "2025-11-25") said.push("protocol version");
+    if (byId.get("b")?.result?.serverInfo?.version !== VERSION) said.push("serverInfo version");
+    if (JSON.stringify(byId.get("c")?.result) !== "{}") said.push("ping");
+    if (byId.get("d")?.error?.code !== -32601 || byId.get("e")?.error?.code !== -32602 || byId.get("f")?.error?.code !== -32600) said.push("unknown method, unknown tool, or a usable id on a bad request");
+    if (parsed.filter((m) => m.id === undefined).map((m) => m.error?.code).join() !== "-32600,-32600,-32600,-32700,-32600") said.push("no usable id, not JSON, not a message");
+    for (const [i, [args, want]] of refused.entries()) {
+      const r = byId.get(i)?.result;
+      if (!r?.isError || r.content[0].text !== want) said.push(`${JSON.stringify(args)}: ${String(JSON.stringify(r)).slice(0, 140)}`);
+    }
+    for (const [{ url }, want] of refused.slice(0, 2)) {
+      const r = await child([bin, url], () => {});
+      if (r.err !== want) said.push(`the CLI on ${url}: ${r.err.slice(0, 100)}`);
+    }
+    record("cli", "mcp refusals", `a bare spawn: ${refused.length} bad calls refused through the tool, the CLI saying the same on the two it can reach, protocol errors by code, a notification and a blank line unanswered, every stdout line an MCP message by the SDK's schema, exit 0 at EOF${said.length ? `: ${said.join("; ")}` : ""}`, !said.length);
+
+    const stream = [], firstError = (out) => { try { return JSON.parse(out.split("\n")[0]).error?.code; } catch { return undefined; } };
+    const held = await child([bin, "mcp"], (c) => c.stdin.write(Buffer.alloc(MAX_LINE + 1, 120)), 5000);
+    if (held.code !== 1 || firstError(held.out) !== -32600 || !held.err.includes(`passed ${MAX_LINE} bytes`)) stream.push(`one byte past the cap: exit ${held.code}, ${held.out.slice(0, 100)}`);
+    const atCap = await child([bin, "mcp"], (c) => c.stdin.end(Buffer.concat([Buffer.alloc(MAX_LINE, 120), Buffer.from("\n")])), 5000);
+    if (atCap.code !== 0 || firstError(atCap.out) !== -32700) stream.push(`at the cap: exit ${atCap.code}, ${atCap.out.slice(0, 100)}`);
+    const cut = await child([bin, "mcp"], (c) => c.stdin.end(line({ id: 8, method: "ping" }).trimEnd()), 5000);
+    if (cut.code !== 1 || cut.out !== "" || !cut.err.includes("ended inside a message")) stream.push(`input ended inside a message: exit ${cut.code}, ${JSON.stringify(cut.out).slice(0, 100)}`);
+    const hold = join(tmp, "hold.cjs");
+    await writeFile(hold, "setInterval(() => {}, 1000);\n");
+    const heldOpen = await child(["--require", hold, bin, "mcp"], (c) => c.stdin.end(), 5000);
+    if (heldOpen.code !== 0) stream.push(`a handle left open at EOF: exit ${heldOpen.code}`);
+    for (const args of [["mcp", "--json"], ["--json", "mcp"], ["mcp", "x"]]) {
+      const r = await child([bin, ...args], () => {}, 5000);
+      if (r.code !== 2 || r.err !== `${USAGE}\n`) stream.push(`bareflow ${args.join(" ")}: exit ${r.code}`);
+    }
+    const late = join(tmp, "late.cjs");
+    await writeFile(late, 'setTimeout(() => console.log("late"), 300);\n');
+    const noStderr = await child(["--require", late, bin, "mcp"], (c) => { c.stderr.destroy(); setTimeout(() => c.stdin.end(line({ id: 9, method: "ping" })), 800); }, 5000);
+    if (noStderr.code !== 0 || !noStderr.out.includes('"id":9')) stream.push(`a closed stderr: exit ${noStderr.code}, ${noStderr.out.slice(0, 100)}`);
+    let readSaid = "";
+    const unreadable = new Readable({ read() { this.destroy(new Error("read failed")); } });
+    const readCode = await serve({ input: unreadable, write: (_s, cb) => cb(), err: (x) => { readSaid += x; }, tool: async () => ({ ok: true, text: "" }) });
+    if (readCode !== 1 || !readSaid.includes("read failed")) stream.push(`a failed read: exit ${readCode}, ${readSaid}`);
+    const closed = await child([bin, "mcp"], (c) => { c.stdout.destroy(); c.stdin.write(line({ id: 7, method: "ping" })); }, 5000);
+    if (closed.code !== 1 || !closed.err.includes("dropped the reply to 7")) stream.push(`stdout closed: exit ${closed.code}, ${closed.err.slice(0, 100)}`);
+    record("cli", "mcp stream", `a message past ${MAX_LINE} bytes stops the server with -32600 and exit 1, one at the cap is read; input ending inside a message and a closed stdout exit 1 by name; a handle left open does not hold the process; a closed stderr does not end the server; a failed read exits 1 by name; mcp with anything beside it is a usage error${stream.length ? `: ${stream.join("; ")}` : ""}`, !stream.length);
+
+  } catch (e) { record("cli", "mcp stream", `threw: ${e.message}`, false); } finally { await done(); }
+
+  // What leaves on a fetch, whole: the threat page's exfiltration row. userinfo in the URL is not sent.
+  const seen = await new Promise((ok) => {
+    const server = createServer((req, res) => { ok({ method: req.method, url: req.url, headers: req.rawHeaders }); res.writeHead(200, { "content-type": "text/html" }); res.end("<html></html>"); });
+    server.listen(0, "127.0.0.1", async () => {
+      await fetchBody(`http://user:secret@site.test:${server.address().port}/x?q=1`, nodeTransport(loopback("127.0.0.1")), { timeout: 3000 }).catch((e) => ok({ method: e.message, url: "", headers: [] }));
+      server.close();
+    });
+  });
+  const sent = Object.fromEntries(seen.headers.flatMap((v, i, a) => (i % 2 ? [] : [[v.toLowerCase(), a[i + 1]]])));
+  const wanted = { ...REQUEST_HEADERS, connection: "close" }, host = sent.host ?? "";
+  delete sent.host;
+  record("cli", "fetch request", `what leaves on a fetch: ${seen.method} ${seen.url}, ${Object.keys(sent).length + 1} headers, equal to REQUEST_HEADERS (pinned in the surface golden) + host + connection; userinfo not sent`, seen.method === "GET" && seen.url === "/x?q=1" && host.startsWith("site.test:") && JSON.stringify(Object.entries(sent).sort()) === JSON.stringify(Object.entries(wanted).sort()));
 }
 
 // The CLI, in process through main() with run() over a frozen page: a usage error exits 2 and

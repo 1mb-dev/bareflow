@@ -4,9 +4,10 @@
 import { run as pipelineRun } from "./pipeline.js";
 import { convertBounded } from "./bounded.js";
 import { CONVERT_TIMEOUT, MAX_BYTES, MAX_DEPTH, MAX_ELEMENTS } from "./fetch-policy.js";
+import { serve } from "./mcp.js";
 import { VERSION } from "./version.js";
 
-export const USAGE = "usage: bareflow <url> [--json] | bareflow --version";
+export const USAGE = "usage: bareflow <url> [--json] | bareflow --version | bareflow mcp";
 
 // The parse seam's refusals (src/html.js NotHtml) and the fetch cap's (fetchPage), said with
 // the host and the next step.
@@ -24,7 +25,23 @@ function refusal(e, url) {
   return null;
 }
 
-export async function main(args, { run = (o) => pipelineRun({ ...o, convert: convertBounded }), out = (s) => process.stdout.write(s), err = (s) => process.stderr.write(s) } = {}) {
+const bounded = (o) => pipelineRun({ ...o, convert: convertBounded });
+
+// The one path from a URL to a caller's text: the CLI prints it, fetch_doc returns it. `run` gets the
+// url alone: its other params skip fetch and the SSRF checks.
+async function render(url, asJson, run) {
+  try {
+    const { doc, markdown } = await run({ url });
+    return { ok: true, text: (asJson ? JSON.stringify(doc) : markdown) + "\n" };
+  } catch (e) {
+    return { ok: false, text: `bareflow: ${refusal(e, url) ?? e?.message ?? e}\n` };
+  }
+}
+
+// bin/bareflow.js routes `mcp` alone here.
+export const mcp = ({ write, err }) => serve({ input: process.stdin, write, err, tool: (url, asJson) => render(url, asJson, bounded) });
+
+export async function main(args, { run = bounded, out = (s) => process.stdout.write(s), err = (s) => process.stderr.write(s) } = {}) {
   // --version alone; beside anything else it is a usage error, as any unknown flag is.
   if (args.length === 1 && args[0] === "--version") { out(VERSION + "\n"); return 0; }
   let url, asJson = false, bad = false;
@@ -35,14 +52,8 @@ export async function main(args, { run = (o) => pipelineRun({ ...o, convert: con
     else if (!a.startsWith("-") && url === undefined) url = a;
     else bad = true;
   }
-  if (bad || !url) { err(USAGE + "\n"); return 2; }
-  try {
-    const { doc, markdown } = await run({ url });
-    const output = asJson ? JSON.stringify(doc) : markdown;
-    out(output + "\n");
-    return 0;
-  } catch (e) {
-    err(`bareflow: ${refusal(e, url) ?? e?.message ?? e}\n`);
-    return 1;
-  }
+  if (bad || !url || url === "mcp") { err(USAGE + "\n"); return 2; }
+  const { ok, text } = await render(url, asJson, run);
+  (ok ? out : err)(text);
+  return ok ? 0 : 1;
 }

@@ -14,6 +14,7 @@ export const CONVERT_TIMEOUT = 20000; // ms for one conversion, CLI (src/bounded
 // page at every other limit (verify: cli memory converts one under it), and unequal to Node's default,
 // which a cap left off would also read back.
 export const HEAP_MB = 1536;
+export const MAX_LINE = 1048576; // bytes in one MCP message
 // Past these a page is refused by name as htmlparser2 parses it, before a tree is built
 // (src/html.js); they bound the parse. CONVERT_TIMEOUT, not these, bounds a conversion: extraction
 // time grows with depth times text, so a page inside both can still run out the clock.
