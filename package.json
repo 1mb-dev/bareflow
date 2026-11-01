@@ -21,7 +21,7 @@
   "author": "Vinayak Mishra (https://github.com/vnykmshr)",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.15"
   },
   "bin": {
     "bareflow": "./bin/bareflow.js"
