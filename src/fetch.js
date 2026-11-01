@@ -8,7 +8,7 @@ import { request as httpsRequest } from "node:https";
 import { lookup } from "node:dns";
 import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib";
 import { isPrivateIp } from "./ssrf.js";
-import { blocked, fetchPage, MAX_BYTES, noAnswer, REDIRECT } from "./fetch-policy.js";
+import { blocked, fetchPage, MAX_BYTES, noAnswer, REDIRECT, unreachable } from "./fetch-policy.js";
 
 // Decompress a capped body, streaming so the decompressed output is also capped at limit:
 // the decompressor is destroyed at the cap, so a bomb costs at most limit bytes of output and the
@@ -56,6 +56,8 @@ export const nodeTransport = (resolver, inflate = decompress) => (url, { host, h
   let timer;
   const done = (fn) => (v) => { clearTimeout(timer); fn(v); };
   resolve = done(resolve); reject = done(reject);
+  // Node's text for a system error names no next step; for several addresses, an AggregateError, it is empty.
+  const failed = (e) => reject(e.errors || e.syscall ? unreachable(host, e.code) : e);
   const r = (isHttps ? httpsRequest : httpRequest)({
     protocol: u.protocol,
     hostname: host,
@@ -88,13 +90,13 @@ export const nodeTransport = (resolver, inflate = decompress) => (url, { host, h
     res.on("data", (c) => {
       chunks.push(c);
       size += c.length;
-      if (size > maxBytes) { res.off("error", reject).on("error", () => {}); r.off("error", reject).on("error", () => {}); finish(); res.destroy(); }
+      if (size > maxBytes) { res.off("error", reject).on("error", () => {}); r.off("error", failed).on("error", () => {}); finish(); res.destroy(); }
     });
     res.on("end", finish);
   });
   // Rejected here, not only through destroy: a request whose response has ended emits no error.
   timer = setTimeout(() => { const e = noAnswer(url, budget); reject(e); r.destroy(e); }, deadline - Date.now());
-  r.on("error", reject);
+  r.on("error", failed);
   r.end();
 });
 

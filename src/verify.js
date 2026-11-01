@@ -926,7 +926,12 @@ const child = (args, drive = () => {}, ms = 30000) => new Promise((ok) => {
   const flags = ["--import", hooks, bin], kill = TIMEOUT - 10000, refused = await child([...flags, `http://127.0.0.1:${port}/gone`], undefined, kill), paged = await child([...flags, `http://127.0.0.1:${port}/hop`], undefined, kill);
   record("cli", "held body", `the bin exits on a 404 and a 302 with an endless body: exit ${refused.code} and ${paged.code}`, refused.code === 1 && refused.err === `bareflow: HTTP 404 from http://127.0.0.1:${port}/gone; check the URL (bareflow does not retry)\n` && paged.code === 0 && paged.out.includes(`final: http://127.0.0.1:${port}/page`));
   server.closeAllConnections();
-  server.close();
+  await new Promise((ok) => server.close(ok));
+  // Port 1 refuses: one address rejects with Node's text, two with an AggregateError whose message is empty.
+  const down = async (lookup) => { let said = ""; const code = await main(["http://site.test:1/"], { run: (o) => run({ ...o, fetch: (u) => fetchSnapshot(u, { lookup }) }), out: () => {}, err: (x) => { said += x; } }); return `${code} ${said}`; };
+  const one = await down(loopback("127.0.0.1")), two = await down(loopback("127.0.0.1", "::1")), named = (code) => `1 bareflow: could not reach site.test (${code}); check the URL, or retry\n`;
+  const lost = await down((_host, _opts, cb) => cb(Object.assign(new Error("getaddrinfo ENOTFOUND site.test"), { code: "ENOTFOUND", syscall: "getaddrinfo" })));
+  record("fetch", "unreachable", `a host that refuses or does not resolve is named with the reason: ${JSON.stringify([one, two, lost])}`, one === named("ECONNREFUSED") && two === named("ECONNREFUSED") && lost === named("ENOTFOUND"));
   await rm(tmp, { recursive: true, force: true });
 }
 
