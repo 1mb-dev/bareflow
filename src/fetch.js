@@ -68,11 +68,9 @@ export const nodeTransport = (resolver, inflate = decompress) => (url, { host, h
   }, (res) => {
     res.on("error", reject); // mid-body abort must reject, not crash the process
     if (REDIRECT.has(res.statusCode) || res.statusCode >= 400) {
-      // The drained response's late errors must not reject the fetch the next hop now owns.
-      res.off("error", reject).on("error", () => {});
-      r.off("error", reject).on("error", () => {});
-      res.resume();
-      return resolve({ status: res.statusCode, location: res.headers.location });
+      // Destroyed, never drained: a drain outlives the deadline and holds the process open.
+      resolve({ status: res.statusCode, location: res.headers.location });
+      return res.destroy();
     }
 
     const chunks = [];

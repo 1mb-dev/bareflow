@@ -20,7 +20,7 @@ import { convert } from "./convert.js";
 import { auditSourceLoss, restoreCodeLayout } from "./loss-audit.js";
 import { contentToBlocks } from "./to-ir.js";
 import { decompress, fetchSnapshot, nodeTransport } from "./fetch.js";
-import { CONVERT_TIMEOUT, fetchBody, fetchPage, HEAP_MB, MAX_BYTES, MAX_DEPTH, MAX_ELEMENTS, snapshot, TIMEOUT } from "./fetch-policy.js";
+import { CONVERT_TIMEOUT, fetchBody, fetchPage, HEAP_MB, MAX_BYTES, MAX_DEPTH, MAX_ELEMENTS, REQUEST_HEADERS, snapshot, TIMEOUT } from "./fetch-policy.js";
 import { edgeTransport, handler, SITEVERIFY, WEB_MAX_BYTES } from "./edge.js";
 import { isPrivateIp } from "./ssrf.js";
 import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
@@ -834,6 +834,9 @@ const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, input
   record("nav", "pager", "via reaches scope", doc.scope.prev?.via === "pager" && doc.scope.next?.via === "pager");
 }
 
+// The test resolver: any name to these addresses, as node:net asks for one or for all.
+const loopback = (...ips) => (_host, opts, cb) => (opts?.all ? cb(null, ips.map((address) => ({ address, family: address.includes(":") ? 6 : 4 }))) : cb(null, ips[0], 4));
+
 // Fetch budget: one deadline for the whole fetch, redirects included, so a server that drips
 // bytes or chains slow redirects cannot hold the caller. A local server stands in for the site;
 // the test resolver maps its name to loopback, which the default resolver refuses.
@@ -855,7 +858,7 @@ const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, input
   });
   await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
   const port = server.address().port;
-  const lookup = (_host, opts, cb) => (opts?.all ? cb(null, [{ address: "127.0.0.1", family: 4 }]) : cb(null, "127.0.0.1", 4));
+  const lookup = loopback("127.0.0.1");
   const timed = async (u, timeout) => { const t0 = Date.now(); const r = await fetchSnapshot(u, { timeout, lookup }).then((s) => s.html, (e) => e.message); return { r, ms: Date.now() - t0 }; };
   const drip = await timed(`http://site.test:${port}/drip`, 300);
   const chainShort = await timed(`http://site.test:${port}/hop0`, 300);
@@ -884,6 +887,47 @@ const bundled = await bundle({ inputs: true }).catch((e) => ({ code: null, input
   record("fetch", "cap", "an endless body is read to the byte cap, marked over, and the connection closed, inside the budget; as a page it is refused by name with its host, a body of exactly the cap is not; the CLI says so, with no output",
     endless === `${MAX_BYTES} true` && endlessPage === "over-cap site.test" && exact === MAX_BYTES && cutExit === 1 && cut === "" &&
     cutSaid === `bareflow: site.test's page is over ${MAX_BYTES / 1048576} MB, bareflow's limit. If the site also publishes it in parts, convert one part; otherwise open it in a browser.\n`);
+}
+
+// A node child, spawned; `drive` gets it, `ms` is the kill timer a hang needs.
+const CHILD_ENV = { ...process.env, NODE_OPTIONS: "", NODE_PATH: "" };
+const child = (args, drive = () => {}, ms = 30000) => new Promise((ok) => {
+  let out = "", err = "";
+  const c = spawn(process.execPath, args, { env: CHILD_ENV }), stop = setTimeout(() => c.kill("SIGKILL"), ms);
+  c.stdout.on("data", (x) => (out += x)); c.stderr.on("data", (x) => (err += x));
+  c.stdout.on("error", () => {}); c.stdin.on("error", () => {});
+  c.on("close", (code) => { clearTimeout(stop); ok({ code, out, err }); });
+  drive(c);
+});
+
+// A status that ends a fetch ends its connection: the deadline is off by then, so a body the server never
+// finishes outlives the fetch and holds the process. The budget here is the policy's, since a short one
+// would close the socket itself, and the bin's kill timer is under it, since a deadline left running exits
+// on its own. A hook swaps src/ssrf.js so the real bin reaches loopback.
+{
+  const bin = join(ROOT, "bin/bareflow.js"), tmp = await mkdtemp(join(tmpdir(), "bareflow-held-")), hooks = join(tmp, "hooks.mjs"), closed = {};
+  await writeFile(hooks, `import module from "node:module";\nmodule.registerHooks({ load: (url, context, next) => (url.endsWith("/src/ssrf.js") ? { format: "module", source: "export const isPrivateIp = () => false;", shortCircuit: true } : next(url, context)) });\n`);
+  const server = createServer((req, res) => {
+    if (req.url === "/page") { res.writeHead(200, { "content-type": "text/html" }); return res.end(`<html><head><title>Held</title></head><body><main><h1>Held</h1><p>${"word ".repeat(200)}</p></main></body></html>`); }
+    res.writeHead(req.url === "/gone" ? 404 : 302, { location: "/page" });
+    res.flushHeaders();
+    const t = setInterval(() => res.write(Buffer.alloc(1 << 16, 97)), 5);
+    res.on("close", () => { clearInterval(t); closed[req.url]?.(); });
+  });
+  await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
+  const { port } = server.address(), lookup = loopback("127.0.0.1");
+  const held = async (path) => {
+    const heard = new Promise((ok) => { closed[path] = () => ok("closed"); });
+    const { status } = await nodeTransport(lookup)(`http://site.test:${port}${path}`, { host: "site.test", headers: REQUEST_HEADERS, deadline: Date.now() + TIMEOUT, budget: TIMEOUT, maxBytes: MAX_BYTES });
+    return `${status} ${await Promise.race([heard, new Promise((ok) => setTimeout(ok, 10000, "open").unref())])}`;
+  };
+  const gone = await held("/gone"), hop = await held("/hop");
+  record("fetch", "held body", `a status that ends a hop closes a body the server never finishes, under the policy's budget: 404 ${gone}, 302 ${hop}`, gone === "404 closed" && hop === "302 closed");
+  const flags = ["--import", hooks, bin], kill = TIMEOUT - 10000, refused = await child([...flags, `http://127.0.0.1:${port}/gone`], undefined, kill), paged = await child([...flags, `http://127.0.0.1:${port}/hop`], undefined, kill);
+  record("cli", "held body", `the bin exits on a 404 and a 302 with an endless body: exit ${refused.code} and ${paged.code}`, refused.code === 1 && refused.err === `bareflow: HTTP 404 from http://127.0.0.1:${port}/gone; check the URL (bareflow does not retry)\n` && paged.code === 0 && paged.out.includes(`final: http://127.0.0.1:${port}/page`));
+  server.closeAllConnections();
+  server.close();
+  await rm(tmp, { recursive: true, force: true });
 }
 
 // The built site (scripts/site.js), once: the worker and shell checks below read what it wrote.
@@ -1229,7 +1273,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   server.on("connection", () => conns++);
   await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
   const port = server.address().port;
-  const lookup = (_host, opts, cb) => (opts?.all ? cb(null, [{ address: "127.0.0.1", family: 4 }]) : cb(null, "127.0.0.1", 4));
+  const lookup = loopback("127.0.0.1");
   const toLocal = (url, init) => { const u = new URL(url); u.hostname = "127.0.0.1"; return fetch(u, init); };
   const outcome = (p) => p.then((s) => `${s.finalUrl} ${s.bytes} ${s.fingerprint}`, (e) => e.message.replace(/\(.*?\)/, "(...)"));
   const paths = ["/page", "/moved", "/c0", "/c1", "/endless", "/bomb", "/gz", "/badgzip", "/noloc", "/priv", "/drip", "/empty", "/missing"];
