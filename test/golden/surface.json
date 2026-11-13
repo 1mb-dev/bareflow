@@ -114,6 +114,9 @@
      "url"
     ],
     "additionalProperties": false
+   },
+   "_meta": {
+    "anthropic/maxResultSizeChars": 500000
    }
   }
  ],
