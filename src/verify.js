@@ -2434,7 +2434,7 @@ else {
     ];
     const script = [
       line({ id: "a", method: "initialize", params: { protocolVersion: "2025-06-18" } }), line({ id: "b", method: "initialize", params: { protocolVersion: "2025-03-26" } }),
-      line({ id: "g", method: "initialize", params: { protocolVersion: "1999-01-01" } }), "\n", line({ method: "notifications/initialized" }), line({ id: "c", method: "ping" }), line({ id: "d", method: "nope" }),
+      line({ id: "g", method: "initialize", params: { protocolVersion: "1999-01-01" } }), "\n", line({ method: "notifications/initialized" }), line({ id: "c", method: "ping" }), line({ id: "t", method: "tools/list" }), line({ id: "d", method: "nope" }),
       line({ id: "e", method: "tools/call", params: { name: { toString: 1 }, arguments: {} } }), line({ id: "f", method: 5 }), '{"jsonrpc":"2.0","id":1e999,"method":"ping"}\n', '{"jsonrpc":"2.0","id":1.5,"method":"ping"}\n', '{"jsonrpc":"2.0","id":9007199254740993,"method":"ping"}\n', "{not json\n", "[]\n", ...refused.map(([args], i) => call(i, args)),
     ];
     const all = await child([bin, "mcp"], (c) => c.stdin.end(script.join("")));
@@ -2449,6 +2449,8 @@ else {
     if (byId.get("a")?.result?.protocolVersion !== "2025-06-18" || byId.get("b")?.result?.protocolVersion !== "2024-11-05" || byId.get("g")?.result?.protocolVersion !== "2025-11-25") said.push("protocol version");
     if (byId.get("b")?.result?.serverInfo?.version !== VERSION) said.push("serverInfo version");
     if (JSON.stringify(byId.get("c")?.result) !== "{}") said.push("ping");
+    const listed = lines.find((l) => l.startsWith('{"jsonrpc":"2.0","id":"t"')) ?? "", wanted = JSON.stringify({ jsonrpc: "2.0", id: "t", result: { tools: TOOLS } });
+    if (listed !== wanted) { const at = [...wanted].findIndex((ch, i) => ch !== listed[i]); said.push(`tools/list line differs from TOOLS at ${at === -1 ? wanted.length : at}: ${listed.slice(Math.max(0, at - 20), at + 60)}`); }
     if (byId.get("d")?.error?.code !== -32601 || byId.get("e")?.error?.code !== -32602 || byId.get("f")?.error?.code !== -32600) said.push("unknown method, unknown tool, or a usable id on a bad request");
     if (parsed.filter((m) => m.id === undefined).map((m) => m.error?.code).join() !== "-32600,-32600,-32600,-32700,-32600") said.push("no usable id, not JSON, not a message");
     for (const [i, [args, want]] of refused.entries()) {
@@ -2459,7 +2461,7 @@ else {
       const r = await child([bin, url], () => {});
       if (r.err !== want) said.push(`the CLI on ${url}: ${r.err.slice(0, 100)}`);
     }
-    record("cli", "mcp refusals", `a bare spawn: ${refused.length} bad calls refused through the tool, the CLI saying the same on the two it can reach, protocol errors by code, a notification and a blank line unanswered, every stdout line an MCP message by the SDK's schema, exit 0 at EOF${said.length ? `: ${said.join("; ")}` : ""}`, !said.length);
+    record("cli", "mcp refusals", `a bare spawn: ${refused.length} bad calls refused through the tool, the CLI saying the same on the two it can reach, protocol errors by code, a notification and a blank line unanswered, the tools/list line byte-equal to TOOLS, every stdout line an MCP message by the SDK's schema, exit 0 at EOF${said.length ? `: ${said.join("; ")}` : ""}`, !said.length);
 
     const stream = [], firstError = (out) => { try { return JSON.parse(out.split("\n")[0]).error?.code; } catch { return undefined; } };
     const held = await child([bin, "mcp"], (c) => c.stdin.write(Buffer.alloc(MAX_LINE + 1, 120)), 5000);
