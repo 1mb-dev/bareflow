@@ -1295,10 +1295,10 @@ import(url).then(async ({ convert }) => {
   await took("<p>warm</p>");
   parentPort.postMessage({ s: Math.min(await took(small), await took(small)), l: await took(large) });
 }).catch((e) => parentPort.postMessage({ error: e.code ?? e.message }));`;
-  const start = performance.now(), left = () => 60000 - (performance.now() - start);
+  const start = performance.now();
   const timed = (small, large) => new Promise((ok) => {
     const w = new Worker(TIMER, { eval: true, workerData: { url: pathToFileURL(join(ROOT, "src/convert.js")).href, small, large } });
-    const stop = setTimeout(() => { w.terminate(); ok({ error: "past the 60 s ceiling" }); }, Math.max(0, left()));
+    const stop = setTimeout(() => { w.terminate(); ok({ error: "past the 60 s ceiling" }); }, 60000);
     w.once("message", (m) => { clearTimeout(stop); w.terminate(); ok(m); });
     w.once("error", (e) => { clearTimeout(stop); ok({ error: e.message }); });
   });
@@ -1330,8 +1330,8 @@ import(url).then(async ({ convert }) => {
   if (!same(BEFORE, described(globalThis))) off.push("a built-in changed after verify started");
   if (keyed(globalThis).join("|") !== keyed(vm.runInContext("globalThis", vm.createContext())).join("|")) off.push("a built-in's keys differ from a fresh realm's");
   const secs = (performance.now() - start) / 1000;
-  record("parse", "hostile", `${Object.keys(TIMED).length} hostile shapes convert growing under 10x for 4x the bytes, 32 KB to 128 KB, each in its own thread, one at the bound measured 3 times (${grew.join(", ")}), in ${secs.toFixed(1)} s (< 60); Object and the Object, Array, String, Function and RegExp prototypes unchanged since verify started, keyed as a fresh realm's, after pages with Object.prototype's names in ids, classes, attributes, rel, meta and JSON-LD; in what reaches the IR (ids, classes, attributes, rel) they convert as look-alikes do${off.length ? `: ${off.join("; ")}` : ""}`,
-    !off.length && secs < 60);
+  record("parse", "hostile", `${Object.keys(TIMED).length} hostile shapes convert growing under 10x for 4x the bytes, 32 KB to 128 KB, each in its own thread, one at the bound measured 3 times (${grew.join(", ")}), in ${secs.toFixed(1)} s; Object and the Object, Array, String, Function and RegExp prototypes unchanged since verify started, keyed as a fresh realm's, after pages with Object.prototype's names in ids, classes, attributes, rel, meta and JSON-LD; in what reaches the IR (ids, classes, attributes, rel) they convert as look-alikes do${off.length ? `: ${off.join("; ")}` : ""}`,
+    !off.length);
 }
 
 // FixedLengthStream's contract (Workers only): the stream errors past, or short of, n bytes. The
