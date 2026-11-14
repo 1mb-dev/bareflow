@@ -6,8 +6,7 @@ For anyone writing a string bareflow shows: a web message, a CLI error, a label,
 
 The page's words are the page's. bareflow never rewrites, summarizes, or styles them.
 
-bareflow's own words are few, plain, and about what happened. In the web view they are the mono
-text: the tape, the controls, the colophon, the messages.
+bareflow's own words are few, plain, and about what happened. In the web view they are the mono text: the tape, the controls, the colophon, the messages.
 
 ## Glossary: one word per thing
 
@@ -26,13 +25,11 @@ text: the tape, the controls, the colophon, the messages.
 
 One exception: the slogan, "Remove the website. Preserve the document."
 
-The home page's forms are sentence case (`Docs page address`, `Convert`); every control in the
-view is lowercase.
+The home page's forms are sentence case (`Docs page address`, `Convert`); every control in the view is lowercase.
 
 ## Message shape
 
-What happened, then what to do. One or two sentences. Name the host. No apology, no "please",
-no exclamation mark. A label or control is lowercase and says the action (`copy markdown`).
+What happened, then what to do. One or two sentences. Name the host. No apology, no "please", no exclamation mark. A label or control is lowercase and says the action (`copy markdown`).
 
 | Before | After |
 |---|---|
@@ -40,14 +37,10 @@ no exclamation mark. A label or control is lowercase and says the action (`copy 
 | `HTTP 403 from <host>; check the URL (bareflow does not retry)` | `<host> refused the request (HTTP 403). Check the address, or save the page and paste its HTML on the home page.` |
 | `3 losses marked.` | `3 losses: parts of the page bareflow could not keep, listed after it.` |
 
-An instruction must work when it is read: no `npx bareflow` until the package is on npm (verify
-fails on `npx` in anything the web serves or says). Paste is offered only where the home shows the
-paste form (from 40rem); a phone's next step is the address, the wait, or the original.
+An instruction must work when it is read: no `npx bareflow` until the package is on npm (verify fails on `npx` in anything the web serves or says). Paste is offered only where the home shows the paste form (from 40rem); a phone's next step is the address, the wait, or the original.
 
-The web shows the server's own words (src/edge.js) only as `detail:`, under a code that covers
-several causes (url, redirect, upstream without a status, convert).
+The web shows the server's own words (src/edge.js) only as `detail:`, under a code that covers several causes (url, redirect, upstream without a status, convert).
 
 ## Banned
 
-seamlessly, effortlessly, unlock, supercharge, simply, just, easily, magic, powerful, smart,
-AI-powered, leverage, robust, cutting-edge, delve, oops, sorry, please, emoji, exclamation marks.
+seamlessly, effortlessly, unlock, supercharge, simply, just, easily, magic, powerful, smart, AI-powered, leverage, robust, cutting-edge, delve, oops, sorry, please, emoji, exclamation marks.
