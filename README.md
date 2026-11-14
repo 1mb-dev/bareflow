@@ -12,6 +12,39 @@ bareflow records a page's prev/next targets (`doc.scope`) and where it sits in t
 deterministic for a fixed snapshot, and every loss it can detect is marked in the output,
 never silently passed through.
 
+## Install and run
+
+```
+git clone https://github.com/1mb-dev/bareflow && cd bareflow
+npm install && npm link           # puts `bareflow` on PATH (Node >=22.15; tested on 22, 24 and 26)
+bareflow <url>                      # Markdown: header, page, loss notes
+bareflow <url> --json               # the typed IR (docs/ir.md)
+bareflow --version                  # the package version
+npm run verify                    # truth gate: loss + nav precision/recall per fixture
+npm run bundle                    # dist/bareflow.js: convert() for the browser, as verify checks it
+```
+
+Exit 0 with the document on stdout; 2 on a usage error; 1 when the fetch or extraction fails,
+with the reason on stderr. A fetch has 30 s in total, redirects included, and the conversion 20 s
+and up to 1536 MB of heap (a V8 heap flag in NODE_OPTIONS replaces that cap).
+A page that is not HTML, is over 5 MB, or whose markup nests past 256 levels or holds over 50,000
+elements, is refused by name, and so is one that keeps no readable text (a page built by JavaScript).
+
+## MCP
+
+`bareflow mcp` serves one tool, `fetch_doc`, over stdio: the CLI's fetch and conversion, Markdown
+unless the call gives `format: "json"`. With `bareflow` on PATH, a client's config is:
+
+```
+{"mcpServers": {"bareflow": {"command": "bareflow", "args": ["mcp"]}}}
+```
+
+Claude Code delivers fetch_doc results whole up to its own ceiling and saves a larger one to a
+file, which a session without file tools cannot read. A long page is long: a 400 KB page is about
+100k tokens of context in one call. Other hosts apply their own limits, untested. The tool carries
+a result-size hint for Claude Code; the hint overrides a user's MAX_MCP_OUTPUT_TOKENS for this tool
+(per Claude Code's docs; not measured with the variable set low).
+
 ## Why
 
 An agent that reads docs through a summarizing fetch (Claude Code's WebFetch, for one) gets a
@@ -25,7 +58,7 @@ grader scored both.
 bareflow's answer was better on 3 (one a borderline call), tied on 2, worse on none. For
 `deno add --unscoped`, WebFetch returned 457 bytes ending in its own gloss ("This flag strips the
 scope prefix, allowing you to import the package using only its base name"); the answer built on
-it could not say what the docs' last sentence does. bareflow (excerpt):
+it could not say what the docs' last sentence does. bareflow 0.4.0, under the old name (excerpt):
 
 ```
 ---
@@ -62,7 +95,7 @@ Extraction is composed (Defuddle); bareflow's work is the IR, the loss audit, an
 - The IR is versioned (`bareflow/ir/v3`, docs/ir.md); that a pinned snapshot version serves a
   consumer is unproven until one pins it.
 
-History: the precision gate (~0.8) failed and was waived by the owner. On six docs pages frozen
+History: the precision gate (~0.8) failed and was waived by the maintainer. On six docs pages frozen
 and labelled before any change was made against them, the auditor emitted 2 findings, both
 correct, too few to call precision. Attaching sibling page content was measured on 12 real tasks
 and dropped: it never carried an answer the page lacked (`usage/v2/log.md`).
@@ -73,6 +106,10 @@ Loss markers are findings, not content: they live in `section.losses` in the JSO
 block stream. The Markdown render lists them after the page, one note each with the dropped
 text verbatim, and a page whose extraction flattened says so in its header.
 Prose loss (a paragraph dropped while its heading survives) is not yet detected.
+
+Wrong output, or a loss with no note:
+[open an issue](https://github.com/1mb-dev/bareflow/issues/new?template=wrong-output.md); the
+template asks for the header.
 
 ## Trust
 
@@ -90,37 +127,14 @@ or HTML of its own; links and images keep http(s), mailto, or relative targets o
 notes sit under `## bareflow: N losses (fingerprint ...)`, whose fingerprint matches the header's;
 a page cannot know its own fingerprint, so a lookalike heading in page text has a different one.
 
-## Install and run
+## Layout
 
-```
-npm install && npm link           # puts `bareflow` on PATH (tested on Node 22, 24 and 26)
-bareflow <url>                      # Markdown: header, page, loss notes
-bareflow <url> --json               # the typed IR (docs/ir.md)
-bareflow --version                  # the package version
-npm run verify                    # truth gate: loss + nav precision/recall per fixture
-npm run bundle                    # dist/bareflow.js: convert() for the browser, as verify checks it
-```
-
-Exit 0 with the document on stdout; 2 on a usage error; 1 when the fetch or extraction fails,
-with the reason on stderr. A fetch has 30 s in total, redirects included, and the conversion 20 s
-and up to 1536 MB of heap (a V8 heap flag in NODE_OPTIONS replaces that cap).
-A page that is not HTML, is over 5 MB, or whose markup nests past 256 levels or holds over 50,000
-elements, is refused by name, and so is one that keeps no readable text (a page built by JavaScript).
-
-## MCP
-
-`bareflow mcp` serves one tool, `fetch_doc`, over stdio: the CLI's fetch and conversion, Markdown
-unless the call gives `format: "json"`. With `bareflow` on PATH, a client's config is:
-
-```
-{"mcpServers": {"bareflow": {"command": "bareflow", "args": ["mcp"]}}}
-```
-
-Claude Code delivers fetch_doc results whole up to its own ceiling and saves a larger one to a
-file, which a session without file tools cannot read. A long page is long: a 400 KB page is about
-100k tokens of context in one call. Other hosts apply their own limits, untested. The tool carries
-a result-size hint for Claude Code; the hint overrides a user's MAX_MCP_OUTPUT_TOKENS for this tool
-(per Claude Code's docs; not measured with the variable set low).
+`bin/` and `src/` are the CLI and the MCP server (`src/verify.js`, `src/truth.js` and `src/edge.js`
+do not ship); `docs/ir.md` is the IR contract. `site/`, `functions/` and `wrangler.toml` are the
+web app: the same `convert()` in a browser worker, behind one fetch-only Function. `scripts/`
+builds and checks the web app and the package. `test/` holds the gate's frozen pages and goldens;
+`usage/` holds the eval records cited above, written under the old name, mdflow. `docs/voice.md`
+sets the wording of every string bareflow shows.
 
 ## License
 
