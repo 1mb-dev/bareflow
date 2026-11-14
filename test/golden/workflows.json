@@ -259,18 +259,13 @@
       },
       "release": {
         "needs": "publish",
-        "runs-on": "ubuntu-latest",
         "permissions": {
           "contents": "write"
         },
-        "steps": [
-          {
-            "run": "gh release create \"$GITHUB_REF_NAME\" --draft --verify-tag --generate-notes --repo \"$GITHUB_REPOSITORY\"",
-            "env": {
-              "GH_TOKEN": "${{ github.token }}"
-            }
-          }
-        ]
+        "uses": "1mb-dev/.github/.github/workflows/release.yml@7633e390616b1ce8dc36a50bc55f468f863fb728",
+        "with": {
+          "draft": "true"
+        }
       }
     }
   }

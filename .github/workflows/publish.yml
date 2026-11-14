@@ -52,13 +52,12 @@ jobs:
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - run: npm publish --ignore-scripts --provenance
 
-  # A draft release for the tag; the owner publishes it.
+  # A draft release for the tag, through the org's workflow at a commit; the owner publishes it. Its title
+  # is "<tag> - <tag message subject>", so the tag message is the release's pet name alone.
   release:
     needs: publish
-    runs-on: ubuntu-latest
     permissions:
       contents: write
-    steps:
-      - run: gh release create "$GITHUB_REF_NAME" --draft --verify-tag --generate-notes --repo "$GITHUB_REPOSITORY"
-        env:
-          GH_TOKEN: ${{ github.token }}
+    uses: 1mb-dev/.github/.github/workflows/release.yml@7633e390616b1ce8dc36a50bc55f468f863fb728
+    with:
+      draft: true
