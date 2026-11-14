@@ -364,6 +364,25 @@ for (const [id, spec] of Object.entries(inventory)) {
     const page = `<html><head><title>T</title></head><body><main><h1>T</h1><h2>A</h2><p>intro text here for the page body.</p><blockquote><pre>${K}</pre><h4>Verify the install</h4><p>Run the status command and read it.</p></blockquote><h2>B</h2><p>more text for the page so the extractor keeps it.</p></main></body></html>`;
     const whole = (await run({ url: "https://example.com/t", html: page, retrievedAt: FIXED })).doc.sections[0];
     const demotedOnly = (text) => JSON.stringify([["source-heading-demoted", text]]);
+    // Headings the IR holds out of source order. A known limit (docs/ir.md): the moved heading can
+    // close the window on a heading or code block that became prose, which then reads as not
+    // extracted (ahead, aheadCode, between, before). Beside them, real drops stay drops (the rest).
+    const KC = "kubectl apply -f deployment.yaml --namespace demo";
+    const hs = (...t) => t.map((x) => `<h2>${x}</h2>`).join("");
+    const dropped = (...t) => JSON.stringify(t.map((x) => ["source-heading-diff", x]));
+    const ahead = auditSourceLoss(`<main>${hs("A")}<h4>Note</h4>${hs("B", "C")}</main>`, [Hd("B"), Hd("A"), P("Note here"), Hd("C")]);
+    const aheadCode = auditSourceLoss(`<main>${hs("A")}<pre>${KC}</pre>${hs("B", "C")}</main>`, [Hd("B"), Hd("A"), P(`Run ${KC} now`), Hd("C")]);
+    const between = auditSourceLoss(`<main>${hs("A")}<h4>Note</h4>${hs("B", "C")}</main>`, [Hd("B"), P("Note here"), Hd("A"), Hd("C")]);
+    const before = auditSourceLoss(`<main>${hs("A")}<h4>Note</h4>${hs("B", "C")}</main>`, [P("Note here"), Hd("B"), Hd("A"), Hd("C")]);
+    const beside = auditSourceLoss(`<main>${hs("A", "B")}<h4>Note</h4>${hs("C", "D")}</main>`,
+      [Hd("B"), P("b"), Hd("C"), P("c"), Hd("A"), P("Note that A is last"), Hd("D")]);
+    const repeated = auditSourceLoss(`<main>${hs("get", "Example", "put")}<h4>Deprecated</h4>${hs("delete", "Example", "list")}</main>`,
+      [Hd("get"), P("g"), Hd("put"), P("p"), Hd("delete"), P("Deprecated since v2: use purge"), Hd("Example"), P("e"), Hd("list")]);
+    const repeatedLow = auditSourceLoss(`<main>${hs("get", "Example")}<h4>Note</h4>${hs("put", "delete", "Example", "list")}</main>`,
+      [Hd("get"), P("g"), Hd("put"), P("p"), Hd("delete"), P("d"), Hd("Example"), P("Note the output"), Hd("list")]);
+    const across = auditSourceLoss(`<main>${hs("X", "A")}<h4>Note</h4>${hs("B", "C")}</main>`, [Hd("B"), Hd("A"), P("p"), Hd("X"), P("Note for X only"), Hd("C")]);
+    const toEnd = auditSourceLoss(`<main>${hs("A")}<h4>Note</h4>${hs("B")}</main>`,
+      [Hd("B"), P("b"), Hd("A"), P("a"), ...Array.from({ length: 150 }, (_, i) => P(`p${i}`)), P("Note that this is unrelated")]);
     const off = Object.entries({
       "late code": kinds(late) === JSON.stringify([["source-heading-diff", "Lost"]]),
       "late code, twice in the source": kinds(lateTwice) === JSON.stringify([["source-heading-demoted", "Heads up"], ["source-code-diff", X]]),
@@ -371,9 +390,18 @@ for (const [id, spec] of Object.entries(inventory)) {
       "a key twice in the IR": kinds(irTwice) === JSON.stringify([["source-heading-diff", "Lost"]]),
       "a far second candidate": kinds(far) === demotedOnly("Note"),
       "headings out of order": kinds(moved) === demotedOnly("Note"),
+      "limit: a heading that became prose after a moved one": kinds(ahead) === dropped("Note"),
+      "limit: code that became prose after a moved heading": kinds(aheadCode) === JSON.stringify([["source-code-diff", KC]]),
+      "limit: prose between two swapped headings": kinds(between) === dropped("Note"),
+      "limit: prose before two swapped headings": kinds(before) === dropped("Note"),
+      "a drop beside moved headings": kinds(beside) === dropped("Note"),
+      "a drop beside a repeated key": kinds(repeated) === dropped("Deprecated", "Example"),
+      "a drop under a repeated key's first copy": kinds(repeatedLow) === dropped("Note", "Example"),
+      "a drop with another section's prose past a moved heading": kinds(across) === dropped("Note"),
+      "a drop with a look-alike paragraph at the page end": kinds(toEnd) === dropped("Note"),
       "hoisted code, converted": whole.blocks.map((b) => b.type).join() === "heading,paragraph,blockquote,code,heading,paragraph" && kinds(whole.losses) === demotedOnly("Verify the install"),
     }).filter(([, ok]) => !ok).map(([name]) => name);
-    record("loss-audit", "shapes", `late or hoisted code, a key twice in the IR, a far second candidate, headings out of order: each keeps its kind${off.length ? `; moved: ${off.join(", ")}` : ""}`, !off.length);
+    record("loss-audit", "shapes", `late or hoisted code, a key twice in the IR, a far second candidate, headings out of order (4 held at the known limit, 5 drops): each keeps its kind${off.length ? `; moved: ${off.join(", ")}` : ""}`, !off.length);
   }
   record("loss-audit", "heading", "title skipped once; year is not a section number",
     tt.length === 1 && tt[0].text === "Overview" && yr.length === 1 && yr[0].text === "2024 Roadmap");
