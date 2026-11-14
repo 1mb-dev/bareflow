@@ -651,8 +651,8 @@ const PLAIN_BLOCK = new Set(["P", "DIV", "LI", "TR", "H1", "H2", "H3", "H4", "H5
 const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "HEAD"]);
 
 // The render on real pages (test/pages.json): header, well-formed, every loss noted; and the cost
-// bar on the 12 pages marked `cost`, as bytes against the plain-text arm. Owner rule
-// (2026-10-04): R <= 1.5, or below 1.95 when every byte over 1.5 is verbatim loss text.
+// bar on the 12 pages marked `cost`, as bytes against the plain-text arm: R <= 1.5, or
+// below 1.95 when every byte over 1.5 is verbatim loss text.
 {
   const bytes = (x) => Buffer.byteLength(x, "utf8");
   const costOk = ({ md, plain, lossText }) => md / plain <= 1.5 || (md / plain < 1.95 && (md - lossText) / plain <= 1.5);
@@ -1188,7 +1188,7 @@ const seeded = (seed) => () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.im
   record("parse", "opening", `the page's opening class is its content token's on ${seen.size} seeded bodies (comments, doctypes, declarations, encoded spaces, end tags with attributes before it)${off.length ? `: ${off.length} differ, ${off.slice(0, 3).join("; ")}` : ""}`, !off.length && seen.size > 1500);
 }
 
-// Hostile shapes (Phase H3). Timed shapes grow under 10x from 32 KB to 128 KB (linear is 4x,
+// Hostile shapes. Timed shapes grow under 10x from 32 KB to 128 KB (linear is 4x,
 // quadratic 16x): this machine against itself, never a wall clock. Each runs in its own thread, a
 // fresh heap: in one shared process, one shape's garbage is the next one's pause (entity soup and dense
 // links read up to 10x there, 4-6x alone). A thread past the 60 s ceiling is ended. The built-ins
@@ -1599,7 +1599,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const wrong = Object.keys(want).filter((k) => String(loads[k]) !== want[k]);
   record("web", "turnstile", `Turnstile's script is added on a target route only, once, from its one address; the home, a submit, a paste, and a refused address make no request${wrong.map((k) => ` ${k}: ${JSON.stringify(String(loads[k]))}`).join("")}`,
     !wrong.length);
-  // Every failure the visitor can meet, as the shell shows it (todos: huddle-2026-10-13-u2). The
+  // Every failure the visitor can meet, as the shell shows it. The
   // codes come from the source, so a new code with no row fails, and a row whose code nothing
   // emits fails. Each row runs the built app.js at phone and desktop width and must say what
   // happened, then what to do, in docs/voice.md's terms; the server's own words only in detail.
@@ -2257,7 +2257,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("view", "linear", `hostile inline runs (100k brackets, stars, backticks) read in ${read} ms (< 3000)`, read < 3000);
 }
 
-// The frozen surface (MLP v1): CLI usage and exit codes, the IR's shape, the header's fields, and
+// The frozen surface: CLI usage and exit codes, the IR's shape, the header's fields, and
 // the loss notes' sources, against test/golden/surface.json. A change fails until blessed:
 // `node src/verify.js --bless-surface` rewrites the golden file, for a change that is meant.
 {
