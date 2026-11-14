@@ -107,6 +107,21 @@ and up to 1536 MB of heap (a V8 heap flag in NODE_OPTIONS replaces that cap).
 A page that is not HTML, is over 5 MB, or whose markup nests past 256 levels or holds over 50,000
 elements, is refused by name, and so is one that keeps no readable text (a page built by JavaScript).
 
+## MCP
+
+`bareflow mcp` serves one tool, `fetch_doc`, over stdio: the CLI's fetch and conversion, Markdown
+unless the call gives `format: "json"`. With `bareflow` on PATH, a client's config is:
+
+```
+{"mcpServers": {"bareflow": {"command": "bareflow", "args": ["mcp"]}}}
+```
+
+Claude Code delivers fetch_doc results whole up to its own ceiling and saves a larger one to a
+file, which a session without file tools cannot read. A long page is long: a 400 KB page is about
+100k tokens of context in one call. Other hosts apply their own limits, untested. The tool carries
+a result-size hint for Claude Code; the hint overrides a user's MAX_MCP_OUTPUT_TOKENS for this tool
+(per Claude Code's docs; not measured with the variable set low).
+
 ## License
 
 MIT
