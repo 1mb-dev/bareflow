@@ -110,6 +110,9 @@ const ORG_CI = "1mb-dev/.github/.github/workflows/ci-node.yml@main";
 const CHECKOUT = { uses: "actions/checkout", with: { "persist-credentials": "false" } };
 const NODE = { uses: "actions/setup-node", with: { "node-version": "24", "package-manager-cache": "false" } };
 const WRANGLER = "node_modules/.bin/wrangler pages deploy dist/site --branch main";
+// A full-history checkout and the line that refuses a commit off main: publish and deploy share both.
+const HISTORY = { uses: CHECKOUT.uses, with: { "fetch-depth": "0", "persist-credentials": "false" } };
+const ON_MAIN = 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main';
 export const TABLE = {
   "ci.yml": {
     on: { push: { branches: ["main"] }, pull_request: { branches: ["main"] } },
@@ -117,7 +120,7 @@ export const TABLE = {
     jobs: { check: { uses: ORG_CI, with: { "node-versions": '["22", "24", "26"]', "run-build": "false", "run-audit": "false" } } },
   },
   "deploy.yml": {
-    on: { push: { branches: ["main"] } },
+    on: { push: { tags: ["v*"] }, workflow_dispatch: null },
     permissions: { contents: "read" },
     concurrency: { group: "deploy", "cancel-in-progress": "false" },
     jobs: {
@@ -129,7 +132,7 @@ export const TABLE = {
       },
       deploy: {
         needs: "build", "runs-on": "ubuntu-latest", environment: "production",
-        steps: [CHECKOUT, NODE, { run: "npm ci --ignore-scripts" },
+        steps: [HISTORY, { run: ON_MAIN }, NODE, { run: "npm ci --ignore-scripts" },
           { uses: "actions/download-artifact", with: { name: "site", path: "dist/site" } },
           { run: "node scripts/artifact.js dist/site" },
           { run: WRANGLER, env: { CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN }}", CLOUDFLARE_ACCOUNT_ID: "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" } },
@@ -145,9 +148,9 @@ export const TABLE = {
       check: { "runs-on": "ubuntu-latest", steps: [CHECKOUT, NODE, { run: "npm ci --ignore-scripts" }, { run: "npm test" }, { run: "npm run audit" }] },
       publish: {
         needs: "check", "runs-on": "ubuntu-latest", environment: "npm", permissions: { contents: "read", "id-token": "write" },
-        steps: [{ uses: CHECKOUT.uses, with: { "fetch-depth": "0", "persist-credentials": "false" } }, NODE,
+        steps: [HISTORY, NODE,
           { run: `grep -Eq '^v[0-9]+\\.[0-9]+\\.[0-9]+$' <<< "$GITHUB_REF_NAME" && test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"` },
-          { run: 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' },
+          { run: ON_MAIN },
           { run: "npm publish --ignore-scripts --provenance" }],
       },
       release: {

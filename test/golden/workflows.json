@@ -31,10 +31,11 @@
     "name": "Deploy",
     "on": {
       "push": {
-        "branches": [
-          "main"
+        "tags": [
+          "v*"
         ]
-      }
+      },
+      "workflow_dispatch": null
     },
     "permissions": {
       "contents": "read"
@@ -94,8 +95,13 @@
           {
             "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
             "with": {
+              "fetch-depth": "0",
               "persist-credentials": "false"
             }
+          },
+          {
+            "name": "the commit is on main",
+            "run": "git merge-base --is-ancestor \"$GITHUB_SHA\" origin/main"
           },
           {
             "uses": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
