@@ -74,7 +74,9 @@ and `at`. `source` is one of:
 | `audit-truncated` | Audit stopped at its cap | none |
 
 `reason` is human-readable and can carry page text; key on `source`. Prose loss (a paragraph
-dropped under a surviving heading) is not detected.
+dropped under a surviving heading) is not detected. A heading the extractor moves out of source
+order can make a nearby heading or code block that became prose read as not extracted
+(`source-heading-diff`, `source-code-diff`); its text is still in the loss.
 
 `at` is required on every loss: null, or `{ after, before }`, integers with
 -1 <= after < before <= blocks.length, never (-1, blocks.length): indices into the section's blocks
