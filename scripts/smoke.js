@@ -1,6 +1,7 @@
 // A deployed site against the build that deployed it: what the platform adds (routing, headers, the
 // Function), never the content verify already proves. The build is dist/site, byte for byte, sitekey
-// included: against a deploy, run it in the job that built and deployed, after the deploy.
+// included, less the scripts Cloudflare appends to an HTML page (scripts/injected.js): against a deploy,
+// run it in the job that built and deployed, after the deploy.
 //   node scripts/smoke.js [base] [--preview <host>] [--burst <n>]
 //   node scripts/smoke.js [base] --probe    the tokenless /_fetch row alone, no build (probe.yml, hourly)
 // base defaults to https://bareflow.1mb.dev. Locally (wrangler takes functions/ from the cwd; wrangler
@@ -12,6 +13,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { lessInjected } from "./injected.js";
 import { TEST_SITEKEYS } from "./sitekey.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -76,18 +78,18 @@ if (!HEADERS.length) throw new Error("dist/site/_headers has no /* headers to ch
 const start = Date.now();
 for (let n = 1; ; n++) {
   let r, same = false;
-  try { r = await get("/"); same = r.status === 200 && (await bytes(r)).equals(home); } catch (e) { r = e; }
+  try { r = await get("/"); same = r.status === 200 && lessInjected(await bytes(r)).equals(home); } catch (e) { r = e; }
   if (same) { console.log(`ok    settled: / is this build (${n} tries)`); break; }
   if (Date.now() - start > SETTLE) { console.log(`FAIL  settled: / is not this build after ${SETTLE / 1000} s (${r instanceof Response ? r.status : r.cause?.message ?? r.message})`); process.exit(1); }
   await new Promise((ok) => setTimeout(ok, POLL));
 }
 
 // The worker is fetched by script: a wrong type would be refused (nosniff) as a module of no use.
-for (const [path, want, name, type] of [["/", home, "home"], ["/privacy", privacy, "privacy page"], [SHARE, shell, "shell"], ["/_app/home", home, "home"], ["/robots.txt", robots, "robots.txt"],
+for (const [path, want, name, type, less] of [["/", home, "home", null, lessInjected], ["/privacy", privacy, "privacy page", null, lessInjected], [SHARE, shell, "shell", null, lessInjected], ["/_app/home", home, "home", null, lessInjected], ["/robots.txt", robots, "robots.txt"],
   ["/_app/worker.js", worker, "worker", /^(text|application)\/javascript\b/]]) {
   await check(`${path} is the built ${name}`, async () => {
     const r = await get(path);
-    const same = r.status === 200 && (await bytes(r)).equals(want) && (!type || type.test(r.headers.get("content-type") ?? ""));
+    const got = await bytes(r), same = r.status === 200 && (less ? less(got) : got).equals(want) && (!type || type.test(r.headers.get("content-type") ?? ""));
     row(same, `${path} is the built ${name}${type ? ", served as JavaScript" : ""}`, same ? "" : `${r.status} ${r.headers.get("content-type")}`);
     if (path === "/robots.txt") return;
     // pages.dev hosts carry _headers' noindex rule; any other host must not.

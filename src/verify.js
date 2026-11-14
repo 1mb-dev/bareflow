@@ -48,6 +48,7 @@ import { deployKey, TEST_SITEKEYS } from "../scripts/sitekey.js";
 import { drift, faults, parsed, readYaml } from "../scripts/workflows.js";
 import { artifactFaults } from "../scripts/artifact.js";
 import { counts, verdict } from "../scripts/counts.js";
+import { lessInjected } from "../scripts/injected.js";
 import { parseShare } from "../site/url.js";
 import { parseInline, renderDoc, renderLosses } from "../site/render.js";
 
@@ -62,7 +63,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const inventory = JSON.parse(await readFile(join(ROOT, "test/inventory.json"), "utf8"));
 const realPages = JSON.parse(await readFile(join(ROOT, "test/pages.json"), "utf8"));
 const FIXED = "2026-01-01T00:00:00.000Z";
-// The page's CSP, as phase-4 and Turnstile's CSP reference give it, and font-src for site/fonts.
+// The page's CSP, as phase-4 and Turnstile's CSP reference give it, and font-src for site/fonts. Cloudflare
+// appends an inline bot detection script and an analytics beacon to every page of the zone
+// (scripts/injected.js); this policy admits neither, so a browser refuses both.
 const CSP = "default-src 'none'; script-src 'self' https://challenges.cloudflare.com; worker-src 'self'; connect-src 'self'; style-src 'self'; font-src 'self'; frame-src https://challenges.cloudflare.com; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 // HTML sinks by name, so any form of use (`+=`, brackets, a call) matches; app code writes the DOM
 // through createElement and textContent only.
@@ -2135,6 +2138,24 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     "https://:project.pages.dev/*\n  X-Robots-Tag: noindex\n\nhttps://:version.:project.pages.dev/*\n  X-Robots-Tag: noindex\n";
   record("web", "headers", "_headers exactly: the CSP (Turnstile's script-src and frame-src only), nosniff, no-referrer on every path, noindex on pages.dev hosts; the Function routed at /_fetch only",
     headers === HEADERS && JSON.stringify(routes) === JSON.stringify({ version: 1, include: ["/_fetch"], exclude: [] }));
+  // smoke compares a served page less what Cloudflare appends to a non-browser request (test/golden/injected.html:
+  // one production response's bot detection). The strip takes bot detection before </body> and no other script.
+  {
+    const END = "</body>\n</html>\n", [detect] = (await readFile(join(ROOT, "test/golden/injected.html"), "utf8")).split("\n");
+    const beacon = `<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/v1" integrity="sha512-x" data-cf-beacon='{"token":"0"}' crossorigin="anonymous"></script>`;
+    const put = (page, s, at = END) => Buffer.from(page.replace(at, () => s + at));
+    const taken = [detect, ""], docs = pages.map(([, t]) => t);
+    const left = [["a script of another shape", "<script>fetch('/x')</script>"], ["a second script after detection", detect + "<script>fetch('/x')</script>"], ["detection twice", detect + detect],
+      ["the beacon", beacon + "\n"], ["the beacon before detection", beacon + "\n" + detect], ["the beacon after detection", detect + beacon + "\n"],
+      ["detection loading another path", detect.replace("/cdn-cgi/challenge-platform/scripts/jsd/main.js", "/x.js")], ["markup beside the run", "<p>x</p>" + detect]];
+    const injBad = [
+      ...docs.flatMap((d, i) => taken.filter((s) => !lessInjected(put(d, s)).equals(Buffer.from(d))).map((s) => `${pages[i][0]}: not taken (${s.length} chars)`)),
+      ...docs.flatMap((d, i) => left.filter(([, s]) => lessInjected(put(d, s)).equals(Buffer.from(d))).map(([n]) => `${pages[i][0]}: taken: ${n}`)),
+      ...docs.filter((d) => lessInjected(put(d, detect, "</head>")).equals(Buffer.from(d))).map(() => "taken: detection in the head"),
+    ];
+    if (!detect?.includes("__CF$cv$params") || docs.some((d) => !d.endsWith(END))) injBad.push("the fixture or a page's ending is not what the row assumes");
+    record("web", "injected", `smoke's strip takes Cloudflare's bot detection before </body> off each of ${docs.length} documents, changes none without it, and leaves ${left.length + 1} other shapes in the bytes${injBad.length ? `: ${injBad.join(" | ")}` : ""}`, !injBad.length);
+  }
   // The Pages project's configuration lives in this file, not the dashboard: without the flag, a fetch to
   // the Function's own zone reaches its origin past Cloudflare's security settings.
   const PAGES = '# The Pages project\'s configuration, its source of truth: the dashboard cannot edit these fields.\nname = "bareflow"\npages_build_output_dir = "./dist/site"\n' +
