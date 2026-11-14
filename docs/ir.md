@@ -1,17 +1,17 @@
-# bareflow IR, `bareflow/ir/v3`
+# bareflow IR, `bareflow/ir/v4`
 
 The JSON render (`bareflow <url> --json`) is this object. `validate()` in `src/ir.js` is the
 contract; `test/golden/surface.json` pins its shape, and verify fails on any change until
 `node src/verify.js --bless-surface` rewrites it. Everything that came from the page is untrusted
 text.
 
-v3 is `mdflow/ir/v2` renamed, plus `source.input`.
+v4 is v3 plus `at` on every loss. v3 was `mdflow/ir/v2` renamed, plus `source.input`.
 
 ## Document
 
 | Field | Type | Meaning |
 |---|---|---|
-| `schema` | `"bareflow/ir/v3"` | Bumped on any breaking change. |
+| `schema` | `"bareflow/ir/v4"` | Bumped on any breaking change. |
 | `id` | string | sha256 of the final URL, first 16 hex. |
 | `title` | string | Page title, plain text, one line. |
 | `source` | `{ url, finalUrl, retrievedAt, fingerprint, input }` | `url` as asked, `finalUrl` after redirects, ISO time, sha256 of the fetched bytes or, with no fetch, of the HTML (first 16 hex). `input`: `"fetch"` (the CLI fetched it), `"edge"` (the web Function fetched it), or `"paste"` (a person gave the HTML; `url` is their assertion). |
@@ -61,8 +61,8 @@ text, remove the backslash escapes.
 
 ## Loss
 
-`{ type: "loss", reason, source, text? }`: a finding, not content; `validate` requires `source`.
-It is one of:
+`{ type: "loss", reason, source, text?, at }`: a finding, not content; `validate` requires `source`
+and `at`. `source` is one of:
 
 | `source` | Meaning | `text` |
 |---|---|---|
@@ -75,6 +75,17 @@ It is one of:
 
 `reason` is human-readable and can carry page text; key on `source`. Prose loss (a paragraph
 dropped under a surviving heading) is not detected.
+
+`at` is required on every loss: null, or `{ after, before }`, integers with
+-1 <= after < before <= blocks.length, never (-1, blocks.length): indices into the section's blocks
+bounding where the lost content sits or sat, -1 and blocks.length standing for the section's start
+and end. This version defines no more of a range than that. null means this version does not place
+the loss.
+In 0.5.0 every `at` is null.
+The version that first emits a range states its rules here, narrowing the sentence above; a reader
+that sees a non-null `at` reads the rules of the version that wrote it (`generator.version`). A
+change to the bounds, or a key added to `at`, bumps `SCHEMA`. The Markdown render does not carry
+`at`.
 
 ## Markdown render
 

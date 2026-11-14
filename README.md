@@ -92,7 +92,7 @@ Extraction is composed (Defuddle); bareflow's work is the IR, the loss audit, an
   landmark (related posts, author bio, comments). The auditor is fitted to docs generators.
 - Nav precision 1.00, recall 0.89: standard rel=prev/next (on `<link>` and `<a>`), else the
   Docusaurus or VitePress docs pager when the page declares that generator (`via: rel | pager`).
-- The IR is versioned (`bareflow/ir/v3`, docs/ir.md); that a pinned snapshot version serves a
+- The IR is versioned (`bareflow/ir/v4`, docs/ir.md); that a pinned snapshot version serves a
   consumer is unproven until one pins it.
 
 History: the precision gate (~0.8) failed and was waived by the maintainer. On six docs pages frozen
@@ -103,8 +103,10 @@ and dropped: it never carried an answer the page lacked (`usage/v2/log.md`).
 Loss reporting is bounded: bareflow marks (a) post-extraction unrepresentable content and
 (b) source headings, code blocks, and tables the extractor dropped, via a source-to-IR diff.
 Loss markers are findings, not content: they live in `section.losses` in the JSON, not the
-block stream. The Markdown render lists them after the page, one note each with the dropped
-text verbatim, and a page whose extraction flattened says so in its header.
+block stream. Each carries `at`, which 0.5.0 leaves null; a later version may fill it with the
+range of blocks the loss sat between (docs/ir.md). The Markdown render lists the losses after the
+page, one note each with the dropped text verbatim, and a page whose extraction flattened says so
+in its header.
 Prose loss (a paragraph dropped while its heading survives) is not yet detected.
 
 Wrong output, or a loss with no note:

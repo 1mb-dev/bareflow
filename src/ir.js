@@ -6,7 +6,7 @@
 // schema revision, not a v1 requirement.
 import { sha256 } from "./sha256.js";
 
-export const SCHEMA = "bareflow/ir/v3";
+export const SCHEMA = "bareflow/ir/v4";
 
 // How the HTML reached the conversion: fetched by the CLI, fetched by the edge Function, or
 // pasted by a person (its URL is then their assertion).
@@ -42,9 +42,9 @@ export function image(src, alt) {
   return { type: "image", src, ...(alt ? { alt } : {}) };
 }
 // text: the dropped block's source text, when the finding is about one block. reason and text
-// carry untrusted page text.
-export function loss(reason, source, text) {
-  return { type: "loss", reason, ...(source ? { source } : {}), ...(text != null ? { text } : {}) };
+// carry untrusted page text. at: null, or { after, before }, indices into the section's blocks.
+export function loss(reason, source, text, at = null) {
+  return { type: "loss", reason, ...(source ? { source } : {}), ...(text != null ? { text } : {}), at };
 }
 
 export function section(id, title, opts = {}) {
@@ -96,7 +96,15 @@ function validateSection(s, path) {
   for (const b of s.blocks) validateBlock(b, `${path}.blocks`);
   if (!Array.isArray(s.losses)) fail(`${path}.losses`, "missing");
   // The Markdown note's label comes from the source: a loss without one has no note to render.
-  for (const l of s.losses) if (!l || typeof l.reason !== "string" || typeof l.source !== "string") fail(`${path}.losses`, "loss: reason and source strings");
+  for (const l of s.losses) {
+    if (!l || typeof l.reason !== "string" || typeof l.source !== "string") fail(`${path}.losses`, "loss: reason and source strings");
+    if (!("at" in l)) fail(`${path}.losses`, "loss: at is required (null, or { after, before })");
+    if (l.at === null) continue;
+    const { after, before } = l.at ?? {};
+    if (typeof l.at !== "object" || Object.keys(l.at).length !== 2 || !Number.isInteger(after) || !Number.isInteger(before) ||
+        after < -1 || after >= before || before > s.blocks.length || (after === -1 && before === s.blocks.length))
+      fail(`${path}.losses`, "loss: at is { after, before }, integers with -1 <= after < before <= blocks.length, never the whole section");
+  }
   if (!Array.isArray(s.children)) fail(`${path}.children`, "missing");
   for (const c of s.children) validateSection(c, `${path}.children`);
 }

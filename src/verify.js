@@ -24,7 +24,7 @@ import { decompress, fetchSnapshot, nodeTransport } from "./fetch.js";
 import { CONVERT_TIMEOUT, fetchBody, fetchPage, HEAP_MB, MAX_BYTES, MAX_DEPTH, MAX_ELEMENTS, MAX_LINE, REQUEST_HEADERS, snapshot, TIMEOUT } from "./fetch-policy.js";
 import { edgeTransport, handler, SITEVERIFY, WEB_MAX_BYTES } from "./edge.js";
 import { isPrivateIp } from "./ssrf.js";
-import { walk, validate, SCHEMA, BLOCK_TYPES } from "./ir.js";
+import { walk, validate, SCHEMA, BLOCK_TYPES, loss as irLoss } from "./ir.js";
 import { renderMarkdown, NOTE_SOURCES, REASON_IS_OWN } from "./render.js";
 import { marked } from "marked";
 import { parseHTML } from "linkedom";
@@ -191,7 +191,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   const fails = (d, spec, re) => errors(d, spec).some((e) => re.test(e));
   // withLosses: the page with "Gone" cut from its blocks and the given audit findings attached.
   const page = doc.sections[0];
-  const finding = (text) => ({ type: "loss", reason: "r", source: "source-heading-diff", text });
+  const finding = (text) => irLoss("r", "source-heading-diff", text);
   const withLosses = (cutGone, ...texts) => ({ ...doc, sections: [{ ...page,
     blocks: cutGone ? page.blocks.filter((b) => b.text !== "Gone") : page.blocks, losses: texts.map(finding) }] });
   const lost = { labels: { lost: [H("Gone")] } };
@@ -203,7 +203,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("truth-harness", "fails on", "ambiguous label", fails(doc, { labels: { lost: [H("")] } }, /ambiguous/));
   record("truth-harness", "fails on", "known_fp without why", fails(withLosses(false, "Kept"), { known_fp: [H("Kept")] }, /without a why/));
   record("truth-harness", "fails on", "flattened label not emitted", fails(doc, { flattened: true }, /not emitted/));
-  const demotedFinding = { ...doc, sections: [{ ...page, blocks: page.blocks.filter((b) => b.text !== "Gone"), losses: [{ type: "loss", reason: "r", source: "source-heading-demoted", text: "Gone" }] }] };
+  const demotedFinding = { ...doc, sections: [{ ...page, blocks: page.blocks.filter((b) => b.text !== "Gone"), losses: [irLoss("r", "source-heading-demoted", "Gone")] }] };
   record("truth-harness", "fails on", "demoted finding on a lost block", fails(demotedFinding, lost, /^new false positive \(lost\)/));
   record("truth-harness", "fails on", "demoted label whose text is gone", fails(withLosses(true), { labels: { demoted: [H("Gone")] } }, /labelled demoted but text not in IR/));
   record("truth-harness", "fails on", "lost label on a block in the IR", fails(doc, lost, /labelled lost but in IR/));
@@ -409,18 +409,18 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("render", "blocks", "header, then blank line between blocks", headerOk(sep) && body(sep) === "# T\n\na\n\nb\n\n- x\n\nc\n");
   // A loss is a note after the page: label from the closed source set, its text fenced; the
   // reason (page text) is not rendered. A reason built from numbers only is.
-  const lossy = renderMarkdown(mk([P("a")], [{ type: "loss", reason: "source heading not extracted (h2): r", source: "source-heading-diff", text: "Gone" },
-    { type: "loss", reason: "audit stopped at 500 findings: 3 more", source: "audit-truncated" }]));
+  const lossy = renderMarkdown(mk([P("a")], [irLoss("source heading not extracted (h2): r", "source-heading-diff", "Gone"),
+    irLoss("audit stopped at 500 findings: 3 more", "audit-truncated")]));
   record("render", "losses", "notes after the page: enum label + fenced text, bareflow reasons only",
     body(lossy) === "# T\n\na\n\n## bareflow: 2 losses (fingerprint f)\n\nL1 source-heading-diff: heading dropped:\n```\nGone\n```\n\nL2 audit-truncated: audit stopped at 500 findings: 3 more\n" &&
     lossy.includes("\nlosses: 2\n"));
   // A flattened page says so on the header's first line.
-  const flatMd = renderMarkdown(mk([P("a")], [{ type: "loss", reason: "extraction flattened: the IR kept 0 of 4 source headings and code blocks as structure", source: "extract-flattened" }]));
+  const flatMd = renderMarkdown(mk([P("a")], [irLoss("extraction flattened: the IR kept 0 of 4 source headings and code blocks as structure", "extract-flattened")]));
   record("render", "flattened", "warning is the header's first field", flatMd.split("\n")[1].startsWith("warning: extraction flattened") && headerOk(flatMd));
   // Fences outlast the backtick runs they hold, in code blocks and in note text.
-  const fencesDoc = mk([{ type: "code", code: "`````\nx\n`````" }], [{ type: "loss", reason: "r", source: "source-code-diff", text: "```\ny\n```" }]);
+  const fencesDoc = mk([{ type: "code", code: "`````\nx\n`````" }], [irLoss("r", "source-code-diff", "```\ny\n```")]);
   const fences = renderMarkdown(fencesDoc);
-  const blanks = renderMarkdown(mk([{ type: "code", code: "a\n\n\nb" }], [{ type: "loss", reason: "r", source: "source-code-diff", text: "x\n\n\n\ny" }]));
+  const blanks = renderMarkdown(mk([{ type: "code", code: "a\n\n\nb" }], [irLoss("r", "source-code-diff", "x\n\n\n\ny")]));
   record("render", "verbatim", "blank lines kept in code and in note text", blanks.includes("```\na\n\n\nb\n```") && blanks.includes("```\nx\n\n\n\ny\n```"));
   // Adversarial corpus: every input this build's reviews used to forge structure, plus the
   // over-escape regressions. Each must lex exactly as the IR (renderOk's oracle); `has` pins what
@@ -559,7 +559,15 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("nav", "determinism", "", JSON.stringify(live.doc) === JSON.stringify(again.doc));
 
   const bad = (edit) => { const d = structuredClone(live.doc); edit(d); try { validate(d); return false; } catch { return true; } };
-  record("ir", "validate", "a loss needs a source (its note label)", bad((d) => { d.sections[0].losses = [{ type: "loss", reason: "r" }]; }) && !bad((d) => { d.sections[0].losses = [{ type: "loss", reason: "r", source: "source-heading-diff" }]; }));
+  record("ir", "validate", "a loss needs a source (its note label)", bad((d) => { d.sections[0].losses = [irLoss("r")]; }) && !bad((d) => { d.sections[0].losses = [irLoss("r", "source-heading-diff")]; }));
+  const blocksN = live.doc.sections[0].blocks.length;
+  const withAt = (v) => (d) => { d.sections[0].losses = [{ type: "loss", reason: "r", source: "source-heading-diff", ...(v === undefined ? {} : { at: v }) }]; };
+  record("ir", "validate", "a loss needs at: null, or a range inside the section and never all of it",
+    blocksN >= 2 && bad(withAt(undefined)) && bad(withAt({ after: 0, before: blocksN + 1 })) && bad(withAt({ after: -1, before: blocksN })) &&
+    bad(withAt({ after: 2, before: 2 })) && bad(withAt({ after: -2, before: 1 })) && bad(withAt({ after: 0, before: 1, x: 1 })) &&
+    bad(withAt({ after: 0.5, before: 1 })) && bad(withAt({ after: 0, before: 1.5 })) && bad(withAt({ after: 0, before: "1" })) && bad(withAt({ after: 0 })) &&
+    bad(withAt([0, 1])) && bad(withAt(0)) &&
+    !bad(withAt(null)) && !bad(withAt({ after: -1, before: 1 })) && !bad(withAt({ after: blocksN - 1, before: blocksN })));
   record("ir", "validate", "scope is a page: window, siblings, unknown keys, bad nav, a second section rejected",
     !bad(() => {}) && bad((d) => { d.scope.kind = "window"; }) && bad((d) => { d.scope.siblings = {}; }) &&
     bad((d) => { d.scope.next = { ...d.scope.next, via: "crawl" }; }) && bad((d) => { d.scope.next = { ...d.scope.next, status: "attached" }; }) && bad((d) => { d.scope.prev = { via: "rel" }; }) &&
@@ -698,6 +706,16 @@ const PLAIN_DROP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "H
     if (!p.cost) continue;
     const lossText = doc.sections.flatMap((s) => s.losses).reduce((n, l) => n + bytes(l.text ?? ""), 0);
     rows.push({ id: name, md: bytes(markdown), plain: bytes(plainText(html)), lossText });
+  }
+  // This version places no loss: every `at` on every frozen page is null, and docs/ir.md and the
+  // README say so of this version by its number.
+  {
+    const all = [...fixtureDocs.values(), ...realDocs.map((r) => r.doc)].flatMap((d) => d.sections[0].losses);
+    const placed = all.filter((l) => l.at !== null).length;
+    const [irDoc, readme] = await Promise.all(["docs/ir.md", "README.md"].map((f) => readFile(join(ROOT, f), "utf8")));
+    const said = irDoc.includes(`In ${VERSION} every \`at\` is null.`) && readme.includes(`which ${VERSION} leaves null`);
+    record("loss-audit", "at", `null on each of ${all.length} losses on ${fixtureDocs.size + realDocs.length} pages, as docs/ir.md and the README say of ${VERSION}${placed ? `: ${placed} carry a range` : ""}${said ? "" : ": a doc does not say it"}`,
+      all.length > 0 && !placed && said);
   }
   record("render", "real pages", `header, well-formed, every loss noted on ${Object.keys(realPages).length} real pages${bad.length ? `: ${bad.join(", ")}` : ""}`, !bad.length);
 
@@ -2299,7 +2317,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const crumbed = await run({ url: "https://example.com/docs/a/", retrievedAt: FIXED, html: '<html><body><nav aria-label="breadcrumb"><a href="/docs/">Docs</a></nav><main><h1>A</h1><p>x</p></main></body></html>' });
   // Every header field the render can emit, from a document that has them all.
   const full = { ...fixtureDocs.get("python-tutorial-intro"), source: { url: "https://example.com/a", finalUrl: "https://example.com/b", retrievedAt: FIXED, fingerprint: "f", input: "paste" },
-    breadcrumbs: [{ title: "Up", url: "https://example.com/" }], sections: [{ ...fixtureDocs.get("python-tutorial-intro").sections[0], losses: [{ type: "loss", reason: "flat", source: "extract-flattened" }] }] };
+    breadcrumbs: [{ title: "Up", url: "https://example.com/" }], sections: [{ ...fixtureDocs.get("python-tutorial-intro").sections[0], losses: [irLoss("flat", "extract-flattened")] }] };
   const fullMd = renderMarkdown(full).split("\n");
   const d = fixtureDocs.get("python-tutorial-intro"), sec = d.sections[0], loss = fixtureDocs.get("tailwind-install").sections[0].losses.find((l) => l.text != null);
   const current = {

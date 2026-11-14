@@ -5,7 +5,7 @@
   "errorExit": 1,
   "env": []
  },
- "schema": "bareflow/ir/v3",
+ "schema": "bareflow/ir/v4",
  "document": [
   "breadcrumbs",
   "generator",
@@ -51,6 +51,7 @@
   "url"
  ],
  "loss": [
+  "at",
   "reason",
   "source",
   "text",
