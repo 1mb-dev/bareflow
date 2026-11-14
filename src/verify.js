@@ -2068,7 +2068,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   let shown = null;
   try { shown = cardText(card); } catch { /* unreadable: reported below */ }
   if (JSON.stringify(shown) !== JSON.stringify(words)) cardBad.push(`it shows ${JSON.stringify(shown)}, the example ${JSON.stringify(words)}: node scripts/card.js`);
-  const og = { "og:title": "bareflow: a docs page as Markdown, every loss marked", "og:image": CARD.url, "og:image:width": String(CARD.width), "og:image:height": String(CARD.height), "og:image:alt": cardAlt(words), "twitter:card": "summary_large_image" };
+  const og = { "og:title": "bareflow: a docs page as Markdown, every loss it can detect marked", "og:image": CARD.url, "og:image:width": String(CARD.width), "og:image:height": String(CARD.height), "og:image:alt": cardAlt(words), "twitter:card": "summary_large_image" };
   const offHead = [...Object.keys(og).filter((k) => meta(homeDoc, k) !== og[k]), ...Object.keys(og).filter((k) => meta(shellDoc, k) !== (k === "og:title" ? og[k] : undefined)).map((k) => `shell ${k}`)];
   if (offHead.length || !CARD.url.startsWith("https://bareflow.1mb.dev/")) cardBad.push(`head: ${offHead.join(", ")}`);
   record("web", "card", `the OG card: ${CARD.width}x${CARD.height}, shipped as committed, its words and tokens the example's; on the home only, og:image absolute, its size and alt with it${cardBad.length ? `: ${cardBad.join(" | ")}` : ""}`, !cardBad.length);
