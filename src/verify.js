@@ -2193,10 +2193,11 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("web", "sinks", `no HTML sink in any site script, source or built (${scanned.length} files); the pattern catches each sink form${sunk.length || missed.length ? `: ${[...sunk, ...missed].join(", ")}` : ""}`,
     !sunk.length && !missed.length && scanned.some((f) => f.endsWith(join("_app", "app.js"))) && !SINKS.test("el.textContent = x; el.setAttribute(\"href\", u)"));
   // Byte for byte: a `! Name` line under any rule detaches that header wherever the rule matches. Cache-Control
-  // is Pages' own default plus no-transform, which asks Cloudflare not to append its scripts.
-  const HEADERS = `/*\n  Content-Security-Policy: ${CSP}\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n  Cache-Control: public, max-age=0, must-revalidate, no-transform\n\n` +
+  // is Pages' own default plus no-transform, which asks Cloudflare not to append its scripts. HSTS names this
+  // host alone: other 1mb.dev hosts are not bareflow's to commit.
+  const HEADERS = `/*\n  Content-Security-Policy: ${CSP}\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n  Cache-Control: public, max-age=0, must-revalidate, no-transform\n  Strict-Transport-Security: max-age=31536000\n\n` +
     "https://:project.pages.dev/*\n  X-Robots-Tag: noindex\n\nhttps://:version.:project.pages.dev/*\n  X-Robots-Tag: noindex\n";
-  record("web", "headers", "_headers exactly: the CSP (Turnstile's script-src and frame-src only), nosniff, no-referrer, no-transform on every path, noindex on pages.dev hosts; the Function routed at /_fetch only",
+  record("web", "headers", "_headers exactly: the CSP (Turnstile's script-src and frame-src only), nosniff, no-referrer, no-transform and HSTS on every path, noindex on pages.dev hosts; the Function routed at /_fetch only",
     headers === HEADERS && JSON.stringify(routes) === JSON.stringify({ version: 1, include: ["/_fetch"], exclude: [] }));
   // smoke compares a served page less what Cloudflare appends to a non-browser request (test/golden/injected.html:
   // one production response's bot detection). The strip takes bot detection before </body> and no other script.
