@@ -345,6 +345,36 @@ for (const [id, spec] of Object.entries(inventory)) {
   const yr = auditSourceLoss("<main><h2>2024 Roadmap</h2><h2>2025 Roadmap</h2></main>", [Hd("2025 Roadmap")]);
   record("loss-audit", "demoted", "word boundary; no whole-page window",
     JSON.stringify(src(wb)) === JSON.stringify(["source-heading-diff"]) && JSON.stringify(src(nn)) === JSON.stringify(["source-heading-diff"]));
+  // Shapes no frozen page holds, each held to its kind: code the IR keeps late or hoists after its
+  // container, a key the IR holds twice, a second demotion candidate far into the window, headings
+  // the IR holds out of order. A change to the audit that moves one is a labelled fix or a bug.
+  {
+    const kinds = (l) => JSON.stringify(l.map((x) => [x.source, x.text]));
+    const X = "npm install example-package --save", K = "helm repo add example https://example.com/charts";
+    const Q = (text) => ({ type: "blockquote", text });
+    const late = auditSourceLoss(`<main><pre>${X}</pre><h2>A</h2><h3>Lost</h3><h2>B</h2><p>p</p></main>`, [Hd("A"), Hd("B"), P("p"), C(X)]);
+    const lateTwice = auditSourceLoss(`<main><pre>${X}</pre><h2>Install</h2><h4>Heads up</h4><p>t</p><h2>Options</h2><h2>Run it</h2><pre>${X}</pre></main>`,
+      [Hd("Install"), P("Heads up t"), Hd("Options"), Hd("Run it"), C(X)]);
+    const hoisted = auditSourceLoss(`<main><h2>A</h2><blockquote><pre>${K}</pre><h4>Verify the install</h4><p>ok</p></blockquote><h2>B</h2></main>`,
+      [Hd("A"), Q("Verify the install ok"), C(K), Hd("B")]);
+    const irTwice = auditSourceLoss("<main><h2>A</h2><aside><h2>Related</h2></aside><p>p</p><h3>Lost</h3><h2>Related</h2></main>", [Hd("A"), Hd("Related"), P("p"), Hd("Related")]);
+    const far = auditSourceLoss("<main><h2>A</h2><h4>Note</h4><h2>B</h2></main>",
+      [Hd("A"), ...Array.from({ length: 250 }, (_, i) => P(i === 2 ? "Note one" : i === 239 ? "Note two" : `p${i}`)), Hd("B")]);
+    const moved = auditSourceLoss("<main><h2>A</h2><h2>B</h2><h4>Note</h4><h2>C</h2></main>", [Hd("B"), P("Note early"), Hd("A"), Hd("C")]);
+    const page = `<html><head><title>T</title></head><body><main><h1>T</h1><h2>A</h2><p>intro text here for the page body.</p><blockquote><pre>${K}</pre><h4>Verify the install</h4><p>Run the status command and read it.</p></blockquote><h2>B</h2><p>more text for the page so the extractor keeps it.</p></main></body></html>`;
+    const whole = (await run({ url: "https://example.com/t", html: page, retrievedAt: FIXED })).doc.sections[0];
+    const demotedOnly = (text) => JSON.stringify([["source-heading-demoted", text]]);
+    const off = Object.entries({
+      "late code": kinds(late) === JSON.stringify([["source-heading-diff", "Lost"]]),
+      "late code, twice in the source": kinds(lateTwice) === JSON.stringify([["source-heading-demoted", "Heads up"], ["source-code-diff", X]]),
+      "hoisted code": kinds(hoisted) === demotedOnly("Verify the install"),
+      "a key twice in the IR": kinds(irTwice) === JSON.stringify([["source-heading-diff", "Lost"]]),
+      "a far second candidate": kinds(far) === demotedOnly("Note"),
+      "headings out of order": kinds(moved) === demotedOnly("Note"),
+      "hoisted code, converted": whole.blocks.map((b) => b.type).join() === "heading,paragraph,blockquote,code,heading,paragraph" && kinds(whole.losses) === demotedOnly("Verify the install"),
+    }).filter(([, ok]) => !ok).map(([name]) => name);
+    record("loss-audit", "shapes", `late or hoisted code, a key twice in the IR, a far second candidate, headings out of order: each keeps its kind${off.length ? `; moved: ${off.join(", ")}` : ""}`, !off.length);
+  }
   record("loss-audit", "heading", "title skipped once; year is not a section number",
     tt.length === 1 && tt[0].text === "Overview" && yr.length === 1 && yr[0].text === "2024 Roadmap");
 
