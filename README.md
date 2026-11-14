@@ -2,63 +2,39 @@
 
 **Remove the website. Preserve the document.**
 
-bareflow is a deterministic, faithful, versioned document layer for technical web content. Give
-it a URL and get the document, not the website around it, as a typed document tree. The
-canonical form is the IR; Markdown and JSON are renders of it.
+Give bareflow a docs page's URL and it returns the page as Markdown, or as a typed JSON tree (the IR), with a note for each loss it detects. The same page bytes and version give the same output, byte for byte, but for `retrieved`, the fetch time, in the header.
 
-The unit is the document, not the page: the site's navigation is document structure, so
-bareflow records a page's prev/next targets (`doc.scope`) and where it sits in the site
-(`doc.breadcrumbs`). It reads one page and fetches none of them. The transformation is
-deterministic for a fixed snapshot, and every loss it can detect is marked in the output,
-never silently passed through.
+https://bareflow.1mb.dev runs the same conversion in the browser.
 
-## Install and run
+## Use
 
 ```
-git clone https://github.com/1mb-dev/bareflow && cd bareflow
-npm install && npm link           # puts `bareflow` on PATH (Node >=22.15; tested on 22, 24 and 26)
-bareflow <url>                      # Markdown: header, page, loss notes
-bareflow <url> --json               # the typed IR (docs/ir.md)
-bareflow --version                  # the package version
-npm run verify                    # truth gate: loss + nav precision/recall per fixture
-npm run bundle                    # dist/bareflow.js: convert() for the browser, as verify checks it
+npx -y bareflow <url>            # Markdown: header, page, loss notes
+npx -y bareflow <url> --json     # the IR, specified in docs/ir.md
+npm i -g bareflow                # or install it, then: bareflow <url>
 ```
 
-Exit 0 with the document on stdout; 2 on a usage error; 1 when the fetch or extraction fails,
-with the reason on stderr. A fetch has 30 s in total, redirects included, and the conversion 20 s
-and up to 1536 MB of heap (a V8 heap flag in NODE_OPTIONS replaces that cap).
-A page that is not HTML, is over 5 MB, or whose markup nests past 256 levels or holds over 50,000
-elements, is refused by name, and so is one that keeps no readable text (a page built by JavaScript).
+Node 22.15 or later. Exit 0 with the page on stdout; 1 when the fetch or conversion fails, with the reason on stderr; 2 on a usage error. There is no library API: the package is the CLI and `bareflow mcp`.
+
+A fetch has 30 s in total, redirects included. The conversion has 20 s and up to 1536 MB of heap (a V8 heap flag in NODE_OPTIONS replaces that cap). A page that is not HTML, is over 5 MB, nests past 256 levels, holds over 50,000 elements, or keeps no readable text (a page built by JavaScript) is refused with a named reason.
 
 ## MCP
 
-`bareflow mcp` serves one tool, `fetch_doc`, over stdio: the CLI's fetch and conversion, Markdown
-unless the call gives `format: "json"`. With `bareflow` on PATH, a client's config is:
+`bareflow mcp` serves one tool, `fetch_doc`, over stdio: the CLI's fetch and conversion, Markdown unless the call asks for `format: "json"`.
 
 ```
-{"mcpServers": {"bareflow": {"command": "bareflow", "args": ["mcp"]}}}
+{"mcpServers": {"bareflow": {"command": "npx", "args": ["-y", "bareflow", "mcp"]}}}
 ```
 
-Claude Code delivers fetch_doc results whole up to its own ceiling and saves a larger one to a
-file, which a session without file tools cannot read. A long page is long: a 400 KB page is about
-100k tokens of context in one call. Other hosts apply their own limits, untested. The tool carries
-a result-size hint for Claude Code; the hint overrides a user's MAX_MCP_OUTPUT_TOKENS for this tool
-(per Claude Code's docs; not measured with the variable set low).
+A 400 KB result is about 100k tokens in one call. Claude Code saves a result over its size ceiling to a file, which a session without file tools cannot read. fetch_doc asks Claude Code for a ceiling of 500,000 characters; Claude Code's docs say that overrides MAX_MCP_OUTPUT_TOKENS for this tool.
 
 ## Why
 
-An agent that reads docs through a summarizing fetch (Claude Code's WebFetch, for one) gets a
-model's paraphrase: short, and silent about what it left out. bareflow gives it the page, with a
-header saying where the page came from and a note for anything it could not keep.
+An agent that reads docs through a summarizing fetch (Claude Code's WebFetch, for one) gets a model's paraphrase: short, and silent about what it left out. bareflow gives it the page, with a header saying where the page came from and a note for anything it could not keep.
 
-Measured on 5 pre-registered questions about features released July to September 2026, on docs
-pages frozen before the run (`usage/seed/`; the pages and the outputs are at commit d3917fd):
-one agent answered from WebFetch, another from bareflow (then named mdflow, 0.4.0), and a blind
-grader scored both.
-bareflow's answer was better on 3 (one a borderline call), tied on 2, worse on none. For
-`deno add --unscoped`, WebFetch returned 457 bytes ending in its own gloss ("This flag strips the
-scope prefix, allowing you to import the package using only its base name"); the answer built on
-it could not say what the docs' last sentence does. bareflow 0.4.0, under the old name (excerpt):
+Measured on 5 pre-registered questions about features released July to September 2026, on docs pages frozen before the run: one agent answered from WebFetch, another from bareflow 0.4.0 (then named mdflow), and a blind grader scored both. bareflow's answer was better on 3 (one a borderline call), tied on 2, worse on none. The questions, WebFetch outputs, answers, and grades are in `usage/seed/`; the frozen pages and bareflow's outputs are at commit d3917fd.
+
+For `deno add --unscoped`, WebFetch returned 457 bytes ending in its own gloss ("This flag strips the scope prefix, allowing you to import the package using only its base name"); the answer built on it could not say what the docs' last sentence does. bareflow's output (excerpt):
 
 ```
 ---
@@ -75,69 +51,42 @@ Use the package name without its scope as the alias (ex. `jsr:@david/jsonc-morph
 `jsonc-morph`). Packages given an explicit alias are unaffected.
 ```
 
-The cost is size: over the five pages bareflow's output was 19 times WebFetch's (67704 against
-3529 bytes). Short is not always cheap, though: on the Astro question WebFetch's summary was
-right, and the answering agent, distrusting it, substituted an API from memory.
+The cost is size: over the five pages bareflow's output was 19 times WebFetch's (67704 against 3529 bytes).
 
-## Status
+## What it catches
 
-0.5.0, unreleased: run it from a clone; npm holds only the name until 0.5.0 publishes. The
-pipeline (fetch -> extract -> IR -> Markdown/JSON) is implemented with structured loss markers, and
-`npm run verify` scores the loss audit and nav detection against hand-labelled frozen fixtures,
-lexes every render with a CommonMark parser, and pins the CLI and IR surface.
-Extraction is composed (Defuddle); bareflow's work is the IR, the loss audit, and the render.
+Extraction is [Defuddle](https://github.com/kepano/defuddle)'s; bareflow's work is the IR, the loss audit, and the render.
 
-- Loss recall 0.97; loss precision 0.60 over 29 pages: 0.81 on the 27 docs pages, and 0 of 12
-  findings correct on the two blog pages, where every false positive is chrome inside the main
-  landmark (related posts, author bio, comments). The auditor is fitted to docs generators.
-- Nav precision 1.00, recall 0.89: standard rel=prev/next (on `<link>` and `<a>`), else the
-  Docusaurus or VitePress docs pager when the page declares that generator (`via: rel | pager`).
-- The IR is versioned (`bareflow/ir/v4`, docs/ir.md); that a pinned snapshot version serves a
-  consumer is unproven until one pins it.
+bareflow notes the headings, code blocks, and tables the extractor dropped, the headings and code blocks it turned into prose, embeds the IR cannot hold, and a page whose structure flattened (its header says so). Hidden elements are not audited. In Markdown the notes follow the page, one per loss with the dropped text verbatim; in the JSON they are `section.losses`. Each loss carries a position field, `at`, which 0.5.0 leaves null.
 
-History: the precision gate (~0.8) failed and was waived by the maintainer. On six docs pages frozen
-and labelled before any change was made against them, the auditor emitted 2 findings, both
-correct, too few to call precision. Attaching sibling page content was measured on 12 real tasks
-and dropped: it never carried an answer the page lacked (`usage/v2/log.md`).
+It misses prose loss: a paragraph dropped under a surviving heading. A heading the extractor moves out of source order can make a nearby heading or code block that became prose read as dropped; the note still holds that block's text.
 
-Loss reporting is bounded: bareflow marks (a) post-extraction unrepresentable content and
-(b) source headings, code blocks, and tables the extractor dropped, via a source-to-IR diff.
-Loss markers are findings, not content: they live in `section.losses` in the JSON, not the
-block stream. Each carries `at`, which 0.5.0 leaves null; a later version may fill it with the
-range of blocks the loss sat between (docs/ir.md). The Markdown render lists the losses after the
-page, one note each with the dropped text verbatim, and a page whose extraction flattened says so
-in its header.
-Prose loss (a paragraph dropped while its heading survives) is not yet detected.
+Scored against hand-labelled frozen pages:
 
-Wrong output, or a loss with no note:
-[open an issue](https://github.com/1mb-dev/bareflow/issues/new?template=wrong-output.md); the
-template asks for the header.
+- Loss recall 0.97, precision 0.60 over 29 pages: precision 0.81 on the 27 docs pages, and 0 of 12 notes were real losses on the two blog pages, where related posts, author bios, and comments inside `<main>` read as losses. The audit is fitted to docs sites.
+- bareflow records a page's prev and next (from `rel=prev/next`, else the Docusaurus or VitePress pager) and its breadcrumbs, and fetches none of them. Nav precision 1.00, recall 0.89.
+
+
+Wrong output, or a loss with no note: [open an issue](https://github.com/1mb-dev/bareflow/issues/new?template=wrong-output.md); the template asks for the header.
 
 ## Trust
 
-The JSON render is the contract; treat everything in it that came from the page as untrusted
-input. Loss markers carry the dropped block's source `text` (hidden content is not audited).
-URLs in `doc.scope` and `doc.breadcrumbs` come from the page's own navigation and are held to
-the page's origin; bareflow fetches none of them, and an agent that follows one makes its own
-request.
+The JSON is the contract ([docs/ir.md](docs/ir.md), `bareflow/ir/v4`; a breaking change bumps the schema). Treat everything in it that came from the page as untrusted. The URLs in `doc.scope` and `doc.breadcrumbs` come from the page's own navigation and are held to its origin; an agent that follows one makes its own request.
 
-The Markdown render opens with a front-matter header of bareflow's own fields. Its values are
-bareflow's, the source URL you gave, and URLs the server or the page chose (`final`, `prev`,
-`next`, `up`); a chosen URL holding a `'` is left out (the JSON keeps it), so a single-quoted
-URL stays one argument. Page text is escaped where it joins Markdown, so it opens no block, link,
-or HTML of its own; links and images keep http(s), mailto, or relative targets only. The loss
-notes sit under `## bareflow: N losses (fingerprint ...)`, whose fingerprint matches the header's;
-a page cannot know its own fingerprint, so a lookalike heading in page text has a different one.
+The Markdown header's values are bareflow's own, the URL you gave, or URLs the server or the page chose (`final`, `prev`, `next`, `up`). Page text is escaped where it joins Markdown, so it opens no structure of its own. The loss notes sit under `## bareflow: N losses (fingerprint ...)` with the header's fingerprint (sha256 of the bytes read, first 16 hex); a page cannot know its own, so a lookalike heading in page text shows a different one.
 
-## Layout
+## Development
 
-`bin/` and `src/` are the CLI and the MCP server (`src/verify.js`, `src/truth.js` and `src/edge.js`
-do not ship); `docs/ir.md` is the IR contract. `site/`, `functions/` and `wrangler.toml` are the
-web app: the same `convert()` in a browser worker, behind one fetch-only Function. `scripts/`
-builds and checks the web app and the package. `test/` holds the gate's frozen pages and goldens;
-`usage/` holds the eval records cited above, written under the old name, mdflow. `docs/voice.md`
-sets the wording of every string bareflow shows.
+```
+git clone https://github.com/1mb-dev/bareflow && cd bareflow
+npm ci
+npm link                         # bareflow on PATH from the clone
+npm run verify                   # the gate: loss and nav scores, renders, CLI and IR surface, the web app
+npm run bundle                   # dist/bareflow.js: convert() for the browser
+```
+
+`bin/` and `src/` are the CLI and the MCP server. `site/`, `functions/`, and `wrangler.toml` are the web app: the same `convert()` in a browser worker, behind one fetch-only Function. `scripts/` builds and checks the web app and the package. `test/` holds the frozen pages and goldens; `usage/` the eval records, written under the old name. `docs/voice.md` sets the wording of every string bareflow shows. Security reports: SECURITY.md.
 
 ## License
 
-MIT
+MIT. The frozen pages in `test/` and the page text quoted in `usage/seed/` belong to their publishers and are not covered by it; NOTICE lists them.
