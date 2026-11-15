@@ -28,6 +28,7 @@ import { walk, validate, SCHEMA, BLOCK_TYPES, loss as irLoss } from "./ir.js";
 import { renderMarkdown, NOTE_SOURCES, REASON_IS_OWN } from "./render.js";
 import { marked } from "marked";
 import { parseHTML } from "linkedom";
+import { build } from "esbuild";
 import { main, USAGE } from "./cli.js";
 import { serve, TOOLS } from "./mcp.js";
 import { unescape } from "./md.js";
@@ -1850,13 +1851,14 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     ...(await readdir(out, { recursive: true })).filter((f) => f.endsWith(".js") && f !== join("_app", "worker.js")).map((f) => join(out, f)),
   ];
   const sunk = (await Promise.all(scanned.map(async (f) => (SINKS.test(await readFile(f, "utf8")) ? [f] : [])))).flat();
-  // No `npx` in anything the web serves or says until the package is on npm (7.4). Text files
-  // only: a font's compressed bytes could spell anything.
-  const text = (e) => e.isFile() && (/\.(html|js|css|json|txt)$/.test(e.name) || !e.name.includes("."));
+  // No npx in any file the site serves but its HTML (the commands row's) and images and fonts, nor in
+  // any module esbuild bundles into the Function from functions/_fetch.js.
+  const text = (e) => e.isFile() && !/\.(html|woff2|png|ico)$/.test(e.name);
+  const fnBuild = await build({ entryPoints: [join(ROOT, "functions/_fetch.js")], bundle: true, write: false, metafile: true, logLevel: "silent", format: "esm", platform: "neutral" });
   const served = [
     ...(await readdir(join(ROOT, "site"), { recursive: true, withFileTypes: true })).filter(text).map((e) => join(e.parentPath, e.name)),
     ...(await readdir(out, { recursive: true, withFileTypes: true })).filter(text).map((e) => join(e.parentPath, e.name)),
-    join(ROOT, "src/edge.js"), join(ROOT, "functions/_fetch.js"),
+    ...Object.keys(fnBuild.metafile.inputs).map((f) => join(ROOT, f)),
   ];
   const npx = (await Promise.all(served.map(async (f) => (/\bnpx\b/.test(await readFile(f, "utf8")) ? [f] : [])))).flat();
   const headers = await readFile(join(out, "_headers"), "utf8");
@@ -1865,6 +1867,15 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   const redirects = await readFile(join(out, "_redirects"), "utf8");
   const home = await readFile(join(out, "_app/home.html"), "utf8").catch(() => "");
   const pages = await Promise.all((await readdir(out, { recursive: true })).filter((f) => f.endsWith(".html")).map(async (f) => [f, await readFile(join(out, f), "utf8")]));
+  // Every <code> on a built page naming npx or starting with bareflow, but the example's (a frozen third-party page),
+  // is exactly `npx -y` plus a form of the CLI usage in test/golden/surface.json.
+  const usage = JSON.parse(await readFile(join(ROOT, "test/golden/surface.json"), "utf8")).cli.usage.replace(/^usage: /, "").split(" | ");
+  const forms = usage.flatMap((u) => (u.includes(" [") ? [u.replace(/ \[(.*?)\]/, " $1"), u.replace(/ \[.*?\]/, "")] : [u])).map((u) => `npx -y ${u}`);
+  const named = (doc, sel = "code") => [...doc.querySelectorAll(sel)].filter((c) => !c.closest(".example")).map((c) => c.textContent.trim()).filter((t) => /\bnpx\b|^bareflow(\s|$)/.test(t));
+  const npxCode = pages.flatMap(([f, src]) => named(parseHTML(src).document).map((t) => [f, t]));
+  const homeCode = parseHTML(home).document;
+  const commandsBad = [...npxCode.filter(([, t]) => !forms.includes(t)).map(([f, t]) => `${f}: ${t}`),
+    ...["#pointer", ".use"].filter((sel) => !named(homeCode, `${sel} code`).length).map((sel) => `no command in the built home's ${sel}`)];
   const privacy = Object.fromEntries(pages)["privacy.html"] ?? "";
   const top = await readdir(out);
   const [tokens, style, builtStyle] = await Promise.all([join(ROOT, "site/tokens.css"), join(ROOT, "site/style.css"), join(out, "_app/style.css")].map((f) => readFile(f, "utf8")));
@@ -1888,8 +1899,8 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   record("web", "fonts", `${fontFiles.length} fonts, ${fontTotal} bytes (cap ${FONT_CAP}), each equal to its SOURCE sha256; every url() and preload resolves; OFL.txt ships${[...unsourced, ...unlinked].length ? `: ${[...unsourced, ...unlinked].join(", ")}` : ""}`,
     fontFiles.length === 3 && fontTotal <= FONT_CAP && Object.keys(sourced).length === fontFiles.length && !unsourced.length &&
     linked.length >= 5 && !unlinked.length && (ofl.match(/SIL OPEN FONT LICENSE Version 1\.1/g) ?? []).length === 2);
-  record("web", "shell", "the shell's visible text for curl and agents equals the pinned sentence (CLI and MCP server as end posture, no version); sitekey set; scripts from self only",
-    visible === "bareflow converts this page in your browser. The CLI and MCP server ship on npm. Source: github.com/1mb-dev/bareflow." && html.includes('data-sitekey="test-sitekey"') &&
+  record("web", "shell", "the shell's visible text for curl and agents equals the pinned sentence (the npx commands, no version); sitekey set; scripts from self only",
+    visible === "bareflow converts this page in your browser. From a terminal: npx -y bareflow <url>, or npx -y bareflow mcp as an MCP server. Source: github.com/1mb-dev/bareflow." && html.includes('data-sitekey="test-sitekey"') &&
     scripts.length === 2 && scripts.every((s) => s.startsWith("/_app/")));
   // Every document the build writes loads scripts from self, each by src (the CSP blocks an inline
   // one; this names it). The privacy page loads the theme alone: no app, so no Turnstile.
@@ -2162,8 +2173,9 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   });
   record("web", "states: worker load", `a worker that never posts ends as "converter" at LOAD_TIMEOUT (${LOAD / 1000} s), not before; {started} clears it and arms CONVERT_TIMEOUT; an error event after {started} is "convert"; a late message changes nothing shown${loadBad.length ? `: ${loadBad.join("; ")}` : ""}`,
     !loadBad.length);
-  record("web", "claims", `no npx in site/, the built site, or the Function's messages (${served.length} files)${npx.length ? `: ${npx.join(", ")}` : ""}`,
-    !npx.length && served.some((f) => f.endsWith(join("_app", "app.js"))) && served.some((f) => f.endsWith("index.html")));
+  record("web", "commands", `each command <code> on a built page (the example aside) is \`npx -y\` plus a form of the CLI's usage (${npxCode.length}); the home's #pointer and .use each name one or more${commandsBad.length ? `: ${commandsBad.join(" | ")}` : ""}`, !commandsBad.length);
+  record("web", "claims", `no npx in any file the site serves (HTML, images and fonts aside), nor in a module of the Function's bundle (${served.length} files)${npx.length ? `: ${npx.join(", ")}` : ""}`,
+    !npx.length && served.some((f) => f.endsWith(join("_app", "app.js"))) && served.some((f) => f.endsWith(join("_app", "worker.js"))) && served.some((f) => f.endsWith(join("src", "fetch-policy.js"))));
   // The theme: theme.js is a classic script in <head> before the stylesheet, so it sets data-theme
   // before the first paint; run here against stand-ins for a stored choice, junk, and no storage.
   const themeTag = html.match(/<script src="\/_app\/theme\.js"[^>]*>/)?.[0] ?? "";

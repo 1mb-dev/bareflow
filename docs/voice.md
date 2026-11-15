@@ -37,7 +37,7 @@ What happened, then what to do. One or two sentences. Name the host. No apology,
 | `HTTP 403 from <host>; check the URL (bareflow does not retry)` | `<host> refused the request (HTTP 403). Check the address, or save the page and paste its HTML on the home page.` |
 | `3 losses marked.` | `3 losses: parts of the page bareflow could not keep, listed after it.` |
 
-An instruction must work when it is read: no `npx bareflow` until the package is on npm (verify fails on `npx` in anything the web serves or says). Paste is offered only where the home shows the paste form (from 40rem); a phone's next step is the address, the wait, or the original.
+An instruction must work where it is read: a web message's next step is one the reader can take in the browser showing it, so it names no command (verify fails on `npx` in any script the site serves). Paste is offered only where the home shows the paste form (from 40rem); a phone's next step is the address, the wait, or the original.
 
 The web shows the server's own words (src/edge.js) only as `detail:`, under a code that covers several causes (url, redirect, upstream without a status, convert).
 
