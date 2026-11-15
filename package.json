@@ -25,7 +25,7 @@
     "node": ">=22.15"
   },
   "bin": {
-    "bareflow": "./bin/bareflow.js"
+    "bareflow": "bin/bareflow.js"
   },
   "files": [
     "bin",
