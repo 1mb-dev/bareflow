@@ -2014,7 +2014,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
     { id: "check-timeout", code: "check-timeout", path: TARGET, extra: { turnstile: { render: (el, o) => o["timeout-callback"]?.() } }, next: "reload" },
     { id: "challenge", code: "challenge", path: TARGET, blockScript: true, next: "reload", paste: true },
     { id: "check-slow", code: "check-slow", path: TARGET, extra: { Date: { now: ((t) => () => (t += 2000))(0) } }, next: "reload", paste: true },
-    { id: "limited", code: "limited", ...fetched({ fetch: answer({ status: 429 }) }), next: "wait" },
+    { id: "limited", code: "limited", ...fetched({ fetch: answer({ status: 429 }) }), next: "wait", paste: true },
     { id: "unavailable", code: "unavailable", ...edge(503, "unavailable", "the bot check service did not answer"), next: "wait", paste: true },
     { id: "unavailable, unknown code", code: "unavailable", ...edge(500, "weird", "something new"), next: "wait", paste: true },
     { id: "unavailable, inherited name as code", code: "unavailable", ...edge(500, "constructor", "something new"), next: "wait", paste: true },
