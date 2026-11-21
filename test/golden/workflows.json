@@ -253,7 +253,7 @@
             "run": "git merge-base --is-ancestor \"$GITHUB_SHA\" origin/main"
           },
           {
-            "run": "npm publish --ignore-scripts --provenance"
+            "run": "npm stage publish --ignore-scripts --provenance"
           }
         ]
       }

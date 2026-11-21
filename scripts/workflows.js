@@ -151,7 +151,7 @@ export const TABLE = {
         steps: [HISTORY, NODE,
           { run: `grep -Eq '^v[0-9]+\\.[0-9]+\\.[0-9]+$' <<< "$GITHUB_REF_NAME" && test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"` },
           { run: ON_MAIN },
-          { run: "npm publish --ignore-scripts --provenance" }],
+          { run: "npm stage publish --ignore-scripts --provenance" }],
       },
     },
   },
