@@ -107,8 +107,6 @@ export function readYaml(text) {
 // recorded in test/golden/workflows.json) and a step's name. A changed run line, env pair, grant,
 // trigger, or new step is an edit here as well as in the workflow; a bless never turns one green.
 const ORG_CI = "1mb-dev/.github/.github/workflows/ci-node.yml@main";
-// It runs with contents: write on a release tag, so it is called at a commit; a bump is an edit here.
-const ORG_RELEASE = "1mb-dev/.github/.github/workflows/release.yml@7633e390616b1ce8dc36a50bc55f468f863fb728";
 const CHECKOUT = { uses: "actions/checkout", with: { "persist-credentials": "false" } };
 const NODE = { uses: "actions/setup-node", with: { "node-version": "24", "package-manager-cache": "false" } };
 const WRANGLER = "node_modules/.bin/wrangler pages deploy dist/site --branch main";
@@ -155,7 +153,6 @@ export const TABLE = {
           { run: ON_MAIN },
           { run: "npm publish --ignore-scripts --provenance" }],
       },
-      release: { needs: "publish", permissions: { contents: "write" }, uses: ORG_RELEASE, with: { draft: "true" } },
     },
   },
   "probe.yml": {

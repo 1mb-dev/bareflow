@@ -256,16 +256,6 @@
             "run": "npm publish --ignore-scripts --provenance"
           }
         ]
-      },
-      "release": {
-        "needs": "publish",
-        "permissions": {
-          "contents": "write"
-        },
-        "uses": "1mb-dev/.github/.github/workflows/release.yml@7633e390616b1ce8dc36a50bc55f468f863fb728",
-        "with": {
-          "draft": "true"
-        }
       }
     }
   }

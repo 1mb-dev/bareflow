@@ -1,8 +1,9 @@
 name: Probe
 
-# Hourly, between deploys: a tokenless /_fetch must answer 403 token. A spent quota, a route that no
-# longer reaches the Function, a broken deploy, or DNS turns it red. GitHub stops a public repo's
-# schedule after 60 days without activity: the session-start check reads this workflow's last run.
+# Scheduled hourly (GitHub runs it every few hours), between deploys: a tokenless /_fetch must answer
+# 403 token. A spent quota, a route that no longer reaches the Function, a broken deploy, or DNS turns
+# it red. GitHub stops a public repo's schedule after 60 days without activity: the session-start
+# check reads this workflow's last run.
 # Stated in scripts/workflows.js (TABLE) as well.
 on:
   schedule:
