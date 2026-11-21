@@ -346,19 +346,19 @@ export function auditSourceLoss(html, blocks, title = "") {
     if (placed[j] !== null || full()) return;
     const own = () => { let k = j - 1; while (k >= 0 && typeof placed[k] !== "number") k--; return ownLeads(src, k, j); };
     const to = demotedTo(nb.before(j - 1), nb.after(j + 1), h, blocks, keys, claimed, own) ?? (survives(h.text) ? { type: "prose" } : null);
-    if (to) losses.push(ir.loss(`source heading demoted to ${to.type} (h${h.level}): ${clip(h.text)}`, "source-heading-demoted", h.raw));
-    else losses.push(ir.loss(`source heading not extracted (h${h.level}): ${clip(h.text)}`, "source-heading-diff", h.raw));
+    if (to) losses.push(ir.loss(`heading kept as ${to.type} (h${h.level}): ${clip(h.text)}`, "source-heading-demoted", h.raw));
+    else losses.push(ir.loss(`heading dropped (h${h.level}): ${clip(h.text)}`, "source-heading-diff", h.raw));
   });
   const budget = new Map();
   for (const code of src.codes) {
     if (take(irc.codes, codeKey(code.key)) || full()) continue;
     const to = codeDemotedTo(nb.before(code.under), nb.after(code.under + 1), code, blocks, keys, budget, src.prose) ?? (survives(code.key) ? { type: "prose" } : null);
-    if (to) losses.push(ir.loss(`source code block demoted to ${to.type}: ${clip(code.key, 80)}`, "source-code-demoted", code.raw));
-    else losses.push(ir.loss(`source code block not extracted: ${clip(code.key, 80)}`, "source-code-diff", code.raw));
+    if (to) losses.push(ir.loss(`code block kept as ${to.type}: ${clip(code.key, 80)}`, "source-code-demoted", code.raw));
+    else losses.push(ir.loss(`code block dropped: ${clip(code.key, 80)}`, "source-code-diff", code.raw));
   }
   for (const { rows, raw } of src.tables) {
     if (!tableSurvived(rows, irc.tables, irc.fullText) && !full()) {
-      losses.push(ir.loss(`source table not extracted: ${clip(rows.flat().slice(0, 6).join(" | "))}`, "source-table-diff", raw));
+      losses.push(ir.loss(`table dropped: ${clip(rows.flat().slice(0, 6).join(" | "))}`, "source-table-diff", raw));
     }
   }
   if (omitted) losses.push(ir.loss(`audit stopped at ${MAX_BLOCK_FINDINGS} findings: ${omitted} more missing headings, code blocks, or tables not reported`, "audit-truncated"));

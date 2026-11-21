@@ -430,7 +430,7 @@ for (const [id, spec] of Object.entries(inventory)) {
       "a drop after the page's own look-alike paragraph, headings moved": kinds(proseBeforeMoved) === dropped("Note"),
       "a drop after the page's own look-alike paragraph, headings swapped": kinds(proseBeforeSwapped) === dropped("Note"),
       ...Object.fromEntries(Object.entries(notOwn).map(([name, l]) => [`a demotion beside ${name}`, kinds(l) === demotedOnly("Note")])),
-      "limit: look-alike list items, the list taken as the demotion": /demoted to list/.test(notOwn["look-alike list items"][0]?.reason),
+      "limit: look-alike list items, the list taken as the demotion": /kept as list/.test(notOwn["look-alike list items"][0]?.reason),
       "hoisted code, converted": whole.blocks.map((b) => b.type).join() === "heading,paragraph,blockquote,code,heading,paragraph" && kinds(whole.losses) === demotedOnly("Verify the install"),
     }).filter(([, ok]) => !ok).map(([name]) => name);
     record("loss-audit", "shapes", `late or hoisted code, a key twice in the IR, a far second candidate, headings out of order (4 held at the known limit, 5 drops), the page's own look-alike paragraph before a lost heading (3 drops) or after it, and 6 look-alikes that are not it (7 demotions, 1 at the known limit): each keeps its kind${off.length ? `; moved: ${off.join(", ")}` : ""}`, !off.length);
@@ -469,7 +469,7 @@ for (const [id, spec] of Object.entries(inventory)) {
   record("render", "blocks", "header, then blank line between blocks", headerOk(sep) && body(sep) === "# T\n\na\n\nb\n\n- x\n\nc\n");
   // A loss is a note after the page: label from the closed source set, its text fenced; the
   // reason (page text) is not rendered. A reason built from numbers only is.
-  const lossy = renderMarkdown(mk([P("a")], [irLoss("source heading not extracted (h2): r", "source-heading-diff", "Gone"),
+  const lossy = renderMarkdown(mk([P("a")], [irLoss("heading dropped (h2): r", "source-heading-diff", "Gone"),
     irLoss("audit stopped at 500 findings: 3 more", "audit-truncated")]));
   record("render", "losses", "notes after the page: enum label + fenced text, bareflow reasons only",
     body(lossy) === "# T\n\na\n\n## bareflow: 2 losses (fingerprint f)\n\nL1 source-heading-diff: heading dropped:\n```\nGone\n```\n\nL2 audit-truncated: audit stopped at 500 findings: 3 more\n" &&
