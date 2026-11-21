@@ -1876,7 +1876,7 @@ const limit = (n) => { piped++; let seen = 0; return new TransformStream({ trans
   // No npx in any file the site serves but its HTML (the commands row's) and images and fonts, nor in
   // any module esbuild bundles into the Function from functions/_fetch.js.
   const text = (e) => e.isFile() && !/\.(html|woff2|png|ico)$/.test(e.name);
-  const fnBuild = await build({ entryPoints: [join(ROOT, "functions/_fetch.js")], bundle: true, write: false, metafile: true, logLevel: "silent", format: "esm", platform: "neutral" });
+  const fnBuild = await build({ entryPoints: [join(ROOT, "functions/_fetch.js")], bundle: true, write: false, metafile: true, logLevel: "silent", format: "esm", platform: "neutral", absWorkingDir: ROOT });
   const served = [
     ...(await readdir(join(ROOT, "site"), { recursive: true, withFileTypes: true })).filter(text).map((e) => join(e.parentPath, e.name)),
     ...(await readdir(out, { recursive: true, withFileTypes: true })).filter(text).map((e) => join(e.parentPath, e.name)),
