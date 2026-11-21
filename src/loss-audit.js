@@ -81,7 +81,7 @@ function readSource(html) {
   const { root, skip } = auditScope(document);
 
   // One pass in document order, so each code block knows the heading it sits under.
-  const headings = [], codes = [], tables = [];
+  const headings = [], codes = [], tables = [], headingEls = [];
   for (const el of root.querySelectorAll("h1, h2, h3, h4, h5, h6, pre")) {
     if (el.closest(skip)) continue;
     if (el.tagName === "PRE") {
@@ -91,7 +91,7 @@ function readSource(html) {
     }
     const raw = headingText(el);
     const text = norm(raw).replace(/\s*¶\s*$/, "");
-    if (text) headings.push({ level: Number(el.tagName[1]), text, raw });
+    if (text) { headings.push({ level: Number(el.tagName[1]), text, raw }); headingEls.push(el); }
   }
   // Innermost tables only: an outer (layout) table's rows and cells contain every nested
   // table, which multiplies the audit's output with nesting depth.
@@ -101,9 +101,31 @@ function readSource(html) {
     const raw = [...tbl.querySelectorAll("th,td")].map((c) => c.textContent);
     if (raw.length) tables.push({ rows: rows.map((r) => r.map(norm)), raw: raw.join(" | ") });
   }
-  let prose; // walked only if a code block goes missing
+  let prose, lead; // walked only if a code block or a heading goes missing
   const title = document.querySelector("title")?.textContent ?? "";
-  return { headings, codes, tables, title, prose: () => (prose ??= proseText(document, root, skip)) };
+  return {
+    headings, codes, tables, title,
+    prose: () => (prose ??= proseText(document, root, skip)),
+    lead: () => (lead ??= proseLeads(root, skip, headingEls)),
+  };
+}
+
+// Per source prose block (outermost, holding no heading), its words and the index of the heading it
+// follows (-1 before the first). A block that wraps a heading (<summary><h3>, <li><h4>) carries that
+// heading's own text, so it is not the page's prose before it. Table cells are not prose: the IR
+// keeps a table as a table, never as one paragraph per cell.
+const PROSE = "p, li, dd, dt, blockquote, figcaption, summary";
+const HEADINGS = "h1, h2, h3, h4, h5, h6";
+function proseLeads(root, skip, headingEls) {
+  const out = [];
+  let h = -1;
+  for (const el of root.querySelectorAll(`${HEADINGS}, ${PROSE}`)) {
+    if (el === headingEls[h + 1]) { h++; continue; }
+    if (/^H[1-6]$/.test(el.tagName) || el.closest(skip) || el.parentElement?.closest(PROSE) || el.querySelector(HEADINGS)) continue;
+    const words = headingWords(el.textContent);
+    if (words) out.push({ h, words });
+  }
+  return out;
 }
 
 // Whitespace-free text of the scope outside code, headings, and chrome: what the source already
@@ -198,18 +220,35 @@ function proseKeys(blocks) {
 // drops of short headings ("Note", "Usage") as demoted; so does a window with no placed
 // neighbour at all, which spans the whole page. The scan stops DEMOTE_SCAN blocks in: a
 // demotion sits where the heading was, and an unbounded scan is quadratic on large pages.
+// A match whose text is a prose block the source holds before the heading (after the placed heading
+// that opens the window) is that block, not the heading: `own()` maps those texts to their counts.
+// Built only once a block matches, so a page with no look-alike pays nothing. Words must be equal:
+// where the IR's text for a block differs from the page's (inline Markdown, a list's joined items,
+// child blocks the page runs together), that block matches nothing here.
 const DEMOTE_SCAN = 200;
-function demotedTo(lo, hi, h, blocks, keys, claimed) {
+const opensWith = (words, w) => words.startsWith(w) && !(/[a-z0-9]$/.test(w) && /^[a-z0-9]/.test(words.slice(w.length)));
+function demotedTo(lo, hi, h, blocks, keys, claimed, own) {
   if (lo === -1 && hi === blocks.length) return null;
   const w = headingWords(h.text);
+  let mine;
   for (let i = lo + 1; i < Math.min(hi, lo + 1 + DEMOTE_SCAN); i++) {
     const k = keys[i];
-    if (!k || claimed.has(i) || !k.words.startsWith(w)) continue;
-    if (/[a-z0-9]$/.test(w) && /^[a-z0-9]/.test(k.words.slice(w.length))) continue;
+    if (!k || claimed.has(i) || !opensWith(k.words, w)) continue;
+    mine ??= own();
+    const n = mine.get(k.words) || 0;
+    if (n > 0) { mine.set(k.words, n - 1); continue; }
     claimed.add(i);
     return blocks[i];
   }
   return null;
+}
+
+// Words of the source prose blocks between the placed heading before heading j (index from, -1 for
+// none) and j that open with heading j's words, with their counts.
+function ownLeads(src, from, j) {
+  const w = headingWords(src.headings[j].text), out = new Map();
+  for (const p of src.lead()) if (p.h >= from && p.h < j && opensWith(p.words, w)) out.set(p.words, (out.get(p.words) || 0) + 1);
+  return out;
 }
 
 // A missing code block is demoted when its text sits inside a prose block in the same
@@ -305,7 +344,8 @@ export function auditSourceLoss(html, blocks, title = "") {
   const full = () => losses.length - pageLevel >= MAX_BLOCK_FINDINGS && ++omitted;
   src.headings.forEach((h, j) => {
     if (placed[j] !== null || full()) return;
-    const to = demotedTo(nb.before(j - 1), nb.after(j + 1), h, blocks, keys, claimed) ?? (survives(h.text) ? { type: "prose" } : null);
+    const own = () => { let k = j - 1; while (k >= 0 && typeof placed[k] !== "number") k--; return ownLeads(src, k, j); };
+    const to = demotedTo(nb.before(j - 1), nb.after(j + 1), h, blocks, keys, claimed, own) ?? (survives(h.text) ? { type: "prose" } : null);
     if (to) losses.push(ir.loss(`source heading demoted to ${to.type} (h${h.level}): ${clip(h.text)}`, "source-heading-demoted", h.raw));
     else losses.push(ir.loss(`source heading not extracted (h${h.level}): ${clip(h.text)}`, "source-heading-diff", h.raw));
   });

@@ -391,6 +391,24 @@ for (const [id, spec] of Object.entries(inventory)) {
     const across = auditSourceLoss(`<main>${hs("X", "A")}<h4>Note</h4>${hs("B", "C")}</main>`, [Hd("B"), Hd("A"), P("p"), Hd("X"), P("Note for X only"), Hd("C")]);
     const toEnd = auditSourceLoss(`<main>${hs("A")}<h4>Note</h4>${hs("B")}</main>`,
       [Hd("B"), P("b"), Hd("A"), P("a"), ...Array.from({ length: 150 }, (_, i) => P(`p${i}`)), P("Note that this is unrelated")]);
+    // A paragraph that opens with a lost heading's words is its demotion only if the source holds it
+    // after the heading: the page's own prose before it is not (tailwind-install's sr-only h3 is after).
+    const stable = "<p>Note that A is stable</p>", SP = P("Note that A is stable");
+    const proseBefore = auditSourceLoss(`<main>${hs("A")}${stable}<h4>Note</h4>${hs("B")}</main>`, [Hd("A"), SP, Hd("B")]);
+    const proseAfter = auditSourceLoss(`<main>${hs("A")}<h4>Note</h4>${stable}${hs("B")}</main>`, [Hd("A"), SP, Hd("B")]);
+    const proseBeforeMoved = auditSourceLoss(`<main>${hs("A")}${stable}<h4>Note</h4>${hs("B", "C")}</main>`, [Hd("A"), SP, Hd("C"), Hd("B")]);
+    const proseBeforeSwapped = auditSourceLoss(`<main>${hs("A")}${stable}<h4>Note</h4>${hs("B", "C")}</main>`, [Hd("B"), Hd("A"), SP, Hd("C")]);
+    // Look-alikes before the heading that are not the paragraph the IR holds: each leaves the demotion.
+    const L = (items) => ({ type: "list", items });
+    const notOwn = {
+      "a heading inside a blockquote": auditSourceLoss(`<main>${hs("A")}<blockquote>\n<h4>Note</h4>\n<p>Keep it short</p></blockquote>${hs("B")}</main>`, [Hd("A"), Q("Note Keep it short"), Hd("B")]),
+      "a heading inside a list item": auditSourceLoss(`<main>${hs("A")}<ul><li>\n<h4>Note</h4>\n<p>run it</p></li></ul>${hs("B")}</main>`, [Hd("A"), L(["Note run it"]), Hd("B")]),
+      "a heading inside a summary": auditSourceLoss(`<main>${hs("A")}<details><summary><h3>Note</h3></summary><p>x</p></details>${hs("B")}</main>`, [Hd("A"), P("Note"), P("x"), Hd("B")]),
+      "a look-alike table cell": auditSourceLoss(`<main>${hs("A")}<table><tr><th>Note</th><th>v</th></tr><tr><td>Note y</td><td>z</td></tr></table><h4>Note</h4><p>q</p>${hs("B")}</main>`,
+        [Hd("A"), { type: "table", headers: ["Note", "v"], rows: [["Note y", "z"]] }, P("Note"), P("q"), Hd("B")]),
+      "look-alike list items": auditSourceLoss(`<main>${hs("A")}<ul><li>Note: x</li><li>Note: y</li></ul><h4>Note</h4><p>q</p>${hs("B")}</main>`, [Hd("A"), L(["Note: x", "Note: y"]), P("Note"), P("q"), Hd("B")]),
+      "an own paragraph the extractor dropped": auditSourceLoss(`<main>${hs("A")}${stable}<h4>Note</h4><p>q</p>${hs("B")}</main>`, [Hd("A"), P("Note"), P("q"), Hd("B")]),
+    };
     const off = Object.entries({
       "late code": kinds(late) === JSON.stringify([["source-heading-diff", "Lost"]]),
       "late code, twice in the source": kinds(lateTwice) === JSON.stringify([["source-heading-demoted", "Heads up"], ["source-code-diff", X]]),
@@ -407,9 +425,15 @@ for (const [id, spec] of Object.entries(inventory)) {
       "a drop under a repeated key's first copy": kinds(repeatedLow) === dropped("Note", "Example"),
       "a drop with another section's prose past a moved heading": kinds(across) === dropped("Note"),
       "a drop with a look-alike paragraph at the page end": kinds(toEnd) === dropped("Note"),
+      "a drop after the page's own look-alike paragraph": kinds(proseBefore) === dropped("Note"),
+      "a demotion into the paragraph after the heading": kinds(proseAfter) === demotedOnly("Note"),
+      "a drop after the page's own look-alike paragraph, headings moved": kinds(proseBeforeMoved) === dropped("Note"),
+      "a drop after the page's own look-alike paragraph, headings swapped": kinds(proseBeforeSwapped) === dropped("Note"),
+      ...Object.fromEntries(Object.entries(notOwn).map(([name, l]) => [`a demotion beside ${name}`, kinds(l) === demotedOnly("Note")])),
+      "limit: look-alike list items, the list taken as the demotion": /demoted to list/.test(notOwn["look-alike list items"][0]?.reason),
       "hoisted code, converted": whole.blocks.map((b) => b.type).join() === "heading,paragraph,blockquote,code,heading,paragraph" && kinds(whole.losses) === demotedOnly("Verify the install"),
     }).filter(([, ok]) => !ok).map(([name]) => name);
-    record("loss-audit", "shapes", `late or hoisted code, a key twice in the IR, a far second candidate, headings out of order (4 held at the known limit, 5 drops): each keeps its kind${off.length ? `; moved: ${off.join(", ")}` : ""}`, !off.length);
+    record("loss-audit", "shapes", `late or hoisted code, a key twice in the IR, a far second candidate, headings out of order (4 held at the known limit, 5 drops), the page's own look-alike paragraph before a lost heading (3 drops) or after it, and 6 look-alikes that are not it (7 demotions, 1 at the known limit): each keeps its kind${off.length ? `; moved: ${off.join(", ")}` : ""}`, !off.length);
   }
   record("loss-audit", "heading", "title skipped once; year is not a section number",
     tt.length === 1 && tt[0].text === "Overview" && yr.length === 1 && yr[0].text === "2024 Roadmap");
