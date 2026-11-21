@@ -57,7 +57,7 @@ The cost is size: over the five pages bareflow's output was 19 times WebFetch's 
 
 Extraction is [Defuddle](https://github.com/kepano/defuddle)'s; bareflow's work is the IR, the loss audit, and the render.
 
-bareflow notes the headings, code blocks, and tables the extractor dropped, the headings and code blocks it turned into prose, embeds the IR cannot hold, and a page whose structure flattened (its header says so). Hidden elements are not audited. In Markdown the notes follow the page, one per loss with the dropped text verbatim; in the JSON they are `section.losses`. Each loss carries a position field, `at`, which 0.5.0 leaves null.
+bareflow notes the headings, code blocks, and tables the extractor dropped, the headings and code blocks it turned into prose, embeds the IR cannot hold, and a page whose structure flattened (its header says so). Hidden elements are not audited. In Markdown the notes follow the page, one per loss with the dropped text verbatim; in the JSON they are `section.losses`. Each loss carries a position field, `at`, which 0.5.1 leaves null.
 
 It misses prose loss: a paragraph dropped under a surviving heading. A heading the extractor moves out of source order can make a nearby heading or code block that became prose read as dropped; the note still holds that block's text.
 

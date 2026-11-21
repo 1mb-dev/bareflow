@@ -1,6 +1,6 @@
 {
   "name": "bareflow",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "A docs page as Markdown or typed JSON, with a note for each loss it detects",
   "keywords": [
     "markdown",
